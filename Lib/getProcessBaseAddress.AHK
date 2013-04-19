@@ -1,4 +1,4 @@
-getProcessBaseAddress(WindowTitle, Hex=1, MatchMode=3)
+getProcessBaseAddress(WindowTitle, Hex=1, MatchMode=3)	;WindowTitle can be anything ahk_exe ahk_class etc
 {
 	SetTitleMatchMode, %MatchMode%	;mode 3 is an exact match
 	WinGetClass, classname, %WindowTitle%

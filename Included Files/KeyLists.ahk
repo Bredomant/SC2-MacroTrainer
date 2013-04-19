@@ -33,6 +33,7 @@
         F11|F12|F13|F14|F15|F16|F17|F18|F19|F20
         F21|F22|F23|F24
        )
+      l_ModifierKeysList := "Shift|Control|Alt"
     ;-- Numpad
     l_NumpadKeysList=
        (ltrim join|
@@ -70,7 +71,6 @@
     ;-- Mouse
     l_MouseKeysList=
        (ltrim join|
-	   *LButton
         LButton
         RButton
         MButton
@@ -102,6 +102,4 @@
         Launch_App1
         Launch_App2
        )
-	   
-	   l_KeyboardAndMouse := l_MouseKeysList "|" l_StandardKeysList "|" l_FunctionKeysList "|" l_NumpadKeysList "|" l_MultimediaKeysList
 	   

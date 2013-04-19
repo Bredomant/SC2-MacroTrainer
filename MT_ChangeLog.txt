@@ -1,3 +1,35 @@
+V2.963
+Changes:
+	• Injects:
+		The following changes should make the forced/fully-automatic injection more reliable and less intrusive to your game play.
+		- Forced (fully automatic) injects will be delayed until after the user finishes casting a spell or placing a structure.
+		- Forced injects will be delayed if a menu is open
+		- If chat was open, it will be restored post injection
+		- Added a separate Forced-Inject sleep time (this should be set as low as reliably possible).
+		- UnitSubgroup/highlighted unit (tab position) should be restored after an inject round
+		- Keyboard and mouse input sent during a FORCED inject will be buffered and then sent to the game after the injects finishes
+			+ Hence mouse movement made during a FORCED inject will influence where the mouse pointer is placed post injection - e.g. if you were doing a down swipe and a forced inject begins, after the injection finishes the mouse should be placed near where the pointer would have been if no inject had occurred.
+
+	• The program should load considerably faster.	
+
+New:
+	• New method of input blocking & key buffering.
+	• Keys which are blocked or buffered during some automations can be defined in "options -> settings -> Key Blocking"
+	• Added a separate Forced-Inject sleep time.
+	• Can disable the "Beep if modifier is held down" ability for FORCED injects.
+
+Fixes:
+	• Hellbat (listed as HellionTank) ID been added to the unit detection list.
+	• Method of finding SC2 Base address
+		- This was likely responsible for some of the "Fail" and "Handle Closed" errors
+		- This could previously be caused by having a folder open called "Starcraft II" or having a really slow computer
+
+V2.962
+Changes:
+	• Reverted to the old inject method (as people have been having issues)
+Fixes:
+	• Changing hotkeys before launching SC2 will no longer display an error.
+	
 V2.961
 New:
 	• Idle Worker Overlay

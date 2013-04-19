@@ -19,6 +19,7 @@ Menu Tray, Add, &Check For Updates, TrayUpdate
 Menu Tray, Add, &Homepage, Homepage
 Menu Tray, Add, &Reload, g_reload
 Menu Tray, Add, Exit, ShutdownProcedure
+Menu Tray, Default, &Settings && Options
 If A_IsCompiled
 	Menu Tray, NoStandard
 Else
@@ -45,7 +46,7 @@ url.HelpFile := "http://www.users.on.net/~jb10/Macro Trainer Help File.htm"
 url.Homepage := "http://www.users.on.net/~jb10/"
 url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 
-version := 2.961
+version := 2.963
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -81,7 +82,6 @@ if HideTrayIcon
 InstallSC2Files()
 #include %A_ScriptDir%\Included Files\Gdip.ahk
 #include %A_ScriptDir%\Included Files\Colour Selector.ahk
-#include %A_ScriptDir%\Included Files\KeyLists.ahk
 
 CreatepBitmaps(a_pBitmap)
 
@@ -116,6 +116,7 @@ If (auto_update AND A_IsCompiled  AND HideTrayIcon <> 1 AND CheckForUpdates(vers
 }
 
 Launch:
+
 If (A_GuiControl = "Disable_Auto_Update")
 	Iniwrite, % auto_check_updates := 0, %config_file%, Misc Settings, auto_check_updates
 If (A_GuiControl = "Disable_Auto_Update" OR A_GuiControl = "Cancel_Auto_Update")
@@ -123,24 +124,20 @@ If (A_GuiControl = "Disable_Auto_Update" OR A_GuiControl = "Cancel_Auto_Update")
 
 If launch_settings
 	gosub options_menu
-
+CreateHotkeys()			;create them before launching the game incase users want to edit them
 process, exist, %GameExe%
 If !errorlevel
 {
 	RegRead, SC2InstallPath, HKEY_LOCAL_MACHINE, SOFTWARE\Wow6432Node\Blizzard Entertainment\StarCraft II Retail, GamePath
 	try run %SC2InstallPath%
 }
-
 Process, wait, %GameExe%	; waits for starcraft to exist
-sleep, 5000 ; required to prevent memory read error - Handle closed: error
-LoadMemoryAddresses(B_SC2Process := getProcessBaseAddress(GameWindowTitle))
+while (!(B_SC2Process := getProcessBaseAddress("ahk_exe " GameExe)) || B_SC2Process < 0)		;using just the window title could cause problems if a folder had the same name e.g. sc2 folder
+	sleep 250				; required to prevent memory read error - Handle closed: error 		;note the space before end quote
+LoadMemoryAddresses(B_SC2Process)	
 settimer, clock, 200
 settimer, timer_exit, 5000
 SetTimer, OverlayKeepOnTop, 1000, -10	;better here, as since WOL 2.0.4 having it in the "clock" section isn't reliable 
-;------------------------
-;	Hotkeys
-;-------------------------
-CreateHotkeys()
 return
 ;-----------------------
 ; End of execution
@@ -169,6 +166,10 @@ EmergencyInputCountReset:
 	settimer, EmergencyInputCountReset, off
 	EmergencyInputCount := 0
 	Return
+
+g_ListVars:
+	ListVars
+	return
 
 Stealth_Exit:
 	ExitApp
@@ -229,14 +230,24 @@ g_GLHF:
 	send, GL{ASC 3}HF{!}
 return
 
-
-ReleaseModifiers(Beep = 1)
+g_DeselectUnit:
+if (getSelectionCount() > 1)
 {
-	while getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
+	mousegetpos, Xmouse, Ymouse
+	ClickUnitPortrait(0, X, Y, Xpage, Ypage) ; -1 as selection index begins at 0 i.e 1st unit at pos 0 top left
+	send +{click Left %X%, %Y%} 	
+	send {click  %Xmouse%, %Ymouse%, 0}
+}
+return
+
+
+ReleaseModifiers(Beep = 1, CheckIfCasting = 0)
+{
+	while (iscasting := CheckIfCasting && isUserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
 	{
 		count++
-		if (count = 1 && Beep)
+		if (count = 1 && Beep) && !iscasting 	;wont beep if casting
 			SoundPlay, %A_Temp%\ModifierDown.wav	
 		sleep, 5
 	}
@@ -517,7 +528,8 @@ clock:
 		{
 			Hotkey, If, WinActive(GameWindowTitle) && time
 			hotkey, >!g, g_GLHF
-			Hotkey, If,
+			hotkey, +ESC, g_DeselectUnit
+			Hotkey, If
 		}	
 		If (DrawMiniMap OR DrawAlerts OR DrawSpawningRaces)
 			SetTimer, MiniMap_Timer, %MiniMapRefresh%, -10		
@@ -584,15 +596,15 @@ Cast_ChronoGates:
 	Critical
 	SetMouseDelay, %CG_KeyDelay%	; 10 is default
 	SetKeyDelay, %CG_KeyDelay%	
-	BlockInput("All", l_KeyboardAndMouse)
+	BufferInput(aButtons.List, "Block")
 	MouseGetPos, start_x, start_y
-	SendWhileBlocked("^" CG_control_group)
+	send % "^" CG_control_group
 	;Send, ^%CG_control_group%
 	warp_gate_chrono(a_WarpGates, nexus_list, chrono_count)
 	max_chronod := chrono_count - CG_chrono_remainder
 	if (max_chronod >= 1)
 	{
-		SendWhileBlocked(CG_nexus_Ctrlgroup_key)
+		send % CG_nexus_Ctrlgroup_key
 		for index, unit in a_WarpGates
 		{
 			If (A_index > max_chronod)
@@ -604,17 +616,17 @@ Cast_ChronoGates:
 			Else
 				Random := 0
 			click_x := click_x + Random , click_y := click_y + Random
-			SendWhileBlocked(chrono_key)
+			send % chrono_key
 			If HumanMouse
 				MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 			send {click Left %click_x%, %click_y%}
 		}
-		SendWhileBlocked(CG_control_group)
+		send % CG_control_group
 		If HumanMouse
 			MouseMoveHumanSC2("x" start_x "y" start_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 		MouseMove, start_x, start_y
 	}
-	BlockInput("Disable", l_KeyboardAndMouse)
+	BufferInput(aButtons.List) ;re-enable keys without sending buffer
 	SetMouseDelay, 10	; default
 	SetKeyDelay, 10		
 	Critical Off	
@@ -745,8 +757,8 @@ Cast_DisableInject:
 	Return
 
 	
-BlockInput(Mode="Disable", byref L_Keys="", Delimiter="|") ; eg 	;	BlockInput("All", l_KeyboardAndMouse)
-{ 							; l_KeyboardAndMouse defined in included keylists.ahk
+BlockInput(Mode="Disable", byref L_Keys="", Delimiter="|") ; eg 	;	BlockInput("All", keylist)
+{ 							
 	If (Mode = "All")		;note 2 button hotkeys eg Shift+1 or ctrl+a will still work
 		BlockInput, MouseMove	;note ctrl/shift/alt not in the keylists ..... 
 	If (Mode = "Enable" || Mode = "All")			
@@ -762,65 +774,66 @@ BlockInput(Mode="Disable", byref L_Keys="", Delimiter="|") ; eg 	;	BlockInput("A
 Return
 }
 	
-SendWhileBlocked(keys*)
-{ 	static l_Modifiers := "#|!|^|+|<|>|*|~|$"  "|{|}" ; "{}" form part of some send keys eg {F5}
-	for index, hotkey in keys				
-	{
-		FullKey := Hotkey
-		Loop, Parse, l_Modifiers, |
-			StringReplace, Hotkey, Hotkey, %A_LoopField%,, All
-		try	hotkey, %hotkey%, Off
-		send, %FullKey%
-		try hotkey, %hotkey%, On
-	}
-	Return	
-}
-
 
 cast_ForceInject:
 cast_inject:
-	ChatStatus := isChatOpen()
-	MenuStatus := isMenuOpen()
-
-	if (ChatStatus && MenuStatus) || (!ChatStatus && !MenuStatus) 	;chat bar is open Or its not i.e. no menu is open
+	If (A_ThisLabel = "cast_ForceInject")
+		ReleaseModifiers(F_Inject_ModifierBeep, 1)	;note b4 critical section
+	else ReleaseModifiers(1,0)	;hence will cast if user presses f5 and a swarmhost is highlighted
+;	Critical ;cant use with input buffer, as prevents hotkey threads launching and hence tracking input
+	Inject := []
+	If (A_ThisLabel = "cast_ForceInject")
 	{
-		ReleaseModifiers()	;note b4 critical section
-		Critical
-		SetMouseDelay, %I_KeyDelay%	; 10 is default
-		SetKeyDelay, %I_KeyDelay%	
-		If (LMouseState := GetKeyState("LButton")) ; 1=down
-			send {click Left up}
-	;	BlockInput, on
-		BlockInput("All", l_KeyboardAndMouse)
-		MouseGetPos, start_x, start_y
-		If ChatStatus
-		{
-			Xscentre := A_ScreenWidth/2, Yscentre := A_ScreenHeight/2
-			send {click Left %Xscentre% %Yscentre%}
-		}	
-		castInjectLarva(auto_inject, ForceInject) ;ie method
-		ForceInject := 0
-		If LMouseState
-		{
-			If HumanMouse
-				MouseMoveHumanSC2("x" MLDownX "y" MLDownY "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
-			send {click Left down %MLDownX%, %MLDownY%}
-		}
-		If HumanMouse
-			MouseMoveHumanSC2("x" start_x "y" start_y "t" HumanMouseTimeLo)
-		Else		
-			MouseMove, start_x, start_y
-	;	BlockInput, off
-		BlockInput("Disable", l_KeyboardAndMouse)
-		if (LMouseState AND !GetKeyState("LButton", "P")) ;mouse button up
-			send {click Left up}
-		If ChatStatus
-			send {Enter}
-		SetMouseDelay, 10	; default
-		SetKeyDelay, 10		
-		Critical Off
-		
+			if !isMenuOpen()		;menu is always 1 regardless if chat is up
+				settimer, Force_Inject, off
+			else if isMenuOpen() & !isChatOpen()	;chat is 0 when  menu is in focus
+				return ;as let the timer continue to check
+			ForceCount++
+			if F_Inject_Beep
+				SoundPlay, %A_Temp%\Windows Ding3.wav 
 	}
+	Thread, NoTimers, true  ;cant use critical with input buffer, as prevents hotkey threads launching and hence tracking input
+	Inject := []
+	SetBatchLines -1
+	SetMouseDelay, %I_KeyDelay%	; 10 is default
+	SetKeyDelay, %I_KeyDelay%	
+
+	If (Inject.LMouseState := GetKeyState("LButton")) ; 1=down
+		send {click Left up}
+	BufferInput(aButtons.List, "Buffer", 0)
+
+	MouseGetPos, start_x, start_y
+	If (ChatStatus := isChatOpen())
+	{
+		Xscentre := A_ScreenWidth/2, Yscentre := A_ScreenHeight/2
+		send {click Left %Xscentre% %Yscentre%}
+	}
+	If (A_ThisLabel = "cast_ForceInject")
+		castInjectLarva(auto_inject, 1, F_Sleep_Time)	
+	else castInjectLarva(auto_inject, 0, auto_inject_sleep) ;ie nomral injectmethod
+
+	If Inject.LMouseState 
+	{
+		If HumanMouse
+			MouseMoveHumanSC2("x" MLDownX "y" MLDownY "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
+		send {click Left down %MLDownX%, %MLDownY%}
+	}
+	If HumanMouse
+		MouseMoveHumanSC2("x" start_x "y" start_y "t" HumanMouseTimeLo)
+	Else		
+		send {click  %start_x%, %start_y%, 0}
+	
+	If ChatStatus
+		send {Enter}
+
+	BufferInput(aButtons.List, "Send")
+	if (Inject.LMouseState AND !GetKeyState("LButton", "P")) ;mouse button up
+		send {click Left up}
+
+	SetMouseDelay, 10	; default
+	SetKeyDelay, 10		
+	SetBatchLines %SetBatchLines%
+	Thread, NoTimers, false
 	inject_set := time
 	if auto_inject_alert
 		settimer, auto_inject, 250
@@ -830,12 +843,6 @@ cast_inject:
 		settimer, Force_Inject, 250	
 		If F_Alert_Enable
 			settimer, Force_Inject_Alert, 250	
-	}
-	if (isMenuOpen() and !ChatStatus)	;ie at a menu screen, not the chat bar
-	{
-		If (A_ThisLabel = "cast_inject")	;hence wont do anything if it was from the force/auto inject
-			send %A_ThisHotkey%				;send what ever button the user pressed
-		return								;doing all this allows for the fully auto injects to continue even if one was going to occur while at a menu screen
 	}
 	If (A_ThisLabel = "cast_inject")
 	{
@@ -953,24 +960,24 @@ MakeWorker(Race)
 	Else If ( Race = "Protoss" )
 		Send, %Make_Worker_P_Key%
 	Else If ( Race = "Zerg" )
-		Send, %Make_Worker_Z1_Key% %Make_Worker_Z2_Key%
+		Send, %Make_Worker_Z1_Key%%Make_Worker_Z2_Key%
 }
 
 SplitWorkers(Type="")
 { 	global
 	if (Type = "2x3")
-		Send, %Idle_Worker_Key% +%Idle_Worker_Key% +%Idle_Worker_Key% %Gather_Minerals_key%)
+		Send, %Idle_Worker_Key%+%Idle_Worker_Key%+%Idle_Worker_Key%%Gather_Minerals_key%
 	else if (Type = "3x2")
-		Send, %Idle_Worker_Key% +%Idle_Worker_Key% %Gather_Minerals_key%)
+		Send, %Idle_Worker_Key%+%Idle_Worker_Key%%Gather_Minerals_key%
 	else if (Type = "6x1")
-		Send, %Idle_Worker_Key% %Gather_Minerals_key%)	
+		Send, %Idle_Worker_Key%%Gather_Minerals_key%	
 	else ;select all of them
-		Send, ^%Idle_Worker_Key% %Gather_Minerals_key%
+		Send, ^%Idle_Worker_Key%%Gather_Minerals_key%
 }
 SendBaseCam(sleep=120, blocked=1)
 { global
 ;	if blocked
-;		SendWhileBlocked(base_camera)
+;		send % base_camera
 	send, %base_camera%
 	sleep, %sleep%	; needs ~70ms to update camera
 }
@@ -1321,12 +1328,7 @@ auto_inject:
 	
 Force_Inject:
 	if ( time - inject_set >= F_Inject_Delay + randomForcedInjectDelay) AND ( ForceCount < F_Max_Injects) AND WinActive(GameWindowTitle)
-	{
-		ForceCount ++
-		settimer, Force_Inject, off
-		ForceInject := 1		
 		gosub cast_ForceInject
-	}
 	Return
 
 Force_Inject_Alert:
@@ -1339,7 +1341,6 @@ Force_Inject_Alert:
 		}
 	}
 	Return
-
 
 Return
 	
@@ -1362,6 +1363,53 @@ user_idle:
 	Else If ( time > 10 )
 		settimer, user_idle, off	
 return
+
+;------------
+;	Worker Count
+;------------
+worker_count:
+	worker_origin := A_ThisHotkey ; so a_hotkey notchanged via thread interuption
+	IF 	( !time ) ; ie = 0 
+	{
+		DSpeak("The game has not started")
+		return
+	}
+	If ( worker_origin = worker_count_enemy_key)
+	{
+		if ( GameType <> "1v1" )
+		{
+			DSpeak("Enemy worker count is only available in 1v1")
+			return
+		}	
+		For slot_number in a_Player
+		{
+			If ( a_LocalPlayer["Team"] <> a_Player[slot_number, "Team"] )
+			{
+				playernumber := a_Player[slot_number, "Team"]	
+				player_race := a_Player[slot_number, "Race"]
+				Break
+			}
+		}
+	}
+	Else
+	{
+		playernumber := a_LocalPlayer["Slot"]
+		player_race := 	a_LocalPlayer["Race"]
+	}
+	if ( "Fail" = newcount := getPlayerWorkerCount(playernumber))
+	{
+		DSpeak("Try Again in a few seconds")
+		return
+	}
+	Else If ( player_race = "Terran" )
+		DSpeak(newcount "SCVs")
+	Else If ( player_race = "Protoss" )
+		DSpeak(newcount "Probes")
+	Else If ( player_race = "Zerg" )
+		DSpeak(newcount "Drones")
+	Else 
+		DSpeak(newcount "Workers")
+return	
 
 ;--------------------
 ;	WarpGate Warning
@@ -1392,10 +1440,10 @@ return
 ;	Unit Bank Read	; I wrote this when I was first startings. I should really clean it up, but I cant be fucked.
 ;------------------
 unit_bank_read:
-SupplyInProductionCount := gateway_count := warpgate_count := EndCount := UnitRead_i := 0
+SupplyInProductionCount := gateway_count := warpgate_count := 0
 a_BaseListTmp := []
 ;UnitBankCount := getUnitCount()
-While ((UnitRead_i + EndCount) / getUnitCount() < 1.1) ; Read +10% blanks in a row
+While (A_Index <= getHighestUnitIndex()) ; Read +10% blanks in a row
 {
 	u_iteration := A_Index -1
 	unit_base := B_uStructure + (u_iteration * S_uStructure)
@@ -1405,19 +1453,10 @@ While ((UnitRead_i + EndCount) / getUnitCount() < 1.1) ; Read +10% blanks in a r
 	; unit_HP := MAXHP - sustained dmg
 	; unit_HP := (ReadMemory((( ReadMemory(B_uStructure + ((A_Index - 1) * S_uStructure) + O_uModelPointer,"StarCraft II") << 5) & 0xFFFFFFFF) + u_MaxHP_Off,"StarCraft II") /4096) - (ReadMemory(B_uStructure + ((A_Index - 1) * S_uStructure) + 0x10C,"StarCraft II")/4096)
 		
-	If (Filter & DeadFilterFlag) 
+	If (Filter & DeadFilterFlag) || (type = "Fail")
 		Continue
-	Else If (unit_type = "Fail")
-	{  EndCount += 1
-		Continue
-	}
-	Else 
-	{	EndCount := 0 
-		UnitRead_i ++
-	}
 	IF (unit_type = supplytype && unit_owner = a_LocalPlayer["Slot"] AND isUnderConstruction(u_iteration))
-			SupplyInProductionCount ++
-			
+			SupplyInProductionCount ++		
 	if ( warpgate_warn_on AND (unit_type = A_unitID["Gateway"] OR unit_type = A_unitID["WarpGate"]) 
 		AND unit_owner = a_LocalPlayer["Slot"] AND !isUnderConstruction(u_iteration)) ; 0 means its completed 
 	{
@@ -1712,8 +1751,8 @@ GuiReturn:
 OptionsGuiClose:
 OptionsGuiEscape:
 Gui Destroy
-Gosub pre_startup	;so the correct values get read back for time *1000
-Return
+Gosub pre_startup	;so the correct values get read back for time *1000 conversion from ms/s vice versa
+Return				
 
 GuiClose:
 GuiEscape:
@@ -1827,11 +1866,14 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	
 	;[Forced Inject]
 	section := "Forced Inject"
-	IniRead, F_Inject_Enable, %config_file%, %section%, Enable, 0
+	IniRead, F_Inject_Enable, %config_file%, %section%, F_Inject_Enable, 0
+	IniRead, F_Inject_ModifierBeep, %config_file%, %section%, F_Inject_ModifierBeep, 1
+	IniRead, F_Inject_Beep , %config_file%, %section%, F_Inject_Beep, 0
 	IniRead, F_Alert_Enable, %config_file%, %section%, Alert_Enable, 1
 	IniRead, F_Alert_PreTime, %config_file%, %section%, F_Alert_PreTime, 1
 	IniRead, F_Inject_Delay, %config_file%, %section%, F_Inject_Delay, 15
 	IniRead, F_Max_Injects, %config_file%, %section%, F_Max_Injects, 4
+	IniRead, F_Sleep_Time, %config_file%, %section%, F_Sleep_Time, 5
 	IniRead, F_InjectOff_Key, %config_file%, %section%, F_InjectOff_Key, Lwin & F5
 	
 	
@@ -1977,22 +2019,38 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, exit_hotkey, %config_file%, Stealth Mode, exit_hotkey, Lwin & Esc
 	
 	;[Misc Hotkey]
+	IniRead, worker_count_local_key, %config_file%, Misc Hotkey, worker_count_key, F8
+	IniRead, worker_count_enemy_key, %config_file%, Misc Hotkey, enemy_worker_count, Lwin & F8
 	IniRead, warning_toggle_key, %config_file%, Misc Hotkey, pause_resume_warnings_key, Lwin & Pause
 	IniRead, ping_key, %config_file%, Misc Hotkey, ping_map, Lwin & MButton
 
 	;[Misc Settings]
 	section := "Misc Settings"
-	IniRead, input_method, %config_file%, %section%, input_method, play
+	IniRead, input_method, %config_file%, %section%, input_method, Event
 	IniRead, auto_update, %config_file%, %section%, auto_check_updates, 1
 	IniRead, launch_settings, %config_file%, %section%, launch_settings, 0
 	IniRead, MaxWindowOnStart, %config_file%, %section%, MaxWindowOnStart, 1
 	IniRead, HumanMouse, %config_file%, %section%, HumanMouse, 0
 	IniRead, HumanMouseTimeLo, %config_file%, %section%, HumanMouseTimeLo, 70
 	IniRead, HumanMouseTimeHi, %config_file%, %section%, HumanMouseTimeHi, 110
+	IniRead, ProcessSleep, %config_file%, %section%, ProcessSleep, 0
 	IniRead, SetBatchLines, %config_file%, %section%, SetBatchLines, 10ms
 		SetBatchLines, %SetBatchLines%
 	IniRead, UnitDetectionTimer_ms, %config_file%, %section%, UnitDetectionTimer_ms, 3500
 	
+
+	;[Key Blocking]
+	section := "Key Blocking"
+	IniRead, BlockingStandard, %config_file%, %section%, BlockingStandard, 1
+	IniRead, BlockingFunctional, %config_file%, %section%, BlockingFunctional, 1
+	IniRead, BlockingNumpad, %config_file%, %section%, BlockingNumpad, 1
+	IniRead, BlockingMouseKeys, %config_file%, %section%, BlockingMouseKeys, 1
+	IniRead, BlockingMultimedia, %config_file%, %section%, BlockingMultimedia, 1
+	IniRead, BlockingModifier, %config_file%, %section%, BlockingModifier, 1
+
+	aButtons := []
+	aButtons.List := getKeyboardAndMouseButtonArray(BlockingStandard*1 + BlockingFunctional*2 + BlockingNumpad*4
+																	 + BlockingMouseKeys*8 + BlockingMultimedia*16 + BlockingModifier*32)	;gets an object contains keys
 	;[Auto Mine]
 	section := "Auto Mine"
 	IniRead, auto_mine, %config_file%, %section%, enable, 0
@@ -2146,6 +2204,8 @@ ini_settings_write:
 			hotkey, %warning_toggle_key%, off			; gives the user a friendlier error
 		
 			Hotkey, If, WinActive(GameWindowTitle) && time	
+			hotkey, %worker_count_local_key%, off
+			hotkey, %worker_count_enemy_key%, off
 			hotkey, %Playback_Alert_Key%, off
 			hotkey, %TempHideMiniMapKey%, off
 			hotkey, %AdjustOverlayKey%, off
@@ -2212,11 +2272,14 @@ ini_settings_write:
 	
 		;[Forced Inject]
 	section := "Forced Inject"
-	IniWrite, %F_Inject_Enable%, %config_file%, %section%, Enable
+	IniWrite, %F_Inject_Enable%, %config_file%, %section%, F_Inject_Enable
+	IniWrite, %F_Inject_ModifierBeep%, %config_file%, %section%, F_Inject_ModifierBeep
+	IniWrite, %F_Inject_Beep%, %config_file%, %section%, F_Inject_Beep 
 	IniWrite, %F_Alert_Enable%, %config_file%, %section%, Alert_Enable
 	IniWrite, %F_Alert_PreTime%, %config_file%, %section%, F_Alert_PreTime
 	IniWrite, %F_Inject_Delay%, %config_file%, %section%, F_Inject_Delay
 	IniWrite, %F_Max_Injects%, %config_file%, %section%, F_Max_Injects
+	IniWrite, %F_Sleep_Time%, %config_file%, %section%, F_Sleep_Time
 	IniWrite, %F_InjectOff_Key%, %config_file%, %section%, F_InjectOff_Key
 
 	;[Idle AFK Game Pause]
@@ -2413,9 +2476,10 @@ ini_settings_write:
 	IniWrite, %l_DeselectArmy%, %config_file%, %section%, l_DeselectArmy
 		
 	;[Misc Hotkey]
+	IniWrite, %worker_count_local_key%, %config_file%, Misc Hotkey, worker_count_key
+	IniWrite, %worker_count_enemy_key%, %config_file%, Misc Hotkey, enemy_worker_count
 	IniWrite, %warning_toggle_key%, %config_file%, Misc Hotkey, pause_resume_warnings_key
 	IniWrite, %ping_key%, %config_file%, Misc Hotkey, ping_map
-
 
 	;[Misc Settings]
 	section := "Misc Settings"
@@ -2427,7 +2491,17 @@ ini_settings_write:
 	Iniwrite, %HumanMouseTimeLo%, %config_file%, %section%, HumanMouseTimeLo
 	Iniwrite, %HumanMouseTimeHi%, %config_file%, %section%, HumanMouseTimeHi
 	Iniwrite, %SetBatchLines%, %config_file%, %section%, SetBatchLines
+	Iniwrite, %ProcessSleep%, %config_file%, %section%, ProcessSleep
 	Iniwrite, %UnitDetectionTimer_ms%, %config_file%, %section%, UnitDetectionTimer_ms
+
+	;[Key Blocking]
+	section := "Key Blocking"
+	IniWrite, %BlockingStandard%, %config_file%, %section%, BlockingStandard
+	IniWrite, %BlockingFunctional%, %config_file%, %section%, BlockingFunctional
+	IniWrite, %BlockingNumpad%, %config_file%, %section%, BlockingNumpad
+	IniWrite, %BlockingMouseKeys%, %config_file%, %section%, BlockingMouseKeys
+	IniWrite, %BlockingMultimedia%, %config_file%, %section%, BlockingMultimedia
+	IniWrite, %BlockingModifier%, %config_file%, %section%, BlockingModifier
 	
 	;[Alert Location]
 	IniWrite, %Playback_Alert_Key%, %config_file%, Alert Location, Playback_Alert_Key
@@ -2514,7 +2588,7 @@ Gui, Options:New
 gui, font, norm s9	;here so if windows user has +/- font size this standardises it. But need to do other menus one day
 ;Gui, +ToolWindow  +E0x40000 ; E0x40000 gives it a icon on taskbar
 options_menu := "home32.png|radarB32.png|map32.png|Inject32.png|Group32.png|reticule32.png|Robot32.png|key.png|warning32.ico|miscB32.png|speakerB32.png|bug32.png|settings.ico"
-l_UnitNames := "Colossus|TechLab|Reactor|InfestorTerran|BanelingCocoon|Baneling|Mothership|PointDefenseDrone|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|PlanetaryFortress|UltraliskBurrowed|OrbitalCommand|WarpGate|OrbitalCommandFlying|ForceField|WarpPrismPhasing|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|Archon|NydusCanal|BroodlingEscort|Mule|LarvaHellionTank|MothershipCore|Locust|SwarmHostBurrowed|SwarmHost|Oracle|Tempest|WidowMine|Viper|WidowMineBurrowed"
+l_UnitNames := "Colossus|TechLab|Reactor|InfestorTerran|BanelingCocoon|Baneling|Mothership|PointDefenseDrone|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|PlanetaryFortress|UltraliskBurrowed|OrbitalCommand|WarpGate|OrbitalCommandFlying|ForceField|WarpPrismPhasing|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|Archon|NydusCanal|BroodlingEscort|Mule|Larva|HellionTank|MothershipCore|Locust|SwarmHostBurrowed|SwarmHost|Oracle|Tempest|WidowMine|Viper|WidowMineBurrowed"
 
 ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity for 10 icons, grows it by 5 if need be, and 1=large icons
  
@@ -2604,10 +2678,7 @@ Gui, Add, GroupBox, xs y+88 w200 h140, MiniMap && BackspaceCtrlG Setup
 		
 		Gui, Add, Text, xs+10 yp+40, Max Queen Distance:`n%A_Space% %A_Space% (From Hatch)
 			Gui, Add, Edit, Number Right xp+132 yp w45 vTT2_MI_QueenDistance
-					Gui, Add, UpDown,  Range1-100000 vMI_QueenDistance, %MI_QueenDistance%
-
-	
-				
+					Gui, Add, UpDown,  Range1-100000 vMI_QueenDistance, %MI_QueenDistance%			
 
 Gui, Tab,  Info
 		gui, font, norm bold s10
@@ -2623,7 +2694,7 @@ Gui, Tab,  Info
 		Gui, Add, Text, X%OriginTabX% y+10 cFF0000, Problems:
 		gui, font, norm s11
 		gui, Add, Text, w410 y+15, If you are consistently missing hatcheries, try increasing the sleep time. The Backspace CtrlGroup method is less robust than the other methods. 
-		gui, Add, Text, w410 y+15, If something really goes wrong, you can reload the program by pressing "Lwin && space" three times.  (The program will take ~5 seconds to reload)
+		gui, Add, Text, w410 y+15, If something really goes wrong, you can reload the program by pressing "Lwin && space" three times.
 		gui, font, norm s10
 		gui, font, 		
 		
@@ -2642,25 +2713,33 @@ Gui, Tab,  Manual
 				Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#inject_reset_key,  Edit
 				
 Gui, Tab,  Forced
-	Gui, Add, GroupBox,  w230 h180, Fully Automated Injects
+	Gui, Add, GroupBox, y+20 w230 h250, Fully Automated Injects
 		Gui, Add, Checkbox,xp+10 yp+30 vF_Inject_Enable checked%F_Inject_Enable%, Enable
+		Gui, Add, Checkbox,y+10 vF_Inject_ModifierBeep checked%F_Inject_ModifierBeep%, Beep If modifier is held down
+		Gui, Add, Checkbox,y+10 vF_Inject_Beep checked%F_Inject_Beep%, Beep when auto Inject begins
+
+
 		Gui, Add, Text,y+15 x%settings2RX% w165, Time Between Injects (SC2 s): 
 			Gui, Add, Edit, Number Right x+5 yp-2 w45 
 				Gui, Add, UpDown, Range39-100000 vF_Inject_Delay, %F_Inject_Delay%
 		Gui, Add, Text,y+15 x%settings2RX% w165, Max. (sequential) Forced Injects: 
 			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Max_Injects 
-				Gui, Add, UpDown, Range1-100000 vF_Max_Injects, %F_Max_Injects%				
-		Gui, Add, Text, x%settings2RX% yp+35, Enable/Disable Hotkey:
+				Gui, Add, UpDown, Range1-100000 vF_Max_Injects, %F_Max_Injects%	
+
+		Gui, Add, Text,y+15 x%settings2RX% w165, Sleep time: 
+			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Sleep_Time 
+				Gui, Add, UpDown, Range0-100000 vF_Sleep_Time, %F_Sleep_Time%	
+
+		Gui, Add, Text, x%settings2RX% yp+25, Enable/Disable Hotkey:
 			Gui, Add, Edit, Readonly y+10 xp+40 w120  vF_InjectOff_Key center gedit_hotkey, %F_InjectOff_Key%
 			Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#F_InjectOff_Key,  Edit				
 			
-	Gui, Add, GroupBox,  w230 h100 x%OriginTabx% yp+55, Pre-Inject Alert
-		Gui, Add, Checkbox,xp+10 yp+30 vF_Alert_Enable checked%F_Alert_Enable%, Enable
+	Gui, Add, GroupBox,  w230 h80 x%OriginTabx% yp+40, Pre-Inject Alert
+		Gui, Add, Checkbox,xp+10 yp+25 vF_Alert_Enable checked%F_Alert_Enable%, Enable
 		Gui, Add, Text,y+15 x%settings2RX% w165, Preinject Alert (sc2 s): 
 			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Alert_PreTime
 				Gui, Add, UpDown, Range0-100000 vF_Alert_PreTime, %F_Alert_PreTime%
-	Gui, Add, Text,y+40 x%settings2RX% w280, Note:
-	Gui, Add, Text,yp+0 xp+40 w280, Forced Injects will become activated after your first auto/F5 inject.`n`nForced injections are performed using the 'MiniMap' macro, but this function is still compatible with the auto inject 'backspace' method. 
+	Gui, Add, Text,y40 x430 w160, Note:`n`nForced Injects will become activated after your first auto/F5 inject.`n`nForced injections are performed using the 'MiniMap' macro, but this function is still compatible with the auto inject 'backspace' method. 
 		
 		
 Gui, Tab,  Alert
@@ -2693,8 +2772,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vKeys_TAB, SC2 Keys
 		Gui, Add, Text,  X%tmpX% y+50 +wrap, Ensure the following keys match the associated SC2 Functions.
 		Gui, Add, Text,  X%tmpX% y+5 +wrap, (either change these settings here or in the SC2 Hotkey options/menu)
 		gui, font, 		
-		
-		
+			
 
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vWarnings_TAB, Supply||Macro|Macro2|Warpgates
 Gui, Tab, Supply	
@@ -2869,6 +2947,14 @@ Gui, Add, GroupBox, y+20 w410 h135, Forgotten Gateway/Warpgate Warning
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Abilities
 	Gui, Add, GroupBox, w240 h150 section, Misc Hotkeys
 		
+		Gui, Add, Text, xp+10 yp+30 w80, Worker Count:
+			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vworker_count_local_key , %worker_count_local_key%
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#worker_count_local_key,  Edit
+				
+		Gui, Add, Text, X%XTabX% yp+35 w80, Enemy Workers:
+			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vworker_count_enemy_key , %worker_count_enemy_key%
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#worker_count_enemy_key,  Edit		
+		
 		Gui, Add, Text, X%XTabX% yp+35 w80, Trainer On/Off:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vwarning_toggle_key , %warning_toggle_key%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#warning_toggle_key,  Edit
@@ -2970,14 +3056,25 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 			Gui, Add, DropDownList, x+5 yp-2 w55 Vinput_method Choose%droplist2_var%, Event|Play|Input
 		
 		Gui, Add, Checkbox,xs+10 yp+30 Vauto_check_updates checked%auto_check_updates%, Auto Check For Updates
-		
+	
+	Gui, Add, GroupBox, xs yp+30 w161 h170, Key Blocking
+		Gui, Add, Checkbox,xp+10 yp+25 vBlockingStandard checked%BlockingStandard%, Standard Keys	
+		Gui, Add, Checkbox, y+10 vBlockingFunctional checked%BlockingFunctional%, Functional F-Keys 	
+		Gui, Add, Checkbox, y+10 vBlockingNumpad checked%BlockingNumpad%, Numpad Keys	
+		Gui, Add, Checkbox, y+10 vBlockingMouseKeys checked%BlockingMouseKeys%, Mouse Buttons	
+		Gui, Add, Checkbox, y+10 vBlockingMultimedia checked%BlockingMultimedia%, Mutimedia Buttons	
+		Gui, Add, Checkbox, y+10 vBlockingModifier checked%BlockingModifier%, Modifier Keys	
+
+
 	Gui, Add, GroupBox, Xs+171 ys w245 h85, Stealth Mode (Hide Icons/Menus)
-		Gui, Add, Checkbox,xp+10 yp+25 VHideTrayIcon checked%HideTrayIcon%, Enable
-		
+		Gui, Add, Checkbox,xp+10 yp+25 VHideTrayIcon checked%HideTrayIcon%, Enable	
 		Gui, Add, Text, yp+30 w80, Exit Hotkey:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vexit_hotkey , %exit_hotkey%
-				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#exit_hotkey,  Edit		
-		
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#exit_hotkey,  Edit
+
+	Gui, Add, GroupBox, Xs+171 yp+37 w245 h170, Debugging
+		Gui, Add, Button, xp+10 yp+30  Gg_ListVars,  List Variables
+
 		
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vDetection_TAB, Detection List
 	loop, parse, l_GameType, `,
@@ -3046,7 +3143,7 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#chrono_key,  Edit	
 		
 		Gui, Add, Text, X%tmpx% y+85 cRed, Note:
-		Gui, Add, Text, x+10 yp+0, If gateways exist, they will be chrono boosted after the warpgates.`nCurrently I cannot differentiate warpgates on cooldown from those`nwhich are not. 
+		Gui, Add, Text, x+10 yp+0, If gateways exist, they will be chrono boosted after the warpgates. 
 				
 
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vAutoGroup_TAB, Terran||Protoss|Zerg|Delay|Info	
@@ -3444,6 +3541,8 @@ idletrigger_TT := gas_trigger_TT := mineraltrigger_TT := "The required amount to
 supplylower_TT := supplymid_TT := supplyupper_TT := "Dictactes when the next or previous supply delta/threashold is used."
 TT_workerProductionTPIdle_TT := workerProductionTPIdle_TT := "This only applies to Terran & protoss.`nIf all nexi/CC/Orbitals/PFs are idle for this amount of time (SC2 seconds), a warning will be made.`n`nNote: A main is considered idle if it has no worker in production and is not currently flying or morphing."
 
+worker_count_local_key_TT := "This will read aloud your current worker count."
+worker_count_enemy_key_TT := "This will read aloud your enemy's worker count. (only in 1v1)"
 warning_toggle_key_TT := "Pauses and resumes the program."
 ping_key_TT := "This hotkey will ping the map at the current mouse cursor location."
 race_reading_TT := "Reads aloud the enemys' spawning races."
@@ -3467,7 +3566,7 @@ exit_hotkey_TT := "Can be used to exit the program while stealth mode is enabled
 TT2_MI_QueenDistance_TT := MI_QueenDistance_TT := "The edge of the hatchery creep is approximately 14`nThis helps prevent queens injecting on remote hatches - It works better with lower numbers"
 TT_F_Max_Injects_TT := F_Max_Injects_TT := "The max. number of 'forced' injects which can occur after a user 'F5'/auto-inject.`nSet this to a high number if you want the program to inject for you."
 TT_F_Alert_PreTime_TT := F_Alert_PreTime_TT := "The alert will sound X seconds before the forced inject."
-
+TT_F_Sleep_Time_TT := F_Sleep_Time_TT := "The amount of time between injecting each hatch.`nThis should be set as low as reliably possible so that the inject rounds are shorter and there is less chance of it affecting your gameplay."
 TT_AM_KeyDelay_TT := AM_KeyDelay_TT := TT_I_KeyDelay_TT := I_KeyDelay_TT := TT_CG_KeyDelay_TT := CG_KeyDelay_TT := "This sets the delay between key/mouse events`nLower numbers are faster, but they may cause problems.`n0-10`n`nWith regards to speed, changing the 'sleep' time will generally have a larger impact."
 TT_Chrono_Gate_Sleep_TT := Chrono_Gate_Sleep_TT  := Auto_inject_sleep_TT := Edit_pos_var_TT := Auto_Mine_Sleep2_TT := TT_Auto_Mine_Sleep2_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'."
 CG_chrono_remainder_TT := TT_CG_chrono_remainder_TT := "This is how many full chronoboosts will remain afterwards between all your nexi.`nA setting of 1 will leave 1 full chronoboost (or 25 energy) on one of your nexi."
@@ -3500,6 +3599,9 @@ SplitctrlgroupStorage_key_TT := #SplitctrlgroupStorage_key_TT := "This ctrl grou
 
 #Sc2SelectArmyCtrlGroup_TT := Sc2SelectArmyCtrlGroup_TT := "The control Group (key) in which to store the army.`nE.G. 1,2,3-0"
 l_DeselectArmy_TT := #l_DeselectArmy_TT := "These unit types will be deselected."
+
+F_Inject_ModifierBeep_TT := "If the modifier keys (Shift, Ctrl, or Alt) or Windows Keys are held down when an Inject is attempted, a beep will heard.`nRegardless of this setting, the inject round will not begin until after these keys have been released."
+BlockingStandard_TT := BlockingFunctional_TT := BlockingNumpad_TT := BlockingMouseKeys_TT := BlockingMultimedia_TT := BlockingMultimedia_TT := BlockingModifier_TT := "During certain automations these keys will be buffered or blocked to prevent interruption to the automation and your game play."
 
 #UnitHighlightList1Colour_TT := #UnitHighlightList2Colour_TT := #UnitHighlightList3Colour_TT := "Click Me!`n`nUnits of this type will appear this colour."
 Short_Race_List := "Terr|Prot|Zerg"
@@ -4077,19 +4179,13 @@ warp_gate_chrono(ByRef a_Result, ByRef F_baselist_var, ByRef F_chronocount_var)
 {	global A_unitID, DeadFilterFlag
 	a_warpgates := [], a_gateways := [],
 	a_WarpgatesOnCoolDown := [], F_baselist_var := [], a_Result := []
-	While ((UnitRead_i + EndCount) / getUnitCount() < 1.1)
+	While (A_index <= getHighestUnitIndex())
 	{
 		unit := A_Index - 1
 		Filter := getUnitTargetFilter(unit)	
 		type := getUnitType(unit)
-		If (Filter & DeadFilterFlag) 
+		If (Filter & DeadFilterFlag) || (type = "Fail")
 			Continue
-		Else If (type = "Fail")
-		{  EndCount += 1
-			Continue
-		}
-		EndCount := 0 
-		UnitRead_i ++
 		If !isUnitLocallyOwned(Unit)
 			continue
 		IF ( type = A_unitID["WarpGate"] && !isUnitChronoed(unit)) && (cooldown := getWarpGateCooldown(unit))
@@ -4296,21 +4392,13 @@ local u_x, u_y, tx, ty
 getBuildingList(F_building_var*)	
 { global DeadFilterFlag
 	;unitcount:= getUnitCount()
-	While ((UnitRead_i + EndCount) / getUnitCount() < 1.1)
+	While (A_index <= getHighestUnitIndex())
 	{	unit := A_Index - 1
 		type := getUnitType(Unit)
 		Filter := getUnitTargetFilter(Unit)		
-		
-		If (Filter & DeadFilterFlag) 
+		If (Filter & DeadFilterFlag) || (type = "Fail")
 			Continue
-		Else If (type = "Fail")
-		{  EndCount += 1
-			Continue
-		}
-		Else 
-		{	EndCount := 0 
-			UnitRead_i ++
-		}		
+			
 		For index, building_type in F_building_var
 		{	IF (type = building_type) And (isUnitLocallyOwned(Unit))
 			AND (isUnderConstruction(Unit) = 0 ) ; 0 means its completed 
@@ -4321,6 +4409,12 @@ getBuildingList(F_building_var*)
 	sort list, D| Random
 	Return List
 }
+
+isUserCastingOrBuilding()	;note auto casting e.g. swarm host will always activate this. There are separate bool values indicating buildings at certain spells
+{	global
+	return pointer(GameWindowTitle, P_IsUserCasting, O1_IsUserCasting, O2_IsUserCasting, O3_IsUserCasting, O4_IsUserCasting)
+}
+
 	
 filterSlectionTypeByEnergy(EnergyFilter="", F_utype*) ;Returns the [Unit] index number
 {	
@@ -4530,19 +4624,15 @@ GetEBases()
 {	global a_Player, a_LocalPlayer, A_unitID, DeadFilterFlag
 	EnemyBase_i := GetEnemyTeamSize()
 	;UnitCount := getUnitCount()
-	While ((UnitRead_i + EndCount) / getUnitCount() < 1.1)  ; Read +10% blanks in a row
+	While (A_index <= getHighestUnitIndex()) 
 						AND (Found_i < EnemyBase_i)  
 	{	unit := A_Index - 1
 		type := getUnitType(Unit)
 		Filter := getUnitTargetFilter(Unit)	
 		Owner := getUnitOwner(Unit)		
 
-		If (Filter & DeadFilterFlag)
+		If (Filter & DeadFilterFlag) || (type = "Fail")
 			Continue
-		Else If (type = "Fail")
-		{  EndCount += 1
-			Continue
-		}
 		Else
 		{	
 			IF (( type = A_unitID["Nexus"] ) OR ( type = A_unitID["CommandCenter"] ) OR ( type = A_unitID["Hatchery"] )) AND (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"])
@@ -4550,8 +4640,6 @@ GetEBases()
 				Found_i ++
 				list .=  unit "|"
 			}
-			UnitRead_i ++	
-			EndCount := 0
 		}
 	}
 	Return SubStr(list, 1, -1)	; remove last "|"	
@@ -4603,10 +4691,15 @@ getSelectedUnitIndex(i=0) ;IF Blank just return the first selected unit (at posi
 	; returns the same thing ; Return ReadMemory(B_SelectionStructure + O_scUnitIndex + i * S_scStructure, GameWindowTitle, 2) /4
 }
 
-getSelectionTypeCount()
+getSelectionTypeCount()	; begins at 1
 {	global
 	Return	ReadMemory(B_SelectionStructure + O_scTypeCount, GameWindowTitle, 2)
 }
+getSelectionHighlightedGroup()	; begins at 0 
+{	global
+	Return ReadMemory(B_SelectionStructure + O_scTypeHighlighted, GameWindowTitle, 2)
+}
+
 getSelectionCount()
 { 	global 
 	Return ReadMemory(B_SelectionStructure, GameWindowTitle, 2)
@@ -4669,7 +4762,7 @@ getSubGroupPriority(Unit)	;this is a messy workaround fix
 	
 	if (type = A_unitID.SwarmHostBurrowed)
 		Priority += .2		;can't use .5 as then if 1 is 18 and other 17 can both equal 17.5 which isnt right
-	else if (Filter & BuriedFilterFlag)
+else if (Filter & BuriedFilterFlag) && (type != A_unitID.WidowMineBurrowed)	; as this doesnt effect where the widow mine is in its subgroup
 		Priority -= .2		;this is a work around, as burrowed units are a lower priority (come later in the selection group) except for swarm host which is higher!! :(
 	Return Priority
 }
@@ -4678,6 +4771,10 @@ getUnitCount()
 	if (!count := ReadMemory(B_uCount, GameWindowTitle))
 		count := 1	;so dont get stuck with dividing by 0 and infinite loop in iterations
 	Return count
+}
+getHighestUnitIndex() 	; this is the highest alive units index - note its out by 1
+{	global				; if 1 unit is alive it will return 1 (NOT 0)
+	Return ReadMemory(B_uHighestIndex, GameWindowTitle)	
 }
 getPlayerName(i) ; start at 0
 {	global
@@ -4827,7 +4924,7 @@ isMenuOpen()
 
 isChatOpen()
 { 	global
-	Return  pointer(GameWindowTitle, P_ChatFocus, O1_ChatFocus, O2_ChatFocus, O3_ChatFocus)
+	Return  pointer(GameWindowTitle, P_ChatFocus, O1_ChatFocus, O2_ChatFocus)
 }
 GetEnemyRaces()
 {	global a_Player, a_LocalPlayer
@@ -4924,19 +5021,14 @@ DrawMiniMap()
 		A_MiniMapUnits := []
 		PlayerColours := arePlayerColoursEnabled()
 		
-		While ((UnitRead_i + EndCount) / getUnitCount() < 1.1) ; Read +10% blanks in a row
+		While (A_index <= getHighestUnitIndex()) 
 		{	unit := A_Index - 1
 			type := getUnitType(Unit)
 			Filter := getUnitTargetFilter(Unit)	
-			If (Filter & DeadFilterFlag) 
+			If (Filter & DeadFilterFlag) || (type = "Fail")
 				Continue
-			Else If (type = "Fail")
-			{  EndCount += 1
-				Continue
-			}
 			Else 
-			{	EndCount := 0
-				UnitRead_i ++
+			{		
 				Owner := getUnitOwner(Unit)			
 				If type in %ActiveUnitHighlightExcludeList% ; cant use or/expressions with type in
 					Continue
@@ -5583,6 +5675,7 @@ InstallSC2Files()
 	FileInstall, Included Files\Off.wav, %A_Temp%\Off.wav, 1 
 	FileInstall, Included Files\Windows Ding.wav, %A_Temp%\Windows Ding.wav, 1 
 	FileInstall, Included Files\Windows Ding2.wav, %A_Temp%\Windows Ding2.wav, 1 
+	FileInstall, Included Files\Windows Ding3.wav, %A_Temp%\Windows Ding3.wav, 1 
 	FileInstall, Included Files\ModifierDown.wav, %A_Temp%\ModifierDown.wav, 1 
 	FileInstall, Included Files\Used_Icons\home32.png, %A_Temp%\home32.png, 1
 	FileInstall, Included Files\Used_Icons\radarB32.png, %A_Temp%\radarB32.png, 1
@@ -5669,6 +5762,8 @@ CreateHotkeys()
 	Hotkey, If, WinActive(GameWindowTitle) && !isMenuOpen() && time
 		hotkey, %ping_key%, ping, on									;on used to re-enable hotkeys as were 
 	Hotkey, If, WinActive(GameWindowTitle) && time						;turned off during save to allow for swaping of keys
+		hotkey, %worker_count_local_key%, worker_count, on
+		hotkey, %worker_count_enemy_key%, worker_count, on
 		hotkey, %Playback_Alert_Key%, g_PrevWarning, on					
 		hotkey, %TempHideMiniMapKey%, g_HideMiniMap, on
 		hotkey, %AdjustOverlayKey%, Adjust_overlay, on
@@ -5756,24 +5851,15 @@ Class c_EnemyUnit
 ParseEnemyUnits(ByRef a_EnemyUnits, ByRef a_Player)
 { global DeadFilterFlag
 	LocalTeam := getPlayerTeam(), a_EnemyUnitsTmp := []
-	While ((UnitRead_i + EndCount) / getUnitCount() < 1.1) ; Read +10% blanks in a row
+	While (A_Index <= getUnitCount()) ; Read +10% blanks in a row
 	{
 		unit := A_Index -1
 		Filter := getUnitTargetFilter(unit)	
-		If (Filter & DeadFilterFlag) 
+		If (Filter & DeadFilterFlag) || (type = "Fail")
 			Continue
-		Else If (UnitType = "Fail")
-		{  EndCount += 1
-			Continue
-		}
-		Else 
-		{	EndCount := 0 
-			UnitRead_i ++
-			Owner := getUnitOwner(unit)
-		}		
+		Owner := getUnitOwner(unit)
 		if  (a_Player[Owner, "Team"] <> LocalTeam AND Owner) 
 			a_EnemyUnitsTmp[Unit] := new c_EnemyUnit(Unit)
-
 	}
 	a_EnemyUnits := a_EnemyUnitsTmp
 }
@@ -5801,14 +5887,17 @@ getCamCenteredUnit(UnitList) ; |delimited ** ; needs a minimum of 70+ ms to upda
 
 
 
-castInjectLarva(Method="Backspace", ForceInject=0)	;SendWhileBlocked("^" CG_control_group)
+castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlocked("^" CG_control_group)
 {	global
+	LOCAL HighlightedGroup := getSelectionHighlightedGroup()
 ;	Send, ^%Inject_control_group%
-	SendWhileBlocked("^" Inject_control_group)
+	send % "^" Inject_control_group
 	if (Method="MiniMap" OR ForceInject)
 	{
+
+		local xNew, yNew
 	;	Send, %MI_Queen_Group%
-		SendWhileBlocked(MI_Queen_Group)
+		send % MI_Queen_Group
 		SkipUsedQueen := [] ; blank the queen list
 		HatchIndex := getBuildingList(A_unitID["Hatchery"], A_unitID["Lair"], A_unitID["Hive"]) 
 		if ((QueenIndex := filterSlectionTypeByEnergy(25, A_unitID["Queen"]))) ; 25=Energy Filter
@@ -5828,12 +5917,21 @@ castInjectLarva(Method="Backspace", ForceInject=0)	;SendWhileBlocked("^" CG_cont
 						Random, Random , -1, 1
 						random := 0
 					;	Send, %Inject_spawn_larva%
-						SendWhileBlocked(Inject_spawn_larva)
-						click_x := click_x + Random , click_y := click_y + Random 				
+						send % Inject_spawn_larva
+						
+						click_x := click_x + Random , click_y := click_y + Random 	
 						If HumanMouse
 							MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 						send {click Left %click_x%, %click_y%}
-						Sleep, %auto_inject_sleep% 
+						; send {click  %start_x%, %start_y%, 0}
+
+						Sleep, %sleepTime% 
+
+						If ForceInject 		; this will update cursos position if user moves it during a force inject
+						{
+							MouseGetPos, xNew, yNew
+							start_x += xNew - click_x , start_y += yNew - click_y
+						}
 						Break
 					}
 				}	
@@ -5842,8 +5940,8 @@ castInjectLarva(Method="Backspace", ForceInject=0)	;SendWhileBlocked("^" CG_cont
 	}	
 	else if (Method="Backspace Adv") || (Method = "Backspace CtrlGroup") ;cos i changed the name in an update
 	{		
-		SendWhileBlocked(BI_create_camera_pos_x)
-		SendWhileBlocked(MI_Queen_Group)
+		send % BI_create_camera_pos_x
+		send % MI_Queen_Group
 		HatchIndex := getBuildingList(A_unitID["Hatchery"], A_unitID["Lair"], A_unitID["Hive"]) 
 		click_x := A_ScreenWidth/2 , click_y := A_ScreenHeight/2
 		If HumanMouse
@@ -5858,7 +5956,7 @@ castInjectLarva(Method="Backspace", ForceInject=0)	;SendWhileBlocked("^" CG_cont
 			loop, % getBaseCameraCount()	
 			{
 				Hatch_i := A_index
-				SendWhileBlocked(base_camera)
+				send % base_camera
 				if (A_Index = 1)
 				{
 					HatchList := []
@@ -5868,31 +5966,31 @@ castInjectLarva(Method="Backspace", ForceInject=0)	;SendWhileBlocked("^" CG_cont
 					loop, parse, HatchIndex, |
 						HatchList[A_Index] := A_loopfield
 				}
-				else Sleep, %auto_inject_sleep%	;sleep needs to be here (to give time to update selection buffer?)				
+				else Sleep, %sleepTime%	;sleep needs to be here (to give time to update selection buffer?)				
 				loop, parse, QueenIndex, |  	;like this to re-check energy if she injects a macro hatch - checking queen index was previouosly here
 				{
 					If areUnitsNearEachOther(A_LoopField, HatchList[Hatch_i] , MI_QueenDistance, MI_QueenDistance)
 					{
-						SendWhileBlocked(Inject_spawn_larva) 	;when # hatches > queens (ie queens going walkabouts)		
+						send % Inject_spawn_larva 	;when # hatches > queens (ie queens going walkabouts)		
 						send {click Left %click_x%, %click_y%}				
 						Break
 					}
 				}
 			}			
-		SendWhileBlocked(BI_camera_pos_x)
+		send % BI_camera_pos_x
 	}
-else ; if (Method="Backspace")
+	else ; if (Method="Backspace")
 	{
 		HatchIndex := getBuildingList(A_unitID["Hatchery"], A_unitID["Lair"], A_unitID["Hive"])
-		SendWhileBlocked(BI_create_camera_pos_x)
+		send % BI_create_camera_pos_x
 		If (drag_origin = "Right" OR drag_origin = "R") And !HumanMouse ;so left origin - not case sensitive
 			Dx1 := A_ScreenWidth-25, Dy1 := 45, Dx2 := 35, Dy2 := A_ScreenHeight-240	
 		Else ;left origin
 			Dx1 := 25, Dy1 := 25, Dx2 := A_ScreenWidth-40, Dy2 := A_ScreenHeight-240
 		loop, % getBaseCameraCount()	
 		{
-			SendWhileBlocked(base_camera)
-			Sleep, auto_inject_sleep/2	;need a sleep somerwhere around here to prevent walkabouts...sc2 not registerings box drag?
+			send % base_camera
+			Sleep, sleepTime/2	;need a sleep somerwhere around here to prevent walkabouts...sc2 not registerings box drag?
 			If (drag_origin = "Right" OR drag_origin = "R") And HumanMouse ;so left origin - not case sensitive
 				Dx1 := A_ScreenWidth-15-rand(0,(360/1920)*A_ScreenWidth), Dy1 := 45+rand(5,(200/1080)*A_ScreenHeight), Dx2 := 40+rand((-5/1920)*A_ScreenWidth,(300/1920)*A_ScreenWidth), Dy2 := A_ScreenHeight-240-rand((-5/1080)*A_ScreenHeight,(140/1080)*A_ScreenHeight)
 			Else If (drag_origin = "Left" OR drag_origin = "L") AND HumanMouse ;left origin
@@ -5906,10 +6004,10 @@ else ; if (Method="Backspace")
 			}
 			Else 
 				send {click down %Dx1%, %Dy1%}{click up, %Dx2%, %Dy2%} 
-			Sleep, auto_inject_sleep/2	;sleep needs to be here (to give time to update selection buffer?)		
+			Sleep, sleepTime/2	;sleep needs to be here (to give time to update selection buffer?)		
 			if (QueenIndex := filterSlectionTypeByEnergy(25, A_unitID["Queen"]))
 			{																	
-				SendWhileBlocked(Inject_spawn_larva)							;have to think about macro hatch though
+				send % Inject_spawn_larva							;have to think about macro hatch though
 				click_x := A_ScreenWidth/2 , click_y := A_ScreenHeight/2		;due to not using Shift - must have 2 queens if on same screen
 																				;as will inject only 1 (as it will go to 1 hatch, then get the order to go the other before injecting the 1s)
 				If HumanMouse
@@ -5918,14 +6016,16 @@ else ; if (Method="Backspace")
 					send {click Left %click_x%, %click_y%}
 				}
 				Else send {click Left %click_x%, %click_y%}
-				SendWhileBlocked(Escape) ; (deselects queen larva) (useful on an already injected hatch)
+				send % Escape ; (deselects queen larva) (useful on an already injected hatch) this is actually a variable
 			}	
 			
 		}
-		SendWhileBlocked(BI_camera_pos_x)
+		send % BI_camera_pos_x
 	}
 	;	Send, %Inject_control_group%
-		SendWhileBlocked(Inject_control_group)
+		send % Inject_control_group
+		while (A_Index <= HighlightedGroup)
+			send {Tab}
 }
 
 
@@ -6055,16 +6155,15 @@ LoadMemoryAddresses(SC2EXE)
 	B_rStructure := SC2EXE + 0x1EC8E00	;old
 		S_rStructure := 0x10
 
-	P_ChatFocus := SC2EXE + 0x020ABD7C		;Just when chat box is in focus
-		O1_ChatFocus := 0x18 
-		O2_ChatFocus := 0x34 
-		O3_ChatFocus := 0x198 
+	P_ChatFocus := SC2EXE + 0x02097818		;Just when chat box is in focus
+		O1_ChatFocus := 0x3D0 
+		O2_ChatFocus := 0x198
 	
 	P_MenuFocus := SC2EXE + 0x03F03C14		;this is all menus and includes chat box when in focus ; old 0x3F04C04
 		O1_MenuFocus := 0x1A0
 		
 	B_uCount := SC2EXE + 0x2CF4588		; This is the units alive (and includes missiles) ;0x02CF5588			
-	B_uCount2 := SC2EXE + 0x25F4700		;this is actually the highest currently alive unit (includes missiles while alive)
+	B_uHighestIndex := SC2EXE + 0x25F4700		;this is actually the highest currently alive unit (includes missiles while alive)
 	B_uStructure := SC2EXE + 0x25F4740			 ;0x25F5740	
 	S_uStructure := 0x1C0
 		O_uModelPointer := 0x8
@@ -6093,6 +6192,7 @@ LoadMemoryAddresses(SC2EXE)
 	S_CtrlGroup := 0x1B60
 	S_scStructure := 0x4	; Unit Selection & Ctrl Group Structures
 		O_scTypeCount := 0x2
+		O_scTypeHighlighted := 0x4
 		O_scUnitIndex := 0x8
 	P_PlayerColours := SC2EXE + 0x03D23EC4 ; 0 when enemies red  1 when player colours
 		O1_PlayerColours := 0x4
@@ -6121,6 +6221,12 @@ LoadMemoryAddresses(SC2EXE)
 	; note I have Converted these hex numbers from their true decimal conversion 
 	; so that they can be used as bit flags with bit wise &
 
+	P_IsUserCasting := SC2EXE + 0x02097818	; this is probably something to do with the cursor icon or control card
+		O1_IsUserCasting := 0x364 			; 1 indicates user is casting a spell e.g. fungal, snipe, or is trying to place a structure
+		O2_IsUserCasting := 0x19C 			; auto casting e.g. swarm host displays 1 always 
+		O3_IsUserCasting := 0x228
+		O4_IsUserCasting := 0x168
+
 		
 		
 	return	
@@ -6139,14 +6245,14 @@ LoadMemoryAddresses(SC2EXE)
 }
 
 g_SplitUnits:
-	BlockInput("All", l_KeyboardAndMouse)
+	BufferInput(aButtons.List, "Block")
 	SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
-	BlockInput("Disable", l_KeyboardAndMouse)
+	BufferInput(aButtons.List) ;re-enable keys without sending buffer
 	return
 	
 g_SelectArmy:
 	ReleaseModifiers(ModifierBeepSelectArmy)
-	BlockInput("All", l_KeyboardAndMouse)
+	BufferInput(aButtons.List, "Block")
 	mousegetpos, Xarmyselect, Yarmyselect
 	send %Sc2SelectArmy_Key%
 	sleep SleepSelectArmy ; every now and then it needs a few ms to update
@@ -6162,7 +6268,7 @@ g_SelectArmy:
 	}
 	if SelectArmyControlGroupEnable
 		send ^%Sc2SelectArmyCtrlGroup%
-	BlockInput("Disable", l_KeyboardAndMouse)
+	BufferInput(aButtons.List) ;re-enable keys without sending buffer
 return
 
 getScreenAspectRatio()
@@ -6366,6 +6472,7 @@ debugData()
 	. A_Tab "Mmap Radius: " getMiniMapRadius(getSelectedUnitIndex()) "`n" 
 	. A_Tab "Energy: " getUnitEnergy(getSelectedUnitIndex()) "`n" 
 	. "Chat Focus: " isChatOpen() "`n"
+	. "Menu Focus: " isMenuOpen() "`n"
 	. "Map: `n"
 	. A_Tab "Map Left: " getMapLeft() "`n"
 	. A_Tab "Map Right: " getMapRight() "`n"
@@ -6428,7 +6535,7 @@ SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 ;	clipboard .= "BL (" botLeftUnitX ", " botLeftUnity ")`n"
 ;	clipboard .= "Squarespots: " squareSpots "`n"
 	send %SplitctrlgroupStorage_key%
-	send {click  %Xorigin%, %Yorigin%, 0}
+	send {click %Xorigin%, %Yorigin%, 0}
 		return
 }
 
@@ -6594,8 +6701,10 @@ isWorkerInProduction(unit) ; units can only be t or P, no Z
 	return state
 }
 
+return
 
 
+; //fold
 ; unit + 0xE2 ; 1 byte = 18h chrono for protoss structures 10h normal
 /*
 Orbital - Unit Abilities + 9 = 24h while idle 04h when SCV in prod - 40h while flying - 1byte
@@ -6715,3 +6824,5 @@ return
 		dspeak("move")
 	else if (state = uMovementFlags.Follow)
 		dspeak("Follow")
+		
+; fold//
