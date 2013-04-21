@@ -19,7 +19,7 @@ New:
 	• Can disable the "Beep if modifier is held down" ability for FORCED injects.
 
 Fixes:
-	• Hellbat (listed as HellionTank) ID been added to the unit detection list.
+	• Hellbat (listed as HellionTank) ID has been added to the unit detection list.
 	• Method of finding SC2 Base address
 		- This was likely responsible for some of the "Fail" and "Handle Closed" errors
 		- This could previously be caused by having a folder open called "Starcraft II" or having a really slow computer

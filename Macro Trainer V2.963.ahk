@@ -1327,18 +1327,15 @@ auto_inject:
 	return
 	
 Force_Inject:
-	if ( time - inject_set >= F_Inject_Delay + randomForcedInjectDelay) AND ( ForceCount < F_Max_Injects) AND WinActive(GameWindowTitle)
+	if (time - inject_set >= F_Inject_Delay + randomForcedInjectDelay) AND ( ForceCount < F_Max_Injects) AND WinActive(GameWindowTitle)
 		gosub cast_ForceInject
 	Return
 
 Force_Inject_Alert:
-	If ( time - inject_set >= F_Inject_Delay + randomForcedInjectDelay - F_Alert_PreTime ) AND ( ForceCount < F_Max_Injects)
+	If ( time - inject_set >= F_Inject_Delay + randomForcedInjectDelay - F_Alert_PreTime ) AND ( ForceCount < F_Max_Injects) AND WinActive(GameWindowTitle)
 	{
-		If WinActive(GameWindowTitle)
-		{
-			settimer, Force_Inject_Alert, off
-			SoundPlay, %A_Temp%\Windows Ding2.wav  ;SoundPlay *-1
-		}
+		settimer, Force_Inject_Alert, off
+		SoundPlay, %A_Temp%\Windows Ding2.wav  ;SoundPlay *-1
 	}
 	Return
 
@@ -6800,7 +6797,6 @@ getLarvaPointer(Hatch, Larva)
 
 
 /*
-
 
 f3::
 dspeak(clipboard := isUnitPatrolling(getSelectedUnitIndex()))
