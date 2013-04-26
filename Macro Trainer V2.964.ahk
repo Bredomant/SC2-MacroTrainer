@@ -1,3 +1,22 @@
+;-----------------------
+;	For updates:
+;	Change version number in exe and config file
+;	Upload the changelog, file version  and new exe files to the ftp server
+; 	check dont have debugging hotkeys and clipboards at end of script
+;-----------------------
+;	git add -A
+;	git commit -m "Msg"
+;	git push
+;-----------------------
+
+
+/*	Things to do
+	Find active units /army offsets and use them in army overlay
+	Unit Panel
+	Check if Hatch was actually injected
+
+*/
+
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #SingleInstance force
 #MaxHotkeysPerInterval 999999
@@ -29,23 +48,6 @@ Else
 	debug_name := "Kalamity"
 }
 
-;-----------------------
-;	For updates:
-;	Change version number in exe and config file
-;	Upload the changelog, file version  and new exe files to the ftp server
-; 	check dont have debugging hotkeys and clipboards at end of script
-;-----------------------
-;	git add -A
-;	git commit -m "Msg"
-;	git push
-;-----------------------
-
-
-/*	Things to do
-	Find active units /army offsets and use them in army overlay
-
-
-*/
 
 start:
 config_file := "MT_Config.ini"
@@ -6739,7 +6741,7 @@ getEnemyUnits(byref aEnemyUnits)
 	aEnemyUnits := []
 	getEnemyUnits(aEnemyUnits)
 	objtree(aEnemyUnits, 1)
-	Panel(aEnemyUnits, a_UnitID)
+	Panel(aEnemyUnits, a_UnitID, a_pBitmap, a_Player)
 	objtree(aEnemyUnits, 2)
 
 return
