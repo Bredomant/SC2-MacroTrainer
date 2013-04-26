@@ -1,3 +1,14 @@
+V2.964
+Fixes:
+	• Fixed an issue which could cause the program to fail if a folder with the name "Starcraft II" was open.
+
+Changes:	
+	• Added deselect unit sleep time.
+	• Queens will no longer inject on hatcheries which are on a different mapheight 
+		e.g. queen on high ground hatch on the low ground
+		Note: A queen standing on a ramp will not inject her hatch (even if she is nearby)
+	•The normal inject alerts will not be heard if 'force injects' have been enabled. 
+
 V2.963
 Changes:
 	• Injects:

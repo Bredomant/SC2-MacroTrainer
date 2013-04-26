@@ -51,6 +51,7 @@ version := 2.963
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
 GameWindowTitle := "StarCraft II"
+GameIdentifier := "ahk_exe SC2.exe"
 GameExe := "SC2.exe"
 
 SAPI := ComObjCreate("SAPI.SpVoice")	; ComObjCreate("SAPI.SpVoice").Speak("Please read this file")
@@ -132,7 +133,7 @@ If !errorlevel
 	try run %SC2InstallPath%
 }
 Process, wait, %GameExe%	; waits for starcraft to exist
-while (!(B_SC2Process := getProcessBaseAddress("ahk_exe " GameExe)) || B_SC2Process < 0)		;using just the window title could cause problems if a folder had the same name e.g. sc2 folder
+while (!(B_SC2Process := getProcessBaseAddress(GameIdentifier)) || B_SC2Process < 0)		;using just the window title could cause problems if a folder had the same name e.g. sc2 folder
 	sleep 250				; required to prevent memory read error - Handle closed: error 		;note the space before end quote
 LoadMemoryAddresses(B_SC2Process)	
 settimer, clock, 200
@@ -241,7 +242,7 @@ if (getSelectionCount() > 1)
 return
 
 
-ReleaseModifiers(Beep = 1, CheckIfCasting = 0)
+ReleaseModifiersOld(Beep = 1, CheckIfCasting = 0)
 {
 	while (iscasting := CheckIfCasting && isUserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
@@ -254,6 +255,30 @@ ReleaseModifiers(Beep = 1, CheckIfCasting = 0)
 	if count
 		sleep, 35	;give time for sc2 to update keystate - it can be a slower!
 }
+
+ReleaseModifiers(Beep = 1, CheckIfCasting = 0)
+{
+	startReleaseModifiers:
+	count := 0
+	firstRun++
+	while (iscasting := CheckIfCasting && isUserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
+	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
+	{
+		count++
+		if (count = 1 && Beep) && !iscasting && firstRun = 1	;wont beep if casting
+			SoundPlay, %A_Temp%\ModifierDown.wav	
+		sleep, 5
+	}
+
+	if count
+	{
+		if (firstRun = 1)
+			sleep, 35	;give time for sc2 to update keystate - it can be a slower! 
+		gosub, startReleaseModifiers
+	}
+	return
+}
+
 
 g_SendBaseCam:
 	send, {Backspace}
@@ -389,7 +414,7 @@ Adjust_overlay:
 		SetTimer, OverlayKeepOnTop, 1000, -10
 		SetTimer, overlay_timer, %OverlayRefresh%, -11
 		SoundPlay, %A_Temp%\Off.wav
-		WinActivate, %GameWindowTitle%
+		WinActivate, %GameIdentifier%
 	}
 Return	
 
@@ -485,14 +510,14 @@ clock:
 		game_status := "game", warpgate_status := "not researched"
 		Alert_TimedOut := [], Alerted_Buildings := [], Alerted_Buildings_Base := []  
 		MiniMapWarning := [], a_BaseList := []
-		if WinActive(GameWindowTitle)
+		if WinActive(GameIdentifier)
 			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := 1
 		if idle_enable	;this is the idle AFK
 			settimer, user_idle, 1000
 ;		if (MaxWindowOnStart && !Auto_Mine && time < 5)  ;as automine has its own
 		if (MaxWindowOnStart && time < 5)  ; automine currently disabled
 		{	MouseMove A_ScreenWidth/2, A_ScreenHeight/2	;which has a longer sleep
-			WinActivate, %GameWindowTitle%
+			WinActivate, %GameIdentifier%
 			WinNotActiveAtStart := 1
 		}
 		Gosub, player_team_sorter
@@ -526,7 +551,7 @@ clock:
 		CreateHotkeys()
 		if (a_LocalPlayer["Name"] == "Kalamity")
 		{
-			Hotkey, If, WinActive(GameWindowTitle) && time
+			Hotkey, If, WinActive(GameIdentifier) && time
 			hotkey, >!g, g_GLHF
 			hotkey, +ESC, g_DeselectUnit
 			Hotkey, If
@@ -639,7 +664,7 @@ Auto_Group:
 	Return
 	
 AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
-{ 	global GameWindowTitle
+{ 	global GameIdentifier
 	static PrevSelectedUnits, SelctedTime
 	; CtrlList := "" ;if unit type not in listt add to it - give count of list type
 	CtrlType_i := 0 
@@ -686,7 +711,7 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 		PrevSelectedUnits := CurrentlySelected
 		SelctedTime := A_Tickcount
 	}
-	if (A_Tickcount - SelctedTime >= AGDelay) && !WrongUnit  && (CtrlType_i = UnitType_i) && (Player_Ctrl_GroupSet <> "") && WinActive(GameWindowTitle) ; note <> "" as there is group 0! cant use " Player_Ctrl_GroupSet "
+	if (A_Tickcount - SelctedTime >= AGDelay) && !WrongUnit  && (CtrlType_i = UnitType_i) && (Player_Ctrl_GroupSet <> "") && WinActive(GameIdentifier) ; note <> "" as there is group 0! cant use " Player_Ctrl_GroupSet "
 	{		;note, i use Alt as 'group 2' - so i have winactive here as i can 'alt tab out' thereby selecting a groupable unit and having the program send the command while outside sc2
 		Sort, CtrlGroupSet, D| N U			;also now needed due to possible AG_delay and user being altabbed out when sending
 		CtrlGroupSet := RTrim(CtrlGroupSet, "|")	
@@ -869,9 +894,9 @@ If (time AND Time <= Start_Mine_Time + 8) && getIdleWorkers()
 		A_Bad_patchesPatchCount := 0
 		local_mineral_list := local_minerals(LocalBase, "Distance")	;Get list of local minerals	
 		MouseMove A_ScreenWidth/2, A_ScreenHeight/2
-		if !WinActive(GameWindowTitle)
+		if !WinActive(GameIdentifier)
 		{	WinNotActiveAtStart := 1
-			WinActivate, %GameWindowTitle%
+			WinActivate, %GameIdentifier%
 			sleep 1500 ; give time for slower computers to make sc2 window 'truely' active
 			DestroyOverlays()
 			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := 1
@@ -1108,7 +1133,7 @@ If (A_ThisLabel = "find_races")
 if !time	;leave this in, so if they press the hotkey whileoutside of game, wont get gibberish
 	return
 Else EnemyRaces := GetEnemyRaces()
-if (race_clipboard && WinActive(GameWindowTitle))
+if (race_clipboard && WinActive(GameIdentifier))
 	clipboard := EnemyRaces
 if race_speech
 	DSpeak(EnemyRaces)
@@ -1312,7 +1337,7 @@ inject:
 	return
 	
 auto_inject:
-	if ( time - inject_set >= auto_inject_time )
+	if ( time - inject_set >= auto_inject_time ) && (!F_Inject_Enable ||  ForceCount >= F_Max_Injects)
 	{
 		settimer, auto_inject, off
 		If W_inject_ding_on
@@ -1327,12 +1352,12 @@ auto_inject:
 	return
 	
 Force_Inject:
-	if (time - inject_set >= F_Inject_Delay + randomForcedInjectDelay) AND ( ForceCount < F_Max_Injects) AND WinActive(GameWindowTitle)
+	if (time - inject_set >= F_Inject_Delay + randomForcedInjectDelay) AND ( ForceCount < F_Max_Injects) AND WinActive(GameIdentifier)
 		gosub cast_ForceInject
 	Return
 
 Force_Inject_Alert:
-	If ( time - inject_set >= F_Inject_Delay + randomForcedInjectDelay - F_Alert_PreTime ) AND ( ForceCount < F_Max_Injects) AND WinActive(GameWindowTitle)
+	If ( time - inject_set >= F_Inject_Delay + randomForcedInjectDelay - F_Alert_PreTime ) AND ( ForceCount < F_Max_Injects) AND WinActive(GameIdentifier)
 	{
 		settimer, Force_Inject_Alert, off
 		SoundPlay, %A_Temp%\Windows Ding2.wav  ;SoundPlay *-1
@@ -1518,7 +1543,7 @@ While (A_Index <= getHighestUnitIndex()) ; Read +10% blanks in a row
 				}										
 				MiniMapWarning.insert({"Unit": u_iteration, "Time": Time})
 
-				If ( alert_array[GameType, "Clipboard"] && WinActive(GameWindowTitle))
+				If ( alert_array[GameType, "Clipboard"] && WinActive(GameIdentifier))
 					clipboard := alert_array[GameType, A_Index, "Name"] " Detected - " a_Player[unit_owner, "Colour"] " - " a_Player[unit_owner, "Name"]
 				PrevWarning := []
 				PrevWarning.speech := alert_array[GameType, A_Index, "Name"]
@@ -1540,7 +1565,7 @@ return
 
 
 OverlayKeepOnTop:
-	if (!WinActive(GameWindowTitle) And ReDraw <> 1)
+	if (!WinActive(GameIdentifier) And ReDraw <> 1)
 	{	ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := ReDrawIdleWorkers:= 1
 		DestroyOverlays()
 	}
@@ -1560,7 +1585,7 @@ g_HideMiniMap:
 return
 
 overlay_timer: 	;DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdent=0, Background=0,Drag=0)
-	If (WinActive(GameWindowTitle) || Dragoverlay) ;really only needed to ressize/scale not drag - as the movement is donve via  a post message
+	If (WinActive(GameIdentifier) || Dragoverlay) ;really only needed to ressize/scale not drag - as the movement is donve via  a post message
 	{
 		If DrawIncomeOverlay
 			DrawIncomeOverlay(ReDrawIncome, IncomeOverlayScale, OverlayIdent, OverlayBackgrounds, Dragoverlay)
@@ -2089,6 +2114,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, SplitctrlgroupStorage_key, %config_file%, %section%, SplitctrlgroupStorage_key, 9
 	IniRead, SleepSplitUnits, %config_file%, %section%, SleepSplitUnits, 20
 	IniRead, l_DeselectArmy, %config_file%, %section%, l_DeselectArmy, %A_Space%
+	IniRead, DeselectSleepTime, %config_file%, %section%, DeselectSleepTime, 0
 
 	;[Alert Location]
 	IniRead, Playback_Alert_Key, %config_file%, Alert Location, Playback_Alert_Key, <#F7
@@ -2190,7 +2216,7 @@ ini_settings_write:
 		{
 			Try Hotkey,	%exit_hotkey%, off
 
-			Hotkey, If, WinActive(GameWindowTitle) 						
+			Hotkey, If, WinActive(GameIdentifier) 						
 														; 	deactivate the hotkeys
 			hotkey, %speaker_volume_up_key%, off		; 	so they can be updated with their new keys
 			hotkey, %speaker_volume_down_key%, off		;	
@@ -2200,7 +2226,7 @@ ini_settings_write:
 			hotkey, %program_volume_down_key%, off		; still left the overall try just incase i missed something
 			hotkey, %warning_toggle_key%, off			; gives the user a friendlier error
 		
-			Hotkey, If, WinActive(GameWindowTitle) && time	
+			Hotkey, If, WinActive(GameIdentifier) && time	
 			hotkey, %worker_count_local_key%, off
 			hotkey, %worker_count_enemy_key%, off
 			hotkey, %Playback_Alert_Key%, off
@@ -2216,16 +2242,16 @@ ini_settings_write:
 		try	hotkey, %inject_start_key%, off
 		try	hotkey, %inject_reset_key%, off	
 
-			Hotkey, If, WinActive(GameWindowTitle) && time && !isMenuOpen() && SelectArmyEnable
+			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
 			hotkey, %castSelectArmy_key%, off
-			Hotkey, If, WinActive(GameWindowTitle) && time && !isMenuOpen() && SplitUnitsEnable
+			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
 			hotkey, %castSplitUnit_key%, off
-			Hotkey, If, WinActive(GameWindowTitle) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time
 			hotkey, %cast_inject_key%, off
 			hotkey, %F_InjectOff_Key%, Cast_DisableInject, on	
-			Hotkey, If, WinActive(GameWindowTitle) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
 			hotkey, %Cast_ChronoGate_Key%, off
-			Hotkey, If, WinActive(GameWindowTitle) && !isMenuOpen() && time
+			Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
 			Hotkey, %ping_key%, off		
 			while (10 > i := A_index - 1)
 			{
@@ -2471,6 +2497,7 @@ ini_settings_write:
 	IniWrite, %SplitctrlgroupStorage_key%, %config_file%, %section%, SplitctrlgroupStorage_key
 	IniWrite, %SleepSplitUnits%, %config_file%, %section%, SleepSplitUnits
 	IniWrite, %l_DeselectArmy%, %config_file%, %section%, l_DeselectArmy
+	IniWrite, %DeselectSleepTime%, %config_file%, %section%, DeselectSleepTime
 		
 	;[Misc Hotkey]
 	IniWrite, %worker_count_local_key%, %config_file%, Misc Hotkey, worker_count_key
@@ -3061,7 +3088,11 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 		Gui, Add, Checkbox, y+10 vBlockingMouseKeys checked%BlockingMouseKeys%, Mouse Buttons	
 		Gui, Add, Checkbox, y+10 vBlockingMultimedia checked%BlockingMultimedia%, Mutimedia Buttons	
 		Gui, Add, Checkbox, y+10 vBlockingModifier checked%BlockingModifier%, Modifier Keys	
-
+	
+	Gui, Add, GroupBox, xs yp+30 w161 h60, Unit Deselection
+		Gui, Add, Text, xp+10 yp+25, Sleep Time:
+		Gui, Add, Edit, Number Right x+25 yp-2 w45 
+			Gui, Add, UpDown,  Range0-300 vDeselectSleepTime, %DeselectSleepTime%,
 
 	Gui, Add, GroupBox, Xs+171 ys w245 h85, Stealth Mode (Hide Icons/Menus)
 		Gui, Add, Checkbox,xp+10 yp+25 VHideTrayIcon checked%HideTrayIcon%, Enable	
@@ -3592,7 +3623,7 @@ SelectArmyDeselectFollowing_TT := "Units on a follow command will be removed fro
 
 castSplitUnit_key_TT := #castSplitUnit_key_TT := "The hotkey used to invoke this function."
 SplitctrlgroupStorage_key_TT := #SplitctrlgroupStorage_key_TT := "This ctrl group is used during the function.`nAssign it to a control group you DON'T use!"
-
+DeselectSleepTime_TT := "Time between deselecting units from the unit panel.`nThis is used by the split and select army, and deselect unit functions"
 
 #Sc2SelectArmyCtrlGroup_TT := Sc2SelectArmyCtrlGroup_TT := "The control Group (key) in which to store the army.`nE.G. 1,2,3-0"
 l_DeselectArmy_TT := #l_DeselectArmy_TT := "These unit types will be deselected."
@@ -4320,19 +4351,19 @@ areUnitsNearEachOther(unit1, unit2, x_max_dist = "", y_max_dist = "", compareZ =
 
 getMapLeft()
 {	global
-	return ReadMemory(O_mLeft, GameWindowTitle) / 4096
+	return ReadMemory(O_mLeft, GameIdentifier) / 4096
 }
 getMapBottom()
 {	global
-	return ReadMemory(O_mBottom, GameWindowTitle) / 4096
+	return ReadMemory(O_mBottom, GameIdentifier) / 4096
 }
 getMapRight()
 {	global
-	return ReadMemory(O_mRight, GameWindowTitle) / 4096
+	return ReadMemory(O_mRight, GameIdentifier) / 4096
 }
 getMapTop()
 {	global
-	return ReadMemory(O_mTop, GameWindowTitle) / 4096
+	return ReadMemory(O_mTop, GameIdentifier) / 4096
 }
 
 Get_Bmap_pixel(u_array_index_number, ByRef Xvar, ByRef Yvar)
@@ -4409,7 +4440,7 @@ getBuildingList(F_building_var*)
 
 isUserCastingOrBuilding()	;note auto casting e.g. swarm host will always activate this. There are separate bool values indicating buildings at certain spells
 {	global
-	return pointer(GameWindowTitle, P_IsUserCasting, O1_IsUserCasting, O2_IsUserCasting, O3_IsUserCasting, O4_IsUserCasting)
+	return pointer(GameIdentifier, P_IsUserCasting, O1_IsUserCasting, O2_IsUserCasting, O3_IsUserCasting, O4_IsUserCasting)
 }
 
 	
@@ -4551,17 +4582,17 @@ isInControlGroup(group, unit)
 		if (unit = getCtrlGroupedUnitIndex(Group,  A_Index - 1))
 			Return 1	;the unit is in this control group
 	Return 0			
-}	;	ctrl_unit_number := ReadMemory(B_CtrlGroupStructure + S_CtrlGroup * (group - 1) + O_scUnitIndex +(A_Index - 1) * S_scStructure, GameWindowTitle, 2)/4
+}	;	ctrl_unit_number := ReadMemory(B_CtrlGroupStructure + S_CtrlGroup * (group - 1) + O_scUnitIndex +(A_Index - 1) * S_scStructure, GameIdentifier, 2)/4
 
 getCtrlGroupedUnitIndex(group, i=0)
 {	global
-	Return ReadMemory(B_CtrlGroupStructure + S_CtrlGroup * (group - 1) + O_scUnitIndex + i * S_scStructure, GameWindowTitle) >> 18
+	Return ReadMemory(B_CtrlGroupStructure + S_CtrlGroup * (group - 1) + O_scUnitIndex + i * S_scStructure, GameIdentifier) >> 18
 }
 
 
 getControlGroupCount(Group)
 {	global
-	Return	ReadMemory(B_CtrlGroupStructure + S_CtrlGroup * (Group - 1), GameWindowTitle, 2)
+	Return	ReadMemory(B_CtrlGroupStructure + S_CtrlGroup * (Group - 1), GameIdentifier, 2)
 }	
 
 ReleaseAllModifiers(Mode="") 
@@ -4668,7 +4699,7 @@ Dspeak>:
 
 getTime()
 {	global 
-	Return Round(ReadMemory(B_Timer, GameWindowTitle)/4096, 1)
+	Return Round(ReadMemory(B_Timer, GameIdentifier)/4096, 1)
 }
 
 getSelectionType(units*) 
@@ -4684,55 +4715,55 @@ getSelectionType(units*)
 
 getSelectedUnitIndex(i=0) ;IF Blank just return the first selected unit (at position 0)
 {	global
-	Return ReadMemory(B_SelectionStructure + O_scUnitIndex + i * S_scStructure, GameWindowTitle) >> 18	;how the game does it
-	; returns the same thing ; Return ReadMemory(B_SelectionStructure + O_scUnitIndex + i * S_scStructure, GameWindowTitle, 2) /4
+	Return ReadMemory(B_SelectionStructure + O_scUnitIndex + i * S_scStructure, GameIdentifier) >> 18	;how the game does it
+	; returns the same thing ; Return ReadMemory(B_SelectionStructure + O_scUnitIndex + i * S_scStructure, GameIdentifier, 2) /4
 }
 
 getSelectionTypeCount()	; begins at 1
 {	global
-	Return	ReadMemory(B_SelectionStructure + O_scTypeCount, GameWindowTitle, 2)
+	Return	ReadMemory(B_SelectionStructure + O_scTypeCount, GameIdentifier, 2)
 }
 getSelectionHighlightedGroup()	; begins at 0 
 {	global
-	Return ReadMemory(B_SelectionStructure + O_scTypeHighlighted, GameWindowTitle, 2)
+	Return ReadMemory(B_SelectionStructure + O_scTypeHighlighted, GameIdentifier, 2)
 }
 
 getSelectionCount()
 { 	global 
-	Return ReadMemory(B_SelectionStructure, GameWindowTitle, 2)
+	Return ReadMemory(B_SelectionStructure, GameIdentifier, 2)
 }
 getIdleWorkers()
 {	global 	
-	return pointer(GameWindowTitle, P_IdleWorker, O1_IdleWorker, O2_IdleWorker)
+	return pointer(GameIdentifier, P_IdleWorker, O1_IdleWorker, O2_IdleWorker)
 }
 getPlayerSupply(player="")
 { global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]
-	Return round(ReadMemory(((B_pStructure + O_pSupply) + (player-1)*S_pStructure), GameWindowTitle)  / 4096)		
+	Return round(ReadMemory(((B_pStructure + O_pSupply) + (player-1)*S_pStructure), GameIdentifier)  / 4096)		
 	; Round Returns 0 when memory returns Fail
 }
 getPlayerSupplyCap(player="")
 { global 
 	If (player = "")
 		player := a_LocalPlayer["Slot"]
-	Return round(ReadMemory(((B_pStructure + O_pSupplyCap) + (player-1)*S_pStructure), GameWindowTitle)  / 4096)
+	Return round(ReadMemory(((B_pStructure + O_pSupplyCap) + (player-1)*S_pStructure), GameIdentifier)  / 4096)
 }
 getPlayerWorkerCount(player="")
 { global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]
-	Return ReadMemory(((B_pStructure + O_pWorkerCount) + (player-1)*S_pStructure), GameWindowTitle)
+	Return ReadMemory(((B_pStructure + O_pWorkerCount) + (player-1)*S_pStructure), GameIdentifier)
 }
 getUnitType(Unit) ;starts @ 0 i.e. first unit at 0
 { global 
 	Return ReadMemory(((ReadMemory(B_uStructure + (Unit * S_uStructure) 
-				+ O_uModelPointer, GameWindowTitle)) << 5) + O_mUnitID, GameWindowTitle, 2) ; note the pointer is 4byte, but the unit type is 2byte/word
+				+ O_uModelPointer, GameIdentifier)) << 5) + O_mUnitID, GameIdentifier, 2) ; note the pointer is 4byte, but the unit type is 2byte/word
 }
 getUnitName(unit)
 {	global 
 	Return substr(ReadMemory_Str(ReadMemory(ReadMemory(((ReadMemory(B_uStructure + (Unit * S_uStructure) 
-			+ O_uModelPointer, GameWindowTitle)) << 5) + 0x6C, GameWindowTitle), GameWindowTitle) + 0x29, ,GameWindowTitle), 6)
+			+ O_uModelPointer, GameIdentifier)) << 5) + 0x6C, GameIdentifier), GameIdentifier) + 0x29, ,GameIdentifier), 6)
 	;	pNameDataAddress := ReadMemory(unit_type + 0x6C, "StarCraft II")
 	;	NameDataAddress  := ReadMemory(pNameDataAddress, "StarCraft II") + 0x29 ; ie its a pointer 
 	;	Name := ReadMemory_Str(NameDataAddress, , "StarCraft II")
@@ -4741,20 +4772,20 @@ getUnitName(unit)
 
 getUnitOwner(Unit) ;starts @ 0 i.e. first unit at 0 - 2.0.4 starts at 1?
 { 	global
-	Return	ReadMemory((B_uStructure + (Unit * S_uStructure)) + O_uOwner, GameWindowTitle, 1) ; note the 1 to read 1 byte
+	Return	ReadMemory((B_uStructure + (Unit * S_uStructure)) + O_uOwner, GameIdentifier, 1) ; note the 1 to read 1 byte
 }
 getUnitTargetFilter(Unit) ;starts @ 0 i.e. first unit at 0
 {	global 
-	Return	ReadMemory((B_uStructure + (Unit * S_uStructure)) + O_uTargetFilter, GameWindowTitle, 8) ; note the 8 to read 8 byte
+	Return	ReadMemory((B_uStructure + (Unit * S_uStructure)) + O_uTargetFilter, GameIdentifier, 8) ; note the 8 to read 8 byte
 }
 
 getMiniMapRadius(Unit)
 {	global
-	Return ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameWindowTitle) << 5) & 0xFFFFFFFF) + O_mMiniMapSize, GameWindowTitle) /4096
+	Return ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mMiniMapSize, GameIdentifier) /4096
 }
 getSubGroupPriority(Unit)	;this is a messy workaround fix
 {	local Filter := getUnitTargetFilter(unit)	
-	local Priority := ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameWindowTitle) << 5) & 0xFFFFFFFF) + O_mSubgroupPriority, GameWindowTitle, 2)
+	local Priority := ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mSubgroupPriority, GameIdentifier, 2)
 	local type := getunittype(unit)
 	
 	if (type = A_unitID.SwarmHostBurrowed)
@@ -4765,23 +4796,23 @@ else if (Filter & BuriedFilterFlag) && (type != A_unitID.WidowMineBurrowed)	; as
 }
 getUnitCount()
 { local count 	
-	if (!count := ReadMemory(B_uCount, GameWindowTitle))
+	if (!count := ReadMemory(B_uCount, GameIdentifier))
 		count := 1	;so dont get stuck with dividing by 0 and infinite loop in iterations
 	Return count
 }
 getHighestUnitIndex() 	; this is the highest alive units index - note its out by 1
 {	global				; if 1 unit is alive it will return 1 (NOT 0)
-	Return ReadMemory(B_uHighestIndex, GameWindowTitle)	
+	Return ReadMemory(B_uHighestIndex, GameIdentifier)	
 }
 getPlayerName(i) ; start at 0
 {	global
-	Return ReadMemory_Str((B_pStructure + O_pName) + (i-1) * S_pStructure, , GameWindowTitle) 
+	Return ReadMemory_Str((B_pStructure + O_pName) + (i-1) * S_pStructure, , GameIdentifier) 
 }
 getPlayerRace(i) ; start at 0
 {	global
 	local Race
-	; Race := ReadMemory_Str((B_rStructure + (i-1) * S_rStructure), ,GameWindowTitle) ;old easy way
-	Race := ReadMemory_Str(ReadMemory(ReadMemory(B_pStructure + O_pRacePointer + (i-1)*S_pStructure, GameWindowTitle) + 4, GameWindowTitle), , GameWindowTitle) 
+	; Race := ReadMemory_Str((B_rStructure + (i-1) * S_rStructure), ,GameIdentifier) ;old easy way
+	Race := ReadMemory_Str(ReadMemory(ReadMemory(B_pStructure + O_pRacePointer + (i-1)*S_pStructure, GameIdentifier) + 4, GameIdentifier), , GameIdentifier) 
 	If (Race == "Terr")
 		Race := "Terran"
 	Else if (Race == "Prot")
@@ -4797,14 +4828,14 @@ getPlayerRace(i) ; start at 0
 
 getPlayerType(i)
 {	global
-	Return ReadMemory((B_pStructure + O_pType) + (i-1) * S_pStructure, GameWindowTitle, 1)
+	Return ReadMemory((B_pStructure + O_pType) + (i-1) * S_pStructure, GameIdentifier, 1)
 }
 
 getPlayerTeam(player="") ;team begins at 0
 {	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory((B_pStructure + O_pTeam) + (player-1) * S_pStructure, GameWindowTitle, 1)
+	Return ReadMemory((B_pStructure + O_pTeam) + (player-1) * S_pStructure, GameIdentifier, 1)
 }
 getPlayerColour(i)
 {	local A_Player_Colour, Colour_List
@@ -4812,99 +4843,99 @@ getPlayerColour(i)
 	Colour_List := "White|Red|Blue|Teal|Purple|Yellow|Orange|Green|Light Pink|Violet|Light Grey|Dark Green|Brown|Light Green|Dark Grey|Pink"
 	Loop, Parse, Colour_List, |
 		A_Player_Colour[a_index - 1] := A_LoopField
-	Return A_Player_Colour[ReadMemory((B_pStructure + O_pColour) + (i-1) * S_pStructure, GameWindowTitle)]
+	Return A_Player_Colour[ReadMemory((B_pStructure + O_pColour) + (i-1) * S_pStructure, GameIdentifier)]
 }
 getLocalPlayerNumber() ;starts @ 1
 {	global
-	Return ReadMemory(B_LocalPlayerSlot, GameWindowTitle, 1) ;Local player slot is 1 Byte!!
+	Return ReadMemory(B_LocalPlayerSlot, GameIdentifier, 1) ;Local player slot is 1 Byte!!
 }
 getBaseCameraCount(player="")
 { 	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory((B_pStructure + O_pBaseCount) + (player-1) * S_pStructure, GameWindowTitle)
+	Return ReadMemory((B_pStructure + O_pBaseCount) + (player-1) * S_pStructure, GameIdentifier)
 }
 getPlayerMineralIncome(player="")
 { 	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + O_pMineralIncome + (player-1) * S_pStructure, GameWindowTitle)
+	Return ReadMemory(B_pStructure + O_pMineralIncome + (player-1) * S_pStructure, GameIdentifier)
 }
 getPlayerGasIncome(player="")
 { 	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + O_pGasIncome + (player-1) * S_pStructure, GameWindowTitle)
+	Return ReadMemory(B_pStructure + O_pGasIncome + (player-1) * S_pStructure, GameIdentifier)
 }
 getPlayerArmySizeMinerals(player="")
 { 	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + O_pArmyMineralSize + (player-1) * S_pStructure, GameWindowTitle)
+	Return ReadMemory(B_pStructure + O_pArmyMineralSize + (player-1) * S_pStructure, GameIdentifier)
 }
 getPlayerArmySizeGas(player="")
 { 	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + O_pArmyGasSize + (player-1) * S_pStructure, GameWindowTitle)
+	Return ReadMemory(B_pStructure + O_pArmyGasSize + (player-1) * S_pStructure, GameIdentifier)
 }
 getPlayerMinerals(player="")
 { 	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + O_pMinerals + (player-1) * S_pStructure, GameWindowTitle)
+	Return ReadMemory(B_pStructure + O_pMinerals + (player-1) * S_pStructure, GameIdentifier)
 }
 getPlayerGas(player="")
 { 	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + O_pGas + (player-1) * S_pStructure, GameWindowTitle)
+	Return ReadMemory(B_pStructure + O_pGas + (player-1) * S_pStructure, GameIdentifier)
 }
 getPlayerCameraPositionX(Player="")
 {	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + (Player - 1)*S_pStructure + O_pXcam, GameWindowTitle) / 4096
+	Return ReadMemory(B_pStructure + (Player - 1)*S_pStructure + O_pXcam, GameIdentifier) / 4096
 }
 getPlayerCameraPositionY(Player="")
 {	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + (Player - 1)*S_pStructure + O_pYcam, GameWindowTitle) / 4096
+	Return ReadMemory(B_pStructure + (Player - 1)*S_pStructure + O_pYcam, GameIdentifier) / 4096
 }
 
 isUnderConstruction(building) ; starts @ 0 and only for BUILDINGS!
 { 	global  ; 0 means its completed
-;	Return ReadMemory(B_uStructure + (building * S_uStructure) + O_uBuildStatus, GameWindowTitle) ;- worked fine
+;	Return ReadMemory(B_uStructure + (building * S_uStructure) + O_uBuildStatus, GameIdentifier) ;- worked fine
 	return getunittargetfilter(building) & a_UnitTargetFilter.UnderConstruction
 }
 
 getUnitEnergy(unit)
 {	global
-	Return Floor(ReadMemory(B_uStructure + (unit * S_uStructure) + O_uEnergy, GameWindowTitle) / 4096)
+	Return Floor(ReadMemory(B_uStructure + (unit * S_uStructure) + O_uEnergy, GameIdentifier) / 4096)
 }
 
 getUnitPositionX(unit)
 {	global
-	Return ReadMemory(B_uStructure + (unit * S_uStructure) + O_uX, GameWindowTitle) /4096
+	Return ReadMemory(B_uStructure + (unit * S_uStructure) + O_uX, GameIdentifier) /4096
 }
 getUnitPositionY(unit)
 {	global
-	Return ReadMemory(B_uStructure + (unit * S_uStructure) + O_uY, GameWindowTitle) /4096
+	Return ReadMemory(B_uStructure + (unit * S_uStructure) + O_uY, GameIdentifier) /4096
 }
 
 getUnitPositionZ(unit)
 {	global
-	Return ReadMemory(B_uStructure + (unit * S_uStructure) + O_uZ, GameWindowTitle) /4096
+	Return ReadMemory(B_uStructure + (unit * S_uStructure) + O_uZ, GameIdentifier) /4096
 }
 
 
 getUnitMoveState(unit)
 {	local CmdQueue, BaseCmdQueStruct
-	if (CmdQueue := ReadMemory(B_uStructure + unit * S_uStructure + O_P_uCmdQueuePointer, GameWindowTitle)) ; points if currently has a command - 0 otherwise
+	if (CmdQueue := ReadMemory(B_uStructure + unit * S_uStructure + O_P_uCmdQueuePointer, GameIdentifier)) ; points if currently has a command - 0 otherwise
 	{
-		BaseCmdQueStruct := ReadMemory(CmdQueue, GameWindowTitle) & -2
-		return ReadMemory(BaseCmdQueStruct + O_cqMoveState, GameWindowTitle, 2) ;current state
+		BaseCmdQueStruct := ReadMemory(CmdQueue, GameIdentifier) & -2
+		return ReadMemory(BaseCmdQueStruct + O_cqMoveState, GameIdentifier, 2) ;current state
 	}
 	else return -1 ;cant return 0 as that ould indicate A-move
 }
@@ -4917,17 +4948,17 @@ isUnitPatrolling(unit)
 
 arePlayerColoursEnabled()
 {	global
-	Return pointer(GameWindowTitle, P_PlayerColours, O1_PlayerColours, O2_PlayerColours)
+	Return pointer(GameIdentifier, P_PlayerColours, O1_PlayerColours, O2_PlayerColours)
 }
 
 isMenuOpen()
 { 	global
-	Return  pointer(GameWindowTitle, P_MenuFocus, O1_MenuFocus)
+	Return  pointer(GameIdentifier, P_MenuFocus, O1_MenuFocus)
 }
 
 isChatOpen()
 { 	global
-	Return  pointer(GameWindowTitle, P_ChatFocus, O1_ChatFocus, O2_ChatFocus)
+	Return  pointer(GameIdentifier, P_ChatFocus, O1_ChatFocus, O2_ChatFocus)
 }
 GetEnemyRaces()
 {	global a_Player, a_LocalPlayer
@@ -4993,7 +5024,7 @@ DrawMiniMap()
 	, DrawX, DrawY, Width, height, i, hbm, hdc, obm, G,  pBitmap, PlayerColours, A_MiniMapUnits
 	static Overlay_RunCount
 	Overlay_RunCount ++
-	if (ReDraw and WinActive(GameWindowTitle))
+	if (ReDraw and WinActive(GameIdentifier))
 	{
 		Try Gui, MiniMapOverlay: Destroy
 		Overlay_RunCount := 1
@@ -5151,7 +5182,7 @@ OverlayMove_LButtonDown()
 }
 
 DrawIdleWorkersOverlay(ByRef Redraw, UserScale=1,Drag=0, expand=1)
-{	global a_LocalPlayer, GameWindowTitle, config_file, IdleWorkersOverlayX, IdleWorkersOverlayY, a_pBitmap
+{	global a_LocalPlayer, GameIdentifier, config_file, IdleWorkersOverlayX, IdleWorkersOverlayY, a_pBitmap
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0				
 
 	Overlay_RunCount ++	
@@ -5164,7 +5195,7 @@ DrawIdleWorkersOverlay(ByRef Redraw, UserScale=1,Drag=0, expand=1)
 		Redraw := 0
 		Return
 	}	
-	Else if (ReDraw AND WinActive(GameWindowTitle) && idleCount)
+	Else if (ReDraw AND WinActive(GameIdentifier) && idleCount)
 	{
 		Try Gui, idleWorkersOverlay: Destroy
 		Overlay_RunCount := 1
@@ -5217,7 +5248,7 @@ DrawIdleWorkersOverlay(ByRef Redraw, UserScale=1,Drag=0, expand=1)
 	Return
 }
 DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Drag=0)
-{	global a_LocalPlayer, HexColour, a_Player, GameWindowTitle, IncomeOverlayX, IncomeOverlayY, config_file, MatrixColour, a_pBitmap
+{	global a_LocalPlayer, HexColour, a_Player, GameIdentifier, IncomeOverlayX, IncomeOverlayY, config_file, MatrixColour, a_pBitmap
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0
 	Overlay_RunCount ++
 	DestX := i := 0
@@ -5229,7 +5260,7 @@ DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Dr
 		Redraw := 0
 		Return
 	}		
-	Else if (ReDraw AND WinActive(GameWindowTitle))
+	Else if (ReDraw AND WinActive(GameIdentifier))
 	{
 		Try Gui, IncomeOverlay: Destroy
 		Overlay_RunCount := 1
@@ -5327,7 +5358,7 @@ DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Dr
 }	
 
 DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Drag=0)
-{	global a_LocalPlayer, HexColour, a_Player, GameWindowTitle, config_file, ResourcesOverlayX, ResourcesOverlayY, MatrixColour, a_pBitmap
+{	global a_LocalPlayer, HexColour, a_Player, GameIdentifier, config_file, ResourcesOverlayX, ResourcesOverlayY, MatrixColour, a_pBitmap
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0		
 	Overlay_RunCount ++	
 	DestX := i := 0
@@ -5339,7 +5370,7 @@ DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0
 		Redraw := 0
 		Return
 	}	
-	Else if (ReDraw AND WinActive(GameWindowTitle))
+	Else if (ReDraw AND WinActive(GameIdentifier))
 	{
 		Try Gui, ResourcesOverlay: Destroy
 		Overlay_RunCount := 1
@@ -5441,7 +5472,7 @@ DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0
 }
 
 DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Drag=0)
-{	global a_LocalPlayer, HexColour, a_Player, GameWindowTitle, config_file, ArmySizeOverlayX, ArmySizeOverlayY, MatrixColour, a_pBitmap
+{	global a_LocalPlayer, HexColour, a_Player, GameIdentifier, config_file, ArmySizeOverlayX, ArmySizeOverlayY, MatrixColour, a_pBitmap
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0	
 	Overlay_RunCount ++	
 	DestX := i := 0
@@ -5453,7 +5484,7 @@ DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,
 		Redraw := 0
 		Return
 	}	
-	Else if (ReDraw AND WinActive(GameWindowTitle))
+	Else if (ReDraw AND WinActive(GameIdentifier))
 	{
 		Try Gui, ArmySizeOverlay: Destroy
 		Overlay_RunCount := 1
@@ -5553,7 +5584,7 @@ DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,
 	Return
 }
 DrawWorkerOverlay(ByRef Redraw, UserScale=1,Drag=0)
-{	global a_LocalPlayer, GameWindowTitle, config_file, WorkerOverlayX, WorkerOverlayY, a_pBitmap
+{	global a_LocalPlayer, GameIdentifier, config_file, WorkerOverlayX, WorkerOverlayY, a_pBitmap
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0				
 	Options := "Center cFFFFFFFF r4 s" 18*UserScale
 	Overlay_RunCount ++	
@@ -5565,7 +5596,7 @@ DrawWorkerOverlay(ByRef Redraw, UserScale=1,Drag=0)
 		Redraw := 0
 		Return
 	}	
-	Else if (ReDraw AND WinActive(GameWindowTitle))
+	Else if (ReDraw AND WinActive(GameIdentifier))
 	{
 		Try Gui, WorkerOverlay: Destroy
 		Overlay_RunCount := 1
@@ -5741,18 +5772,18 @@ CreateHotkeys()
 		SendMode Play	; causes problems 
 	Else ;If (input_method = "input")
 		SendMode Input 
-	#If, WinActive(GameWindowTitle) 
-	#If, WinActive(GameWindowTitle) && (a_LocalPlayer["Race"] = "Zerg") && !isMenuOpen() && time 
-	#If, WinActive(GameWindowTitle) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time  
-	#If, WinActive(GameWindowTitle) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
-	#If, WinActive(GameWindowTitle) && time && !isMenuOpen() && SelectArmyEnable
-	#If, WinActive(GameWindowTitle) && time && !isMenuOpen() && SplitUnitsEnable
-	#If, WinActive(GameWindowTitle) && !isMenuOpen() && time
-	#If, WinActive(GameWindowTitle) && time
+	#If, WinActive(GameIdentifier) 
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && !isMenuOpen() && time 
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time  
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
+	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
+	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
+	#If, WinActive(GameIdentifier) && !isMenuOpen() && time
+	#If, WinActive(GameIdentifier) && time
 	#If
 	if HideTrayIcon
 		Hotkey,	%exit_hotkey%, Stealth_Exit, on 
-	Hotkey, If, WinActive(GameWindowTitle) 														
+	Hotkey, If, WinActive(GameIdentifier) 														
 		hotkey, %speaker_volume_up_key%, speaker_volume_up, on		
 		hotkey, %speaker_volume_down_key%, speaker_volume_down, on
 		hotkey, %speech_volume_up_key%, speech_volume_up, on
@@ -5762,9 +5793,9 @@ CreateHotkeys()
 		hotkey, %warning_toggle_key%, mt_pause_resume, on		
 		hotkey, *~LButton, g_LbuttonDown, on
 		hotkey, Lwin, g_DoNothing, on		
-	Hotkey, If, WinActive(GameWindowTitle) && !isMenuOpen() && time
+	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
 		hotkey, %ping_key%, ping, on									;on used to re-enable hotkeys as were 
-	Hotkey, If, WinActive(GameWindowTitle) && time						;turned off during save to allow for swaping of keys
+	Hotkey, If, WinActive(GameIdentifier) && time						;turned off during save to allow for swaping of keys
 		hotkey, %worker_count_local_key%, worker_count, on
 		hotkey, %worker_count_enemy_key%, worker_count, on
 		hotkey, %Playback_Alert_Key%, g_PrevWarning, on					
@@ -5785,16 +5816,16 @@ CreateHotkeys()
 		hotkey, %inject_start_key%, inject_start, on
 		hotkey, %inject_reset_key%, inject_reset, on
 	}	
-	Hotkey, If, WinActive(GameWindowTitle) && time && !isMenuOpen() && SelectArmyEnable
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
 		hotkey, %castSelectArmy_key%, g_SelectArmy, on
-	Hotkey, If, WinActive(GameWindowTitle) && time && !isMenuOpen() && SplitUnitsEnable
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
 		hotkey, %castSplitUnit_key%, g_SplitUnits, on	
-	Hotkey, If, WinActive(GameWindowTitle) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time
 		hotkey, %cast_inject_key%, cast_inject, on	
 		hotkey, %F_InjectOff_Key%, Cast_DisableInject, on			
-	Hotkey, If, WinActive(GameWindowTitle) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
 		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoGates, on		
-	Hotkey, If, WinActive(GameWindowTitle) && !isMenuOpen() && time
+	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
 	while (10 > i := A_index - 1)
 	{
 		if A_UnitGroupSettings["LimitGroup", a_LocalPlayer["Race"], i,"Enabled"] 
@@ -5900,6 +5931,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 
 		local xNew, yNew
 	;	Send, %MI_Queen_Group%
+		if ForceInject
+			send % BI_create_camera_pos_x 	;just incase it stuffs up and moves the camera
 		send % MI_Queen_Group
 		SkipUsedQueen := [] ; blank the queen list
 		HatchIndex := getBuildingList(A_unitID["Hatchery"], A_unitID["Lair"], A_unitID["Hive"]) 
@@ -5940,6 +5973,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 				}	
 			}	
 		}
+		if ForceInject
+			send % BI_camera_pos_x
 	}	
 	else if (Method="Backspace Adv") || (Method = "Backspace CtrlGroup") ;cos i changed the name in an update
 	{		
@@ -6051,19 +6086,19 @@ SortUnitsByAge(unitlist="", units*)
 
 getUnitTimer(unit)
 {	global 
-	return ReadMemory(B_uStructure + unit * S_uStructure + O_uTimer, GameWindowTitle)
+	return ReadMemory(B_uStructure + unit * S_uStructure + O_uTimer, GameIdentifier)
 }
 
 isUnitHoldingXelnaga(unit)
 {	global
-	if (256 = ReadMemory(B_uStructure + unit * S_uStructure + O_XelNagaActive, GameWindowTitle))
+	if (256 = ReadMemory(B_uStructure + unit * S_uStructure + O_XelNagaActive, GameIdentifier))
 		return 1
 	else return 0
 }
 
 getBaseCamIndex() ; begins at 0
 {	global 	
-	return pointer(GameWindowTitle, B_CurrentBaseCam, P1_CurrentBaseCam)
+	return pointer(GameIdentifier, B_CurrentBaseCam, P1_CurrentBaseCam)
 }
 
 SortBasesByBaseCam(BaseList, CurrentHatchCam)
@@ -6249,7 +6284,7 @@ LoadMemoryAddresses(SC2EXE)
 }
 
 g_SplitUnits:
-	BufferInput(aButtons.List, "Block")
+	BufferInput(aButtons.List, "Buffer", 0)
 	SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 	BufferInput(aButtons.List) ;re-enable keys without sending buffer
 	return
@@ -6257,9 +6292,10 @@ g_SplitUnits:
 g_SelectArmy:
 	ReleaseModifiers(ModifierBeepSelectArmy)
 	BufferInput(aButtons.List, "Buffer", 0)
-	mousegetpos, Xarmyselect, Yarmyselect
 	send %Sc2SelectArmy_Key%
 	sleep SleepSelectArmy ; every now and then it needs a few ms to update
+	mousegetpos, Xarmyselect, Yarmyselect
+	BlockInput, MouseMove
 	a_RemoveUnits := []
 	findUnitsToRemoveFromArmy(a_RemoveUnits, SelectArmyDeselectXelnaga, SelectArmyDeselectPatrolling
 		, SelectArmyDeselectHoldPosition, SelectArmyDeselectFollowing, l_ActiveDeselectArmy)
@@ -6267,11 +6303,12 @@ g_SelectArmy:
 	{
 		Sort2DArray(a_RemoveUnits, "Unit", 0) ;clicks highest units first, so dont have to calculate new click positions due to the units moving down one spot in the panel grid	
 		Sort2DArray(a_RemoveUnits, "Priority", 1)	; sort in ascending order so select units lower down 1st		
-		DeselectUnitsFromPanel(a_RemoveUnits, SleepSelectArmy)
+		DeselectUnitsFromPanel(a_RemoveUnits, DeselectSleepTime)
 		send {click  %Xarmyselect%, %Yarmyselect%, 0}
 	}
 	if SelectArmyControlGroupEnable
 		send ^%Sc2SelectArmyCtrlGroup%
+	BlockInput, MouseMoveOff
 	BufferInput(aButtons.List) ;re-enable keys without sending buffer
 return
 
@@ -6443,7 +6480,7 @@ sortSelectedUnitsByDistance(byref a_SelectedUnits, Amount = 3)	;takes a simple a
 
 getUnitSelectionPage()	;0-5 indicates which unit page is currently selected (in game its 1-6)
 {	global 	
-	return pointer(GameWindowTitle, P_SelectionPage, O1_SelectionPage, O2_SelectionPage, O3_SelectionPage)
+	return pointer(GameIdentifier, P_SelectionPage, O1_SelectionPage, O2_SelectionPage, O3_SelectionPage)
 }
 
 debugData()
@@ -6487,7 +6524,9 @@ debugData()
 SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 {
 	uSpacing := 4
+	sleep, % SleepSplitUnits
 	send ^%SplitctrlgroupStorage_key%
+	BlockInput, MouseMove
 	mousegetpos, Xorigin, Yorigin
 	a_SelectedUnits := []
 	xSum := ySum := 0
@@ -6530,7 +6569,7 @@ SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 		tmpObject := []
 		tmpObject.insert(a_SelectedUnits[1])
 		send {click right %X%, %Y%}
-		DeselectUnitsFromPanel(tmpObject, SleepSplitUnits)		;might not have enough time to update the selections?
+		DeselectUnitsFromPanel(tmpObject, DeselectSleepTime)		;might not have enough time to update the selections?
 		a_SelectedUnits.remove(1)
 		if (a_SelectedUnits.MaxIndex() <= 1)
 			break
@@ -6539,6 +6578,7 @@ SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 ;	clipboard .= "BL (" botLeftUnitX ", " botLeftUnity ")`n"
 ;	clipboard .= "Squarespots: " squareSpots "`n"
 	send %SplitctrlgroupStorage_key%
+	BlockInput, MouseMoveOff
 	send {click %Xorigin%, %Yorigin%, 0}
 		return
 }
@@ -6641,23 +6681,23 @@ FindXYatAngle(byref ResultX, byref ResultY,	Angle, Direction, distance, X, Y)
 
 
 getWarpGateCooldown(WarpGate) ; unitIndex
-{	global B_uStructure, S_uStructure, O_P_uAbilityPointer, GameWindowTitle
+{	global B_uStructure, S_uStructure, O_P_uAbilityPointer, GameIdentifier
 	u_AbilityPointer := B_uStructure + WarpGate * S_uStructure + O_P_uAbilityPointer
-	ablilty := ReadMemory(u_AbilityPointer, GameWindowTitle) & 0xFFFFFFFC
-	p1 := ReadMemory(ablilty + 0x28, GameWindowTitle)	
-	if !(p2 := ReadMemory(p1 + 0x1C, GameWindowTitle)) ; 0 if it has never warped in a unit
+	ablilty := ReadMemory(u_AbilityPointer, GameIdentifier) & 0xFFFFFFFC
+	p1 := ReadMemory(ablilty + 0x28, GameIdentifier)	
+	if !(p2 := ReadMemory(p1 + 0x1C, GameIdentifier)) ; 0 if it has never warped in a unit
 		return 0
-	p3 := ReadMemory(p2 + 0xC, GameWindowTitle)
-	return ReadMemory(p3 + 0x6, GameWindowTitle, 2)
+	p3 := ReadMemory(p2 + 0xC, GameIdentifier)
+	return ReadMemory(p3 + 0x6, GameIdentifier, 2)
 }
 getUnitAbilityPointer(unit)
 {	global
-	return ReadMemory(B_uStructure + unit * S_uStructure + O_P_uAbilityPointer, GameWindowTitle) & 0xFFFFFFFC
+	return ReadMemory(B_uStructure + unit * S_uStructure + O_P_uAbilityPointer, GameIdentifier) & 0xFFFFFFFC
 }
 
 isUnitChronoed(unit)
 {	global	; 1 byte = 18h chrono for protoss structures 10h normal state
-	if (24 = ReadMemory(B_uStructure + unit * S_uStructure + O_uChronoState, GameWindowTitle, 1))	
+	if (24 = ReadMemory(B_uStructure + unit * S_uStructure + O_uChronoState, GameIdentifier, 1))	
 		return 1
 	else return 0
 }
@@ -6670,8 +6710,8 @@ isWorkerInProduction(unit) ; units can only be t or P, no Z
 		state := -1
 	else if ( type = A_unitID["Nexus"]) 	
 	{
-		local p2 := ReadMemory(getUnitAbilityPointer(unit) + 0x24, GameWindowTitle)
-		state := ReadMemory(p2 + 0x88, GameWindowTitle, 1)
+		local p2 := ReadMemory(getUnitAbilityPointer(unit) + 0x24, GameIdentifier)
+		state := ReadMemory(p2 + 0x88, GameIdentifier, 1)
 		if (state = 0x43)	;probe Or mothership	
 			state := 1
 		else 	; idle 0x3
@@ -6679,7 +6719,7 @@ isWorkerInProduction(unit) ; units can only be t or P, no Z
 	}
 	Else if (type = A_unitID["CommandCenter"])
 	{
-		 state := ReadMemory(getUnitAbilityPointer(unit) + 0x9, GameWindowTitle, 1)
+		 state := ReadMemory(getUnitAbilityPointer(unit) + 0x9, GameIdentifier, 1)
 		if (state = 0x12)	;scv in produ
 			state := 1
 		else if (state = 32 || state = 64)	;0x0A = flying 32 ->PF | 64 -> orbital
@@ -6689,15 +6729,15 @@ isWorkerInProduction(unit) ; units can only be t or P, no Z
 	}
 	Else if  (type =  A_unitID["PlanetaryFortress"])
 	{
-		local p1 := ReadMemory(getUnitAbilityPointer(unit) + 0x34, GameWindowTitle)
-		state := ReadMemory(p1 + 0x4E4, GameWindowTitle, 1) ; wrong - 0x180
+		local p1 := ReadMemory(getUnitAbilityPointer(unit) + 0x34, GameIdentifier)
+		state := ReadMemory(p1 + 0x4E4, GameIdentifier, 1) ; wrong - 0x180
 		if (state = 0x43)
 			state := 1
 		else state := 0 ; 0x3
 	}
 	else if (type =  A_unitID["OrbitalCommand"])
 	{
-		state := ReadMemory(getUnitAbilityPointer(unit) + 0x9, GameWindowTitle, 1)
+		state := ReadMemory(getUnitAbilityPointer(unit) + 0x9, GameIdentifier, 1)
 		if (state = 0x11)	;scv
 			state := 1
 		else state := 0 ; 99h  	;else if (state = 0)	;flying
@@ -6709,15 +6749,110 @@ return
 
 
 
-f3::
-clipboard := Height := round(getUnitPositionZ(getSelectedUnitIndex()), 1)
-if (Height != oldHeight)
+
+
+
+
+getEnemyUnits(byref aEnemyUnits)
 {
-	soundplay *-1
-	oldHeight := Height
+	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer
+	aEnemyUnits := []
+	While (A_Index <= getHighestUnitIndex()) 
+	{
+		unit := A_Index - 1
+		If (getUnitTargetFilter(unit) & DeadFilterFlag)
+			Continue
+		Owner := getUnitOwner(unit)
+		If  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] AND Owner) ; Owner 0 = neutral
+		{
+			Type := getunittype(unit)
+			if aEnemyUnits[Owner, Type]
+				aEnemyUnits[Owner, Type]++
+			Else aEnemyUnits[Owner, Type] := 1		
+		}
+	}
+	Return
 }
 
+; unit 123 owner 4
++f2::
+	aEnemyUnits := []
+	getEnemyUnits(aEnemyUnits)
+	objtree(aEnemyUnits, 1)
+	Panel(aEnemyUnits, a_UnitID)
+	objtree(aEnemyUnits, 2)
+
 return
+
+
+
+
+
+
+Panel(byref aEnemyUnits, byref aUnitID)	;care have used A_unitID everywhere else!!
+{	
+	;	aEnemyUnits[Owner, Type]
+	GLOBAL a_Player
+	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab"]
+							, "Protoss": ["Interceptor", "Gateway"]
+							, "Zerg": ["OverlordCocoon","CreepTumorBurrowed","Broodling"]}
+
+	STATIC aAddUnits 	:=	{"Terran": {SupplyDepotLowered: "SupplyDepot"}
+							, "Protoss": {Phaseprims: "WarpPrism"} 
+							, "Zerg": {keyA: "ValueA"}}
+
+						;spore crawler uprooted
+						;SpineCrawler uprooted
+
+						;check out baneling and broodmorphing name InfestedTerran
+	;	msgbox % aRemovedUnits["Terran", 1]
+
+	for owner, object in aEnemyUnits
+	{
+		race := a_Player[owner, "Race"]
+		for unit, count in object
+			for index, removeUnit in aRemovedUnits[race]
+				if (unit = aUnitID[removeUnit])
+					object.remove(unit)
+		for subUnit, mainUnit in aAddUnits[Race]
+			if (total := object[subUnit])
+			{
+				mainUnit := aUnitID[mainUnit]
+				if object[mainUnit]
+					object[mainUnit] += total
+				else object[mainUnit] := total
+				object.remove(aUnitID[subUnit])
+			}
+	}
+
+	for owner, object in aEnemyUnits
+	{
+		race := a_Player[owner, "Race"]
+		for subUnit, mainUnit in aAddUnits[Race]
+			if object[subUnit]
+			{
+				if object[aUnitID[mainUnit]]
+					object[aUnitID[mainUnit]] += object[aUnitID[subUnit]]
+				else object[aUnitID[mainUnit]] := object[aUnitID[subUnit]]
+				object.remove(subUnit)
+			}
+	}
+
+
+	;below is an example for the aAddUnits
+	for accessoryUnit, mainUnit in aAddUnits["Protoss"]
+		msgbox % accessoryUnit "`n|" mainUnit
+
+	for objRace, object in aAddUnits
+		for accessoryUnit, mainUnit in object[objRace]
+
+			msgbox % objRace "`n|" accessoryUnit "`n|" mainUnit
+
+	
+}
+
+
+
 
 ; //fold
 ; unit + 0xE2 ; 1 byte = 18h chrono for protoss structures 10h normal
@@ -6747,7 +6882,7 @@ clipboard := dectohex((getSelectedUnitIndex()*S_uStructure) + B_uStructure)
 
 return
 f3::
-	SC2exe := getProcessBaseAddress(GameWindowTitle)
+	SC2exe := getProcessBaseAddress(GameIdentifier)
 B_hStructure := SC2exe + 0x328C764
 	O_hHatchPointer := 0xC
 	O_hLarvaCount := 0x5C
@@ -6783,11 +6918,11 @@ getLarvaCount(player="")
 }
 getHatchBase(Hatch) ; beings @ 0 - this refers to the hatch index
 {	global	; a Positive number indicates a hatch exists - 0 nothing
-	return ReadMemory(B_hStructure + Hatch*S_hStructure, GameWindowTitle)
+	return ReadMemory(B_hStructure + Hatch*S_hStructure, GameIdentifier)
 }
 HatchIndexUnitPointer(Hatch) ; beings @ 0 - this refers to the hatch index
 {	global	; a Positive number indicates a hatch exists - 0 nothing
-	return ReadMemory(B_hStructure + O_hHatchPointer + Hatch*S_hStructure, GameWindowTitle)
+	return ReadMemory(B_hStructure + O_hHatchPointer + Hatch*S_hStructure, GameIdentifier)
 }
 
 getUnitIndexFromAddress(Address)
@@ -6799,18 +6934,18 @@ getLarvaUnitIndex(Hatch=0, Larva=0) ; Refers to the hatch index and within that 
 {	local LarvaAddress, UnitIndex
 
 	LarvaAddress := ReadMemory(B_hStructure + (Hatch-1)*S_hStructure 
-		+ (O_hUnitIndexPointer + (Larva * S_hLarva)) , GameWindowTitle) ; address is actually the mem/hex address
+		+ (O_hUnitIndexPointer + (Larva * S_hLarva)) , GameIdentifier) ; address is actually the mem/hex address
 	Return  (LarvaAddress - B_uStructure )/ S_uStructure	
 }
 getHatchLarvaCount(Hatch)
 {	global 
-	return ReadMemory(B_hStructure + Hatch*S_hStructure + O_hLarvaCount, GameWindowTitle)
+	return ReadMemory(B_hStructure + Hatch*S_hStructure + O_hLarvaCount, GameIdentifier)
 }
 
 
 getLarvaPointer(Hatch, Larva)
 {	global
-	return ReadMemory((B_hStructure + S_hStructure * Hatch) + (O_hUnitIndexPointer + S_hLarva * Larva), GameWindowTitle)
+	return ReadMemory((B_hStructure + S_hStructure * Hatch) + (O_hUnitIndexPointer + S_hLarva * Larva), GameIdentifier)
 }
 
 
