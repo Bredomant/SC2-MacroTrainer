@@ -35,6 +35,17 @@ Else
 ;	Upload the changelog, file version  and new exe files to the ftp server
 ; 	check dont have debugging hotkeys and clipboards at end of script
 ;-----------------------
+;	git add -A
+;	git commit -m "Msg"
+;	git push
+;-----------------------
+
+
+/*	Things to do
+	Find active units /army offsets and use them in army overlay
+
+
+*/
 
 start:
 config_file := "MT_Config.ini"
@@ -84,7 +95,7 @@ InstallSC2Files()
 #include %A_ScriptDir%\Included Files\Gdip.ahk
 #include %A_ScriptDir%\Included Files\Colour Selector.ahk
 
-CreatepBitmaps(a_pBitmap)
+CreatepBitmaps(a_pBitmap, a_unitID)
 
 
 If (auto_update AND A_IsCompiled  AND HideTrayIcon <> 1 AND CheckForUpdates(version, url.vr ))
@@ -5677,7 +5688,7 @@ Draw(G,x,y,l=11,h=11,colour=0x880000ff, Mode=0) ;use mode 3 to draw rectangle th
 	}
 }
 
-CreatepBitmaps(byref a_pBitmap)
+CreatepBitmaps(byref a_pBitmap, a_unitID)
 {
 	a_pBitmap := []
 	l_Races := "Terran,Protoss,Zerg"
@@ -5694,6 +5705,13 @@ CreatepBitmaps(byref a_pBitmap)
 		a_pBitmap[A_loopfield,"Army"] := Gdip_CreateBitmapFromFile(A_Temp "\Army_" A_loopfield ".png")
 		a_pBitmap[A_loopfield,"RaceFlat"]  := Gdip_CreateBitmapFromFile(A_Temp "\Race_" A_loopfield "Flat.png")
 		a_pBitmap[A_loopfield,"RacePretty"] := Gdip_CreateBitmapFromFile(A_Temp "\" A_loopfield "90.png")
+		
+	}
+	Loop, %A_Temp%\UnitPanelMacroTrainer\*.png
+	{
+		StringReplace, FileTitle, A_LoopFileName, .%A_LoopFileExt% ;remove the .ext
+		if a_unitID[FileTitle]	;have a 2 pics which arnt in the unit array - bunkerfortified & thorsiegemode
+			a_pBitmap[a_unitID[FileTitle]] := Gdip_CreateBitmapFromFile(A_LoopFileFullPath)
 	}
 	a_pBitmap["PurpleX16"] := Gdip_CreateBitmapFromFile(A_Temp "\PurpleX16.png")
 	a_pBitmap["GreenX16"] := Gdip_CreateBitmapFromFile(A_Temp "\GreenX16.png")
@@ -5703,64 +5721,6 @@ CreatepBitmaps(byref a_pBitmap)
 
 
 
-InstallSC2Files()
-{ 	global
-	FileInstall, Included Files\On.wav, %A_Temp%\On.wav, 1 
-	FileInstall, Included Files\Off.wav, %A_Temp%\Off.wav, 1 
-	FileInstall, Included Files\Windows Ding.wav, %A_Temp%\Windows Ding.wav, 1 
-	FileInstall, Included Files\Windows Ding2.wav, %A_Temp%\Windows Ding2.wav, 1 
-	FileInstall, Included Files\Windows Ding3.wav, %A_Temp%\Windows Ding3.wav, 1 
-	FileInstall, Included Files\ModifierDown.wav, %A_Temp%\ModifierDown.wav, 1 
-	FileInstall, Included Files\Used_Icons\home32.png, %A_Temp%\home32.png, 1
-	FileInstall, Included Files\Used_Icons\radarB32.png, %A_Temp%\radarB32.png, 1
-	FileInstall, Included Files\Used_Icons\Inject32.png, %A_Temp%\Inject32.png, 1
-	FileInstall, Included Files\Used_Icons\Group32.png, %A_Temp%\Group32.png, 1
-	FileInstall, Included Files\Used_Icons\mine.png, %A_Temp%\mine.png, 1
-	FileInstall, Included Files\Used_Icons\reticule32.png, %A_Temp%\reticule32.png, 1
-	FileInstall, Included Files\Used_Icons\key.png, %A_Temp%\key.png, 1
-	FileInstall, Included Files\Used_Icons\warning32.ico, %A_Temp%\warning32.ico, 1
-	FileInstall, Included Files\Used_Icons\miscB32.png, %A_Temp%\miscB32.png, 1
-	FileInstall, Included Files\Used_Icons\speakerB32.png, %A_Temp%\speakerB32.png, 1
-	FileInstall, Included Files\Used_Icons\bug32.png, %A_Temp%\bug32.png, 1
-	FileInstall, Included Files\Used_Icons\Robot32.png, %A_Temp%\Robot32.png, 1
-	FileInstall, Included Files\Used_Icons\map32.png, %A_Temp%\map32.png, 1
-	FileInstall, Included Files\Used_Icons\settings.ico, %A_Temp%\settings.ico, 1
-	FileInstall, Included Files\Used_Icons\Terran90.png, %A_Temp%\Terran90.png, 1
-	FileInstall, Included Files\Used_Icons\Protoss90.png, %A_Temp%\Protoss90.png, 1
-	FileInstall, Included Files\Used_Icons\Zerg90.png, %A_Temp%\Zerg90.png, 1
-	FileInstall, Included Files\Used_Icons\RedX16.png, %A_Temp%\RedX16.png, 1
-	FileInstall, Included Files\Used_Icons\BlueX16.png, %A_Temp%\BlueX16.png, 1
-	FileInstall, Included Files\Used_Icons\GreenX16.png, %A_Temp%\GreenX16.png, 1
-	FileInstall, Included Files\Used_Icons\PurpleX16.png, %A_Temp%\PurpleX16.png, 1
-	FileInstall, Included Files\Used_Icons\Gas_0Protoss.png, %A_Temp%\Gas_0Protoss.png, 1
-	FileInstall, Included Files\Used_Icons\Gas_0Terran.png, %A_Temp%\Gas_0Terran.png, 1
-	FileInstall, Included Files\Used_Icons\Gas_0Zerg.png, %A_Temp%\Gas_0Zerg.png, 1
-	FileInstall, Included Files\Used_Icons\Mineral_0Protoss.png, %A_Temp%\Mineral_0Protoss.png, 1
-	FileInstall, Included Files\Used_Icons\Mineral_0Terran.png, %A_Temp%\Mineral_0Terran.png, 1
-	FileInstall, Included Files\Used_Icons\Mineral_0Zerg.png, %A_Temp%\Mineral_0Zerg.png, 1
-	FileInstall, Included Files\Used_Icons\Supply_0Protoss.png, %A_Temp%\Supply_0Protoss.png, 1
-	FileInstall, Included Files\Used_Icons\Supply_0Terran.png, %A_Temp%\Supply_0Terran.png, 1
-	FileInstall, Included Files\Used_Icons\Supply_0Zerg.png, %A_Temp%\Supply_0Zerg.png, 1
-	FileInstall, Included Files\Used_Icons\Gas_1Protoss.png, %A_Temp%\Gas_1Protoss.png, 1
-	FileInstall, Included Files\Used_Icons\Gas_1Terran.png, %A_Temp%\Gas_1Terran.png, 1
-	FileInstall, Included Files\Used_Icons\Gas_1Zerg.png, %A_Temp%\Gas_1Zerg.png, 1
-	FileInstall, Included Files\Used_Icons\Mineral_1Protoss.png, %A_Temp%\Mineral_1Protoss.png, 1
-	FileInstall, Included Files\Used_Icons\Mineral_1Terran.png, %A_Temp%\Mineral_1Terran.png, 1
-	FileInstall, Included Files\Used_Icons\Mineral_1Zerg.png, %A_Temp%\Mineral_1Zerg.png, 1
-	FileInstall, Included Files\Used_Icons\Supply_1Protoss.png, %A_Temp%\Supply_1Protoss.png, 1
-	FileInstall, Included Files\Used_Icons\Supply_1Terran.png, %A_Temp%\Supply_1Terran.png, 1
-	FileInstall, Included Files\Used_Icons\Supply_1Zerg.png, %A_Temp%\Supply_1Zerg.png, 1
-	FileInstall, Included Files\Used_Icons\Worker_0Protoss.png, %A_Temp%\Worker_0Protoss.png, 1
-	FileInstall, Included Files\Used_Icons\Worker_0Terran.png, %A_Temp%\Worker_0Terran.png, 1
-	FileInstall, Included Files\Used_Icons\Worker_0Zerg.png, %A_Temp%\Worker_0Zerg.png, 1
-	FileInstall, Included Files\Used_Icons\Army_Protoss.png, %A_Temp%\Army_Protoss.png, 1
-	FileInstall, Included Files\Used_Icons\Army_Terran.png, %A_Temp%\Army_Terran.png, 1
-	FileInstall, Included Files\Used_Icons\Army_Zerg.png, %A_Temp%\Army_Zerg.png, 1
-	FileInstall, Included Files\Used_Icons\Race_ProtossFlat.png, %A_Temp%\Race_ProtossFlat.png, 1
-	FileInstall, Included Files\Used_Icons\Race_TerranFlat.png, %A_Temp%\Race_TerranFlat.png, 1
-	FileInstall, Included Files\Used_Icons\Race_ZergFlat.png, %A_Temp%\Race_ZergFlat.png, 1
-	FileInstall, C:\Program Files\AutoHotkey\AutoHotkey.exe, %A_Temp%\AHK.exe, 1
-}
 
 
 CreateHotkeys()
@@ -6785,26 +6745,33 @@ getEnemyUnits(byref aEnemyUnits)
 return
 
 
+!F1::
+msgbox % getSelectionType(0)
+return
+
+!F2::
+objtree(a_pBitmap)
+return
 
 
 
-
-Panel(byref aEnemyUnits, byref aUnitID)	;care have used A_unitID everywhere else!!
+Panel(byref aEnemyUnits, byref aUnitID, byref a_pBitmap, a_Player)	;care have used A_unitID everywhere else!!
 {	
 	;	aEnemyUnits[Owner, Type]
-	GLOBAL a_Player
 	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab"]
-							, "Protoss": ["Interceptor", "Gateway"]
-							, "Zerg": ["OverlordCocoon","CreepTumorBurrowed","Broodling"]}
+							, "Protoss": ["Interceptor"]
+							, "Zerg": ["OverlordCocoon","CreepTumorBurrowed","Broodling","Locust"]}
 
 	STATIC aAddUnits 	:=	{"Terran": {SupplyDepotLowered: "SupplyDepot"}
-							, "Protoss": {Phaseprims: "WarpPrism"} 
-							, "Zerg": {keyA: "ValueA"}}
+							, "Protoss": {DroneBurrowed: "Drone"} 
+							, "Zerg": {DroneBurrowed: "Drone", ZerglingBurrowed: "Zergling", HydraliskBurrowed: "Hydralisk", UltraliskBurrowed: "Ultralisk", RoachBurrowed: "Roach"
+							, InfestorBurrowed: "Infestor", BanelingBurrowed: "Baneling", QueenBurrowed: "Queen", SporeCrawlerUprooted: "SporeCrawler", SpineCrawlerUprooted: "SpineCrawler"  
+							, Zergling: "BanelingCocoon"}}
 
-						;spore crawler uprooted
-						;SpineCrawler uprooted
+						; note - could have just done - f name contains "Burrowed" check substri = minus burrowed
+						;check  name InfestedTerran
+						; overlorrd cocoon = morphing overseer
 
-						;check out baneling and broodmorphing name InfestedTerran
 	;	msgbox % aRemovedUnits["Terran", 1]
 
 	for owner, object in aEnemyUnits
