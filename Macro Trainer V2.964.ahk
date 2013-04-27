@@ -2187,7 +2187,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, OverlayBackgrounds, %config_file%, %section%, OverlayBackgrounds, 0
 	IniRead, MiniMapRefresh, %config_file%, %section%, MiniMapRefresh, 300
 	IniRead, OverlayRefresh, %config_file%, %section%, OverlayRefresh, 1000
-	IniRead, UnitOverlayRefresh, %config_file%, %section%, OverlayRefresh, 4500
+	IniRead, UnitOverlayRefresh, %config_file%, %section%, UnitOverlayRefresh, 4500
 
 	
 	;[MiniMap]
@@ -6830,9 +6830,17 @@ return
 objtree(a_pBitmap)
 return
 
+!f3::
+	soundplay *-1
+		getEnemyUnits(aEnemyUnits)
+		FilterUnits(aEnemyUnits, a_UnitID, a_Player)
+		RedrawUnit := 1
+		DrawUnitOverlay(RedrawUnit, UnitOverlayScale, OverlayIdent, DragOverlay)
+return
+
 DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Background = 0, Drag = 0)
 {
-	GLOBAL a_pBitmap, a_Player, a_LocalPlayer, HexColour, GameIdentifier, config_file, UnitOverlayX, UnitOverlayY, MatrixColour 
+	GLOBAL aEnemyUnits, a_pBitmap, a_Player, a_LocalPlayer, HexColour, GameIdentifier, config_file, UnitOverlayX, UnitOverlayY, MatrixColour 
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0
 	Overlay_RunCount ++	
 	DestX := i := 0
@@ -6874,6 +6882,52 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Background = 
 	G := Gdip_GraphicsFromHDC(hdc)
 	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)	
 
+	for slot_number, object in aEnemyUnits ; slotnumber = owner and slotnuber is an object
+	{
+		DestY := i ? i*Height : 0
+		for unit, count in object
+		{
+			If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 ) && (A_Index = 1)
+			{	
+				IF (PlayerIdentifier = 2)
+					OptionsName := "Right Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
+				Else IF (PlayerIdentifier = 1)
+					OptionsName := "Right Bold cFFFFFFFF r4 s" 17*UserScale		
+				pBitmap := a_pBitmap[unit]
+				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
+				Width *= UserScale *.5, Height *= UserScale *.5
+				TextData :=	gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font) ;get string size	
+				StringSplit, TextSize, TextData, | ;retrieve the length of the string	
+				DestX := TextSize3+10*UserScale
+			}
+			Else If (PlayerIdentifier = 3)	&& (A_Index = 1)
+			{	pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"RaceFlat"]
+				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
+				Width *= UserScale *.5, Height *= UserScale *.5	
+				Gdip_DrawImage(G, pBitmap, 12*UserScale, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight, MatrixColour[a_Player[slot_number, "Colour"]])
+				;Gdip_DisposeImage(pBitmap)
+				pBitmap := a_pBitmap[unit]
+				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
+				Width *= UserScale *.5, Height *= UserScale *.5		
+				DestX := Width+10*UserScale
+			}
+
+			pBitmap := a_pBitmap[unit]
+			SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
+			Width *= UserScale *.5, Height *= UserScale *.5	
+
+			Gdip_DrawImage(G, pBitmap, DestX + ((A_index-1) * (Width+5*UserScale)), DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
+		}
+			Height += 5*userscale	;needed to stop the edge of race pic overlap'n due to Supply pic -prot then zerg
+			i++ 
+
+	}
+	WindowHeight := DestY+Height
+	Gdip_DeleteGraphics(G)
+	UpdateLayeredWindow(hwnd1, hdc) ; ,,,WindowWidth,WindowHeight)
+	SelectObject(hdc, obm)
+	DeleteObject(hbm)
+	DeleteDC(hdc)
 	Return
 }
 
