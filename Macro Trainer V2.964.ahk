@@ -489,6 +489,11 @@ Overlay_Toggle:
 	{
 		If (!DrawIdleWorkersOverlay := !DrawIdleWorkersOverlay)
 			DrawIdleWorkersOverlay(-1)
+	}	
+	Else If (A_ThisHotkey = ToggleUnitOverlayKey)
+	{
+		If (!DrawUnitOverlay := !DrawUnitOverlay)
+			DrawUnitOverlay(-1)
 	}
 Return
 	
@@ -518,7 +523,7 @@ clock:
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
-	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)   ; OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
+	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)    OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
 	{
 		game_status := "game", warpgate_status := "not researched"
 		Alert_TimedOut := [], Alerted_Buildings := [], Alerted_Buildings_Base := []  
@@ -1598,7 +1603,7 @@ g_HideMiniMap:
 return
 
 overlay_timer: 	;DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdent=0, Background=0,Drag=0)
-	If (WinActive(GameIdentifier) || Dragoverlay) ;really only needed to ressize/scale not drag - as the movement is donve via  a post message
+	If (WinActive(GameIdentifier) || Dragoverlay) ;really only needed to ressize/scale not drag - as the movement is donve via  a post message - needed as overlay becomes the active window during drag etc
 	{
 		If DrawIncomeOverlay
 			DrawIncomeOverlay(ReDrawIncome, IncomeOverlayScale, OverlayIdent, OverlayBackgrounds, Dragoverlay)
@@ -1612,6 +1617,16 @@ overlay_timer: 	;DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdent=0, Bac
 			DrawIdleWorkersOverlay(ReDrawIdleWorkers, IdleWorkersOverlayScale, dragOverlay)
 	}
 Return
+
+g_unitPanelOverlay_timer:
+	If (WinActive(GameIdentifier) || Dragoverlay) && (DrawUnitOverlay || DrawBuildingConstructionOverlay)
+	{
+		getEnemyUnits(aEnemyUnits)
+		FilterUnits(aEnemyUnits, a_UnitID, a_Player)
+		if DrawUnitOverlay
+			DrawUnitOverlay(RedrawUnit, UnitOverlayScale, OverlayIdent, DragOverlay)
+	}
+return
 
 ;--------------------
 ;	Mini Map Setup
@@ -2136,7 +2151,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	
 	;[Overlays]
 	section := "Overlays"
-	list := "IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay"
+	list := "IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay"
 	loop, parse, list, `,
 	{
 		IniRead, Draw%A_LoopField%, %config_file%, %section%, Draw%A_LoopField%, 0
@@ -2154,8 +2169,12 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 		Else if (%A_LoopField%Y > A_ScreenHeight)
 			%A_LoopField%Y := A_ScreenHeight/2
 	}
-	IniRead, DrawWorkerOverlay, %config_file%, %section%, DrawWorkerOverlay, 1
-	IniRead, DrawIdleWorkersOverlay, %config_file%, %section%, DrawIdleWorkersOverlay, 1
+
+
+;	IniRead, DrawWorkerOverlay, %config_file%, %section%, DrawWorkerOverlay, 1
+;	IniRead, DrawIdleWorkersOverlay, %config_file%, %section%, DrawIdleWorkersOverlay, 1
+
+	IniRead, ToggleUnitOverlayKey, %config_file%, %section%, ToggleUnitOverlayKey, <#U
 	IniRead, ToggleIdleWorkersOverlayKey, %config_file%, %section%, ToggleIdleWorkersOverlayKey, <#L
 	IniRead, ToggleIncomeOverlayKey, %config_file%, %section%, ToggleIncomeOverlayKey, <#I
 	IniRead, ToggleResourcesOverlayKey, %config_file%, %section%, ToggleResourcesOverlayKey, <#R
@@ -2167,7 +2186,9 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, OverlayIdent, %config_file%, %section%, OverlayIdent, 2
 	IniRead, OverlayBackgrounds, %config_file%, %section%, OverlayBackgrounds, 0
 	IniRead, MiniMapRefresh, %config_file%, %section%, MiniMapRefresh, 300
-	IniRead, OverlayRefresh, %config_file%, %section%, OverlayRefresh, 1000	
+	IniRead, OverlayRefresh, %config_file%, %section%, OverlayRefresh, 1000
+	IniRead, UnitOverlayRefresh, %config_file%, %section%, OverlayRefresh, 4500
+
 	
 	;[MiniMap]
 	section := "MiniMap" 	
@@ -2545,7 +2566,7 @@ ini_settings_write:
 
 	;[Overlays]
 	section := "Overlays"
-	list := "IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay"
+	list := "IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay"
 	loop, parse, list, `,
 	{
 		drawname := "Draw" A_LoopField,	drawvar := %drawname%
@@ -2572,6 +2593,7 @@ ini_settings_write:
 	Iniwrite, %OverlayBackgrounds%, %config_file%, %section%, OverlayBackgrounds	
 	Iniwrite, %MiniMapRefresh%, %config_file%, %section%, MiniMapRefresh	
 	Iniwrite, %OverlayRefresh%, %config_file%, %section%, OverlayRefresh	
+	Iniwrite, %UnitOverlayRefresh%, %config_file%, %section%, UnitOverlayRefresh
 
 	
 	;[MiniMap]
@@ -5707,7 +5729,6 @@ CreatepBitmaps(byref a_pBitmap, a_unitID)
 		a_pBitmap[A_loopfield,"Army"] := Gdip_CreateBitmapFromFile(A_Temp "\Army_" A_loopfield ".png")
 		a_pBitmap[A_loopfield,"RaceFlat"]  := Gdip_CreateBitmapFromFile(A_Temp "\Race_" A_loopfield "Flat.png")
 		a_pBitmap[A_loopfield,"RacePretty"] := Gdip_CreateBitmapFromFile(A_Temp "\" A_loopfield "90.png")
-		
 	}
 	Loop, %A_Temp%\UnitPanelMacroTrainer\*.png
 	{
@@ -6736,28 +6757,7 @@ getEnemyUnits(byref aEnemyUnits)
 	Return
 }
 
-; unit 123 owner 4
-+f2::
-	aEnemyUnits := []
-	getEnemyUnits(aEnemyUnits)
-	objtree(aEnemyUnits, 1)
-	Panel(aEnemyUnits, a_UnitID, a_pBitmap, a_Player)
-	objtree(aEnemyUnits, 2)
-
-return
-
-
-!F1::
-msgbox % getSelectionType(0)
-return
-
-!F2::
-objtree(a_pBitmap)
-return
-
-
-
-Panel(byref aEnemyUnits, byref aUnitID, byref a_pBitmap, a_Player)	;care have used A_unitID everywhere else!!
+FilterUnits(byref aEnemyUnits, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
 {	
 	;	aEnemyUnits[Owner, Type]
 	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab"]
@@ -6770,19 +6770,28 @@ Panel(byref aEnemyUnits, byref aUnitID, byref a_pBitmap, a_Player)	;care have us
 							, InfestorBurrowed: "Infestor", BanelingBurrowed: "Baneling", QueenBurrowed: "Queen", SporeCrawlerUprooted: "SporeCrawler", SpineCrawlerUprooted: "SpineCrawler"  
 							, Zergling: "BanelingCocoon"}}
 
-						; note - could have just done - f name contains "Burrowed" check substri = minus burrowed
-						;check  name InfestedTerran
-						; overlorrd cocoon = morphing overseer
-
-	;	msgbox % aRemovedUnits["Terran", 1]
+									; note - could have just done - if name contains "Burrowed" check, substring = minus burrowed
+									; overlorrd cocoon = morphing overseer
 
 	for owner, object in aEnemyUnits
 	{
-		race := a_Player[owner, "Race"]
+		aDeleteKeys := []					;****have to 'save' the delete keys, as deleting them during a for loop will cause you to go +2 keys on next loop, not 1
+		race := a_Player[owner, "Race"]		;it doesn't matter if it attempts to delete the same key a second time (doesn't effect anything)
 		for unit, count in object
+		{
+
+			if  (unit < aUnitID["Colossus"])	;as colossus is first real unit
+			{
+				aDeleteKeys.insert(unit)	;object.remove(unit, "")
+				continue
+			}
 			for index, removeUnit in aRemovedUnits[race]
 				if (unit = aUnitID[removeUnit])
-					object.remove(unit)
+				{
+					aDeleteKeys.insert(unit)
+					continue
+				}					
+		}
 		for subUnit, mainUnit in aAddUnits[Race]
 			if (total := object[subUnit])
 			{
@@ -6790,35 +6799,85 @@ Panel(byref aEnemyUnits, byref aUnitID, byref a_pBitmap, a_Player)	;care have us
 				if object[mainUnit]
 					object[mainUnit] += total
 				else object[mainUnit] := total
-				object.remove(aUnitID[subUnit])
+					aDeleteKeys.insert(unit) 
 			}
+		for index, unit in aDeleteKeys
+			object.remove(unit, "")				; **********	remove(unit, "") Removes an integer key and returns its value, but does NOT affect other integer keys.
+												;				as the keys are integers, otherwise it will decrease the keys afterwards by 1 for each removed unit!!!!
 	}
+	return
 
-	for owner, object in aEnemyUnits
-	{
-		race := a_Player[owner, "Race"]
-		for subUnit, mainUnit in aAddUnits[Race]
-			if object[subUnit]
-			{
-				if object[aUnitID[mainUnit]]
-					object[aUnitID[mainUnit]] += object[aUnitID[subUnit]]
-				else object[aUnitID[mainUnit]] := object[aUnitID[subUnit]]
-				object.remove(subUnit)
-			}
-	}
-
-
-	;below is an example for the aAddUnits
-	for accessoryUnit, mainUnit in aAddUnits["Protoss"]
-		msgbox % accessoryUnit "`n|" mainUnit
-
-	for objRace, object in aAddUnits
-		for accessoryUnit, mainUnit in object[objRace]
-
-			msgbox % objRace "`n|" accessoryUnit "`n|" mainUnit
-
-	
 }
+
+; unit 123 owner 4
++f2::
+	aEnemyUnits := []
+	getEnemyUnits(aEnemyUnits)
+	objtree(aEnemyUnits, 1)
+	sleep 5000
+	FilterUnits(aEnemyUnits, a_UnitID, a_Player)
+	objtree(aEnemyUnits, "Filtered")
+
+
+return
+
+
+!F1::
+msgbox % getSelectionType(0) "`n" getUnitOwner(getSelectedUnitIndex())
+return
+
+!F2::
+objtree(a_pBitmap)
+return
+
+DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Background = 0, Drag = 0)
+{
+	GLOBAL a_pBitmap, a_Player, a_LocalPlayer, HexColour, GameIdentifier, config_file, UnitOverlayX, UnitOverlayY, MatrixColour 
+	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0
+	Overlay_RunCount ++	
+	DestX := i := 0
+	Options := "Center cFFFFFFFF r4 s" 17*UserScale					;these cant be static	
+	If (Redraw = -1)
+	{
+		Try Gui, UnitOverlay: Destroy
+		Overlay_RunCount := 0
+		Redraw := 0
+		Return
+	}	
+	Else if (ReDraw AND WinActive(GameIdentifier))
+	{
+		Try Gui, UnitOverlay: Destroy
+		Overlay_RunCount := 1
+		Redraw := 0
+	}
+	If (Overlay_RunCount = 1)
+	{
+		Gui, UnitOverlay: -Caption Hwndhwnd1 +E0x20 +E0x80000 +LastFound  +ToolWindow +AlwaysOnTop
+		Gui, UnitOverlay: Show, NA X%UnitOverlayX% Y%UnitOverlayY% W400 H400, UnitOverlay
+		OnMessage(0x201, "OverlayMove_LButtonDown")
+		OnMessage(0x20A, "OverlayResize_WM_MOUSEWHEEL")
+	}	
+	If (Drag AND !DragPrevious)
+	{	DragPrevious := 1
+		Gui, UnitOverlay: -E0x20
+	}
+	Else if (!Drag AND DragPrevious)
+	{	DragPrevious := 0
+		Gui, UnitOverlay: +E0x20 +LastFound
+		WinGetPos,UnitOverlayX,UnitOverlayY		
+		IniWrite, %UnitOverlayX%, %config_file%, Overlays, UnitOverlayY
+		Iniwrite, %UnitOverlayX%, %config_file%, Overlays, UnitOverlayY		
+	}
+	hbm := CreateDIBSection(A_ScreenWidth, A_ScreenHeight)
+	hdc := CreateCompatibleDC()
+	obm := SelectObject(hdc, hbm)
+	G := Gdip_GraphicsFromHDC(hdc)
+	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)	
+
+	Return
+}
+
+
 
 
 
