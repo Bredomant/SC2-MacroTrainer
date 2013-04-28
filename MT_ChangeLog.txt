@@ -1,7 +1,11 @@
 V2.964
+New:
+	• UNIT PANEL!!
+
 Fixes:
 	• Fixed an issue which could cause the program to fail if a folder with the name "Starcraft II" was open.
 	• After destroying an enemies spawning base those small red squares will no longer be visible on the minimap.
+	• If using the player name identifier in overlays, the resources/units will be aligned regardless of the name length
 
 Changes:	
 	• Added deselect unit sleep time.

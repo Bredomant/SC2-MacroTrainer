@@ -1631,7 +1631,7 @@ g_unitPanelOverlay_timer:
 	DrawUnitOverlay := 1
 	If (DrawUnitOverlay || DrawBuildingConstructionOverlay) && (WinActive(GameIdentifier) || Dragoverlay)
 	{
-		getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction)
+		getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID)
 		FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
 		if DrawUnitOverlay
 			DrawUnitOverlay(RedrawUnit, UnitOverlayScale, OverlayIdent, Dragoverlay)
@@ -4839,6 +4839,13 @@ else if (Filter & BuriedFilterFlag) && (type != A_unitID.WidowMineBurrowed)	; as
 		Priority -= .2		;this is a work around, as burrowed units are a lower priority (come later in the selection group) except for swarm host which is higher!! :(
 	Return Priority
 }
+getRealSubGroupPriority(unit)	;needed as unit panel uses unit priotriy as key values - and cant have decimal places in keys
+{
+	Global
+	Return ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mSubgroupPriority, GameIdentifier, 2)
+}
+
+
 getUnitCount()
 { local count 	
 	if (!count := ReadMemory(B_uCount, GameIdentifier))
@@ -6758,13 +6765,16 @@ return
 
 
 
+/*
+	object looks like this
+	(owner)	|----3
+	(Priority)	 |-----2
+	(unit)			   |------247
 
-
-
-
-getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction)
+*/
+getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID)
 {
-	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter
+	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter, aEnemyUnitPriorities := []
 	aEnemyUnits := [], aEnemyBuildingConstruction := []
 	While (A_Index <= getHighestUnitIndex()) 
 	{
@@ -6776,22 +6786,30 @@ getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction)
 		If  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] AND Owner) ; Owner 0 = neutral
 		{
 			Type := getunittype(unit)
+			if  (Type < aUnitID["Colossus"])
+				continue		
+			if !aEnemyUnitPriorities[Type]
+				aEnemyUnitPriorities[Type] := Priority := getRealSubGroupPriority(unit)	
+			else Priority := aEnemyUnitPriorities[Type] ; faster than reading the priority each time - this is splitting hairs!!!
 			if (TargetFilter & a_UnitTargetFilter.UnderConstruction)
 			{
-				aEnemyBuildingConstruction[Owner, Type] := aEnemyBuildingConstruction[Owner, Type] ? aEnemyBuildingConstruction[Owner, Type] + 1 : 1
-				aEnemyBuildingConstruction[Owner, "TotalCount"] := aEnemyBuildingConstruction[Owner, "TotalCount"] ? aEnemyBuildingConstruction[Owner, "TotalCount"] + 1 : 1	
+
+				aEnemyBuildingConstruction[Owner, Priority, Type] := aEnemyBuildingConstruction[Owner, Priority, Type] ? aEnemyBuildingConstruction[Owner, Priority, Type] + 1 : 1
+				aEnemyBuildingConstruction[Owner, "TotalCount"] := aEnemyBuildingConstruction[Owner, "TotalCount"] ? aEnemyBuildingConstruction[Owner, "TotalCount"] + 1 : 1
+
+
 			}		; this is a cheat and very lazy way of incorporating a count into the array without stuffing the for loop and having another variable
 			Else
-				aEnemyUnits[Owner, Type] := aEnemyUnits[Owner, Type] ? aEnemyUnits[Owner, Type] + 1 : 1 ;note +1 (++ will not work!!!)
+				aEnemyUnits[Owner, Priority, Type] := aEnemyUnits[Owner, Priority, Type] ? aEnemyUnits[Owner, Priority, Type] + 1 : 1 ;note +1 (++ will not work!!!)
 		}
 	}
 	Return
 }
 
 FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
-{	
+{	global aEnemyUnitPriorities
 	;	aEnemyUnits[Owner, Type]
-	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab"]
+	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab","StarportReactor"]
 							, "Protoss": ["Interceptor"]
 							, "Zerg": ["OverlordCocoon","CreepTumorBurrowed","Broodling","Locust"]}
 
@@ -6801,45 +6819,77 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 							, InfestorBurrowed: "Infestor", BanelingBurrowed: "Baneling", QueenBurrowed: "Queen", SporeCrawlerUprooted: "SporeCrawler", SpineCrawlerUprooted: "SpineCrawler"  
 							, Zergling: "BanelingCocoon"}}
 
+	STATIC aAddConstruction := {"Terran": {BarracksTechLab: "TechLab", BarracksReactor: "Reactor", FactoryTechLab: "TechLab", FactoryReactor: "Reactor", StarportTechLab: "TechLab", StarportReactor: "Reactor"}}
+
 									; note - could have just done - if name contains "Burrowed" check, substring = minus burrowed
-									; overlorrd cocoon = morphing overseer
+									; overlorrd cocoon = morphing overseer (and it isnt under construction)
 									;also need to account for morphing drones into buildings 
+/*
+	object looks like this
+	(owner)	|----3
+	(Priority)	 |-----2
+	(unit)			   |------247
 
-	for owner, object in aEnemyUnits
+*/
+	for owner, priorityObject in aEnemyUnits
 	{
-		aDeleteKeys := []					;****have to 'save' the delete keys, as deleting them during a for loop will cause you to go +2 keys on next loop, not 1
+	;	aDeleteKeys := []					;****have to 'save' the delete keys, as deleting them during a for loop will cause you to go +2 keys on next loop, not 1
 		race := a_Player[owner, "Race"]		;it doesn't matter if it attempts to delete the same key a second time (doesn't effect anything)
-		for unit, count in object
-		{
 
-			if  (unit < aUnitID["Colossus"])	;as colossus is first real unit
-			{
-				aDeleteKeys.insert(unit)	;object.remove(unit, "")
-				continue
-			}
-			for index, removeUnit in aRemovedUnits[race]
-				if (unit = aUnitID[removeUnit])
-				{
-					aDeleteKeys.insert(unit)
-					continue
-				}					
+		if (race = "Zerg" && object[aEnemyUnitPriorities[aUnitID["Drone"]], aUnitID["Drone"]] && aEnemyBuildingConstruction[Owner, "TotalCount"])
+			object[aEnemyUnitPriorities[aUnitID["Drone"]], aUnitID["Drone"]] -= aEnemyBuildingConstruction[Owner, "TotalCount"] ; as drones morphing are still counted as 'alive' so have to remove them		
+		
+		for index, removeUnit in aRemovedUnits[race]
+		{
+			removeUnit := aUnitID[removeUnit]
+			priority := aEnemyUnitPriorities[removeUnit]
+			priorityObject[priority].remove(removeUnit, "")
 		}
-		if (race = "Zerg" && object[aUnitID["Drone"]] && aEnemyBuildingConstruction[Owner, "TotalCount"])
-			object[aUnitID["Drone"]] -= aEnemyBuildingConstruction[Owner, "TotalCount"] ; as drones morphing are still counted as 'alive' so have to remove them
 
 		for subUnit, mainUnit in aAddUnits[Race]
-			if (total := object[subUnit])
+		{
+			subunit := aUnitID[subUnit]
+			priority := aEnemyUnitPriorities[subunit]
+			if (total := priorityObject[priority, subunit])
 			{
 				mainUnit := aUnitID[mainUnit]
-				if object[mainUnit]
-					object[mainUnit] += total
-				else object[mainUnit] := total
-					aDeleteKeys.insert(unit) 
-			}
-		for index, unit in aDeleteKeys
-			object.remove(unit, "")				; **********	remove(unit, "") Removes an integer key and returns its value, but does NOT affect other integer keys.
-												;				as the keys are integers, otherwise it will decrease the keys afterwards by 1 for each removed unit!!!!
+				priority := aEnemyUnitPriorities[mainUnit]
+				if priorityObject[priority, mainUnit]
+					priorityObject[priority, mainUnit] += total
+				else priorityObject[priority, mainUnit] := total
+				priorityObject[priority].remove(subunit, "")
+			}	
+		}
+
+;		for index, unit in aDeleteKeys												; **********	remove(unit, "") Removes an integer key and returns its value, but does NOT affect other integer keys.
+;			priorityObject[aEnemyUnitPriorities[unit]].remove(unit, "")				;				as the keys are integers, otherwise it will decrease the keys afterwards by 1 for each removed unit!!!!													
 	}
+
+	for owner, priorityObject in aEnemyBuildingConstruction
+	{
+		race := a_Player[owner, "Race"]	
+		for subUnit, mainUnit in aAddConstruction[Race]
+		{
+			subunit := aUnitID[subUnit]
+			priority := aEnemyUnitPriorities[subunit]
+			if (total := priorityObject[priority, subunit])
+			{
+				mainUnit := aUnitID[mainUnit]
+				priority := aEnemyUnitPriorities[mainUnit]
+				if priorityObject[priority, mainUnit]
+					priorityObject[priority, mainUnit] += total
+				else priorityObject[priority, mainUnit] := total
+				priorityObject[priority].remove(subunit, "")
+			}
+
+			
+		}
+
+	}
+
+;	objtree(aDeleteKeys, "aDeleteKeys")
+;	objtree(aEnemyUnits, "aEnemyUnits")
+;	msgbox stop
 	return
 
 }
@@ -6847,16 +6897,20 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 ; unit 123 owner 4
 
 !F1::
-msgbox % getSelectionType(0) "`n" getUnitOwner(getSelectedUnitIndex()) "`n" isUnderConstruction(getSelectedUnitIndex()) "`n" getSubGroupPriority(getSelectedUnitIndex())
+msgbox % getSelectionType(0) "`n" getUnitOwner(getSelectedUnitIndex()) "`n" isUnderConstruction(getSelectedUnitIndex()) "`n" getSubGroupPriority(getSelectedUnitIndex()) "`n" getUnitOwner(getSelectedUnitIndex())
 
 return
 
 !F2::
-;	getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction)
+;	getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID)
 ;	FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
-objtree(a_Player)
-objtree(a_LocalPlayer)
-msgbox % getLongestEnemyPlayerName(a_Player)
+;objtree(aEnemyUnits)
+;objtree(aEnemyBuildingConstruction)
+
+;msgbox % getLongestEnemyPlayerName(a_Player) "`n" getLocalPlayerNumber() "`n" getPlayerTeam(getLocalPlayerNumber())
+objtree(aDeleteKeys)
+
+
 return
 
 getLongestEnemyPlayerName(a_Player)
@@ -6914,90 +6968,89 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 	G := Gdip_GraphicsFromHDC(hdc)
 	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)
 	setDrawingQuality(G)	
-	for slot_number, object in aEnemyUnits ; slotnumber = owner and slotnuber is an object
+	for slot_number, priorityObject in aEnemyUnits ; slotnumber = owner and slotnuber is an object
 	{
 		DestY := i ? i*Height : 0
 		DestX := 0
-		for unit, unitCount in object
-		{
-			If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 ) && (A_Index = 1)
-			{	
-				IF (PlayerIdentifier = 2)
-					OptionsName := " Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
-				Else IF (PlayerIdentifier = 1)
-					OptionsName := " Bold cFFFFFFFF r4 s" 17*UserScale		
-				pBitmap := a_pBitmap[unit]
-				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
-				Width *= UserScale *.5, Height *= UserScale *.5
-				gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font) ;get string size	
-			;	StringSplit, TextSize, TextData, | ;retrieve the length of the string		
-				if !LongestNameSize
-				{
-					LongestNameData :=	gdip_TextToGraphics(G, getLongestEnemyPlayerName(a_Player), "x0" "y"(DestY+(Height//4))  " Bold c00FFFFFF r4 s" 17*UserScale	, Font) ; text is invisible ;get string size	
-					StringSplit, LongestNameSize, LongestNameData, | ;retrieve the length of the string
-					LongestNameSize := LongestNameSize3
-				}
-				DestX := LongestNameSize+10*UserScale
-
-			;	DestX := TextSize3+10*UserScale
+		
+		If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 )
+		{	
+			IF (PlayerIdentifier = 2)
+				OptionsName := " Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
+			Else IF (PlayerIdentifier = 1)
+				OptionsName := " Bold cFFFFFFFF r4 s" 17*UserScale		
+			gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY +12*UserScale)  OptionsName, Font) ;get string size	
+		;	StringSplit, TextSize, TextData, | ;retrieve the length of the string		
+			if !LongestNameSize
+			{
+				LongestNameData :=	gdip_TextToGraphics(G, getLongestEnemyPlayerName(a_Player), "x0" "y"(DestY)  " Bold c00FFFFFF r4 s" 17*UserScale	, Font) ; text is invisible ;get string size	
+				StringSplit, LongestNameSize, LongestNameData, | ;retrieve the length of the string
+				LongestNameSize := LongestNameSize3
 			}
-			Else If (PlayerIdentifier = 3) && (A_Index = 1)
-			{	pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"RaceFlat"]
-				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
-				Width *= UserScale *.5, Height *= UserScale *.5	
-				Gdip_DrawImage(G, pBitmap, 12*UserScale, DestY + Height/5, Width, Height, 0, 0, SourceWidth, SourceHeight, MatrixColour[a_Player[slot_number, "Colour"]])
-				;Gdip_DisposeImage(pBitmap)
-				pBitmap := a_pBitmap[unit]
-				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
-				Width *= UserScale *.5, Height *= UserScale *.5		
-				DestX := Width+10*UserScale
-			}
+			DestX := LongestNameSize+5*UserScale
 
-			if !(pBitmap := a_pBitmap[unit])
-				continue ; as i dont have a picture for that unit - not a real unit?
+		}
+		Else If (PlayerIdentifier = 3)
+		{	
+			pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"RaceFlat"]
 			SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 			Width *= UserScale *.5, Height *= UserScale *.5	
-
-			Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
-			Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX + .6*Width, DestY + .6*Height, Width/2.5, Height/2.5, 5)
-			if (unitCount >= 10)
-				gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
-			Else
-					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
-
-			if (unitCount := aEnemyBuildingConstruction[slot_number, unit])	; so there are some of this unit being built lets draw the count on top of the completed units
+			Gdip_DrawImage(G, pBitmap, 12*UserScale, DestY + Height/5, Width, Height, 0, 0, SourceWidth, SourceHeight, MatrixColour[a_Player[slot_number, "Colour"]])
+			DestX := Width+15*UserScale 
+		}
+		for priority, object in priorityObject
+		{
+			for unit, unitCount in object
 			{
-				;	Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX, DestY + .6*Height, Width/2.5, Height/2.5, 5)
+				if !(pBitmap := a_pBitmap[unit])
+					continue ; as i dont have a picture for that unit - not a real unit?
+				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
+				Width *= UserScale *.5, Height *= UserScale *.5	
+
+				Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
+				Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX + .6*Width, DestY + .6*Height, Width/2.5, Height/2.5, 5)
+				if (unitCount >= 10)
+					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
+				Else
+						gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
+
+				if (unitCount := aEnemyBuildingConstruction[slot_number, priority, unit])	; so there are some of this unit being built lets draw the count on top of the completed units
+				{
+					;	Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX, DestY + .6*Height, Width/2.5, Height/2.5, 5)
+						Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX + .6*Width, DestY, Width/2.5, Height/2.5, 5)
+						if (unitCount >= 10)
+							gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
+						Else
+							gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) "y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
+						aEnemyBuildingConstruction[slot_number, priority].remove(unit, "")
+				}
+
+				DestX += (Width+5*UserScale)
+			}	
+		}
+		; DestX += 35 ; to end buildings in construction appear further to the right
+		if (DestX + Width > WindowWidth)
+			WindowWidth := DestX
+		for ConstructionPriority, priorityConstructionObject in aEnemyBuildingConstruction[slot_number]
+			for unit, unitCount in priorityConstructionObject		;	lets draw the buildings under construction (these are ones which werent already drawn above)
+				if (unit <> "TotalCount" && pBitmap := a_pBitmap[unit])				;	i.e. there are no already completed buildings of same type
+				{
+					SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
+					Width *= UserScale *.5, Height *= UserScale *.5	
+					Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
 					Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX + .6*Width, DestY, Width/2.5, Height/2.5, 5)
 					if (unitCount >= 10)
 						gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
 					Else
-						gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) "y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
-					aEnemyBuildingConstruction[slot_number].remove(unit, "")
-			}
+						gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) " y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
+					DestX += (Width+5*UserScale)
+					if (DestX + Width > WindowWidth)
+						WindowWidth := DestX
+				}
 
-			DestX += (Width+5*UserScale)
-			if (DestX + Width > WindowWidth)
-				WindowWidth := DestX
-		}
-		for unit, unitCount in aEnemyBuildingConstruction[slot_number]		;	lets draw the buildings under construction (these are ones which werent already drawn above)
-			if (unit <> "TotalCount" && pBitmap := a_pBitmap[unit])				;	i.e. there are no already completed buildings of same type
-			{
-				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
-				Width *= UserScale *.5, Height *= UserScale *.5	
-				Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
-				Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX + .6*Width, DestY, Width/2.5, Height/2.5, 5)
-				if (unitCount >= 10)
-					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
-				Else
-					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) " y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
-				DestX += (Width+5*UserScale)
-				if (DestX + Width > WindowWidth)
-					WindowWidth := DestX
-			}
-
-			Height += 5*userscale	;needed to stop the edge of race pic overlap'n due to Supply pic -prot then zerg
-			i++ 
+				Height += 5*userscale	;needed to stop the edge of race pic overlap'n due to Supply pic -prot then zerg
+				i++ 
+		
 	}
 	WindowHeight := DestY+Height
 	Gdip_DeleteGraphics(G)
