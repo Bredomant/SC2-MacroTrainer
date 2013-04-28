@@ -415,8 +415,11 @@ Adjust_overlay:
 	{
 		SetBatchLines, -1
 		gosub overlay_timer
+		if DrawUnitOverlay
+			gosub g_unitPanelOverlay_timer
 		SetTimer, OverlayKeepOnTop,off
 		SetTimer, overlay_timer, 50, 0		; make normal priority so it can interupt this thread to move
+		SetTimer, g_unitPanelOverlay_timer, 50, 0
 		SoundPlay, %A_Temp%\On.wav
 	}	
 	sleep 500
@@ -426,6 +429,7 @@ Adjust_overlay:
 		SetBatchLines, %SetBatchLines%
 		SetTimer, OverlayKeepOnTop, 1000, -10
 		SetTimer, overlay_timer, %OverlayRefresh%, -11
+		SetTimer, g_unitPanelOverlay_timer, %UnitOverlayRefresh%, -11
 		SoundPlay, %A_Temp%\Off.wav
 		WinActivate, %GameIdentifier%
 	}
@@ -495,13 +499,16 @@ Overlay_Toggle:
 		If (!DrawUnitOverlay := !DrawUnitOverlay)
 			DrawUnitOverlay(-1)
 	}
+	If (A_ThisHotkey = ToggleUnitOverlayKey) || (A_ThisHotkey = ToggleBuildingConstructionOverlayKey) 
+		gosub, g_unitPanelOverlay_timer
+	else gosub, overlay_timer ;this makes the change take effect immediately. 
 Return
 	
 mt_pause_resume:
 	if (mt_on := !mt_on)	; 1st run mt_on blank so considered false and does else	
 	{
 		game_status := "lobby" ; with this clock = 0 when not in game 
-		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer")
+		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer")
 		inject_timer := 0	;ie so know inject timer is off
 		DSpeak("Macro Trainer Paused")
 	}	
@@ -519,7 +526,7 @@ clock:
 	if (!time AND game_status = "game") OR (UpdateTimers) ; time=0 outside game
 	{	
 		game_status := "lobby" ; with this clock = 0 when not in game (while in game at 0s clock = 44)	
-		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer")
+		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer")
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
@@ -529,7 +536,7 @@ clock:
 		Alert_TimedOut := [], Alerted_Buildings := [], Alerted_Buildings_Base := []  
 		MiniMapWarning := [], a_BaseList := []
 		if WinActive(GameIdentifier)
-			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := 1
+			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := RedrawConstruction := 1
 		if idle_enable	;this is the idle AFK
 			settimer, user_idle, 1000
 ;		if (MaxWindowOnStart && !Auto_Mine && time < 5)  ;as automine has its own
@@ -577,6 +584,8 @@ clock:
 		If (DrawMiniMap OR DrawAlerts OR DrawSpawningRaces)
 			SetTimer, MiniMap_Timer, %MiniMapRefresh%, -10		
 		SetTimer, overlay_timer, %OverlayRefresh%, -11	;lowest priority
+		SetTimer, g_unitPanelOverlay_timer, %UnitOverlayRefresh%, -11	;lowest priority
+
 		EnemyBaseList := GetEBases()		
 ;		If Auto_Mine
 ;			settimer, Auto_mine, 100
@@ -627,7 +636,7 @@ Loop, 8	;doing it this way allows for custom games with blank slots ;can get wei
 		a_LocalPlayer :=  new c_Player(A_Index)
 }
 IF (IsInList(a_LocalPlayer.Type, 5, 6) OR (A_IsCompiled AND a_LocalPlayer.Type = 16))
-	timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer") ;Pause all warnings. Clock still going so will resume next game
+	timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer") ;Pause all warnings. Clock still going so will resume next game
 GameType := GetGameType(a_Player)
 return
 ;-------------------------
@@ -917,7 +926,7 @@ If (time AND Time <= Start_Mine_Time + 8) && getIdleWorkers()
 			WinActivate, %GameIdentifier%
 			sleep 1500 ; give time for slower computers to make sc2 window 'truely' active
 			DestroyOverlays()
-			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := 1
+			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := RedrawConstruction := 1
 		}
 		Gosub overlay_timer	; here so can update the overlays
 		If (DrawMiniMap OR DrawAlerts OR DrawSpawningRaces)
@@ -1584,7 +1593,7 @@ return
 
 OverlayKeepOnTop:
 	if (!WinActive(GameIdentifier) And ReDraw <> 1)
-	{	ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := ReDrawIdleWorkers:= 1
+	{	ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := ReDrawIdleWorkers := RedrawUnit := RedrawConstruction := 1
 		DestroyOverlays()
 	}
 Return
@@ -1619,12 +1628,13 @@ overlay_timer: 	;DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdent=0, Bac
 Return
 
 g_unitPanelOverlay_timer:
-	If (WinActive(GameIdentifier) || Dragoverlay) && (DrawUnitOverlay || DrawBuildingConstructionOverlay)
+	DrawUnitOverlay := 1
+	If (DrawUnitOverlay || DrawBuildingConstructionOverlay) && (WinActive(GameIdentifier) || Dragoverlay)
 	{
-		getEnemyUnits(aEnemyUnits)
-		FilterUnits(aEnemyUnits, a_UnitID, a_Player)
+		getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction)
+		FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
 		if DrawUnitOverlay
-			DrawUnitOverlay(RedrawUnit, UnitOverlayScale, OverlayIdent, DragOverlay)
+			DrawUnitOverlay(RedrawUnit, UnitOverlayScale, OverlayIdent, Dragoverlay)
 	}
 return
 
@@ -3970,7 +3980,7 @@ loop, parse, l_GameType, `,
 	}			
 }
 
-Gui, Add, GroupBox, ys x+30 w245 h195 vOriginTabRAL, Parameters
+Gui, Add, GroupBox, ys x+30 w245 h185 vOriginTabRAL, Parameters
 GuiControlGet, OriginTabRAL, Pos
 	Gui, Add, Text,xp+10 yp+20 section, Name/Warning:
 	Gui, Add, Text,y+10 w80, Don't Warn if Exists Before (s):
@@ -3988,7 +3998,7 @@ GuiControlGet, OriginTabRAL, Pos
 	DetectionUnitListNames := 	"ID List||" l_UnitNames	;get the ID List Txt first in the shared list
 	Gui, Add, DropDownList, xs y+10 w135 Vdrop_ID sort, %DetectionUnitListNames%
 
-Gui, Add, GroupBox, y+10 x%OriginTabRALX% w245 h175, Alert Submission	
+Gui, Add, GroupBox, y+30 x%OriginTabRALX% w245 h175, Alert Submission	
 	Gui, Add, Button, xp+10 yp+20 w225 section vB_Modify_Alert gB_Modify_Alert, Modify Alert
 	Gui, Add, Text,xs ys+27 w225 center, OR
 	Gui, Add, Button, xs y+5 w225 section gDelete_Alert vB_Delete_Alert Center, Delete Alert
@@ -5201,7 +5211,7 @@ OverlayResize_WM_MOUSEWHEEL(wParam) 		;(wParam, lParam) 0x20A =mousewheel
 { local WheelMove, ActiveTitle, newScale, Scale
 	WheelMove := wParam > 0x7FFFFFFF ? HiWord(-(~wParam)-1)/120 :  HiWord(wParam)/120 ;get the higher order word & /120 = number of rotations
 	WinGetActiveTitle, ActiveTitle 			;downard rotations are -negative numbers
-	if ActiveTitle in IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay ; here cos it can get non overlay titles
+	if ActiveTitle in IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay ; here cos it can get non overlay titles
 	{	
 		newScale := %ActiveTitle%Scale + WheelMove*.05
 		if (newScale >= .5)
@@ -5271,7 +5281,7 @@ DrawIdleWorkersOverlay(ByRef Redraw, UserScale=1,Drag=0, expand=1)
 			increased := .5
 		UserScale += increased
 	}
-	Options := "Center cFFFFFFFF r4 s" 18*UserScale
+	Options := " cFFFFFFFF r4 s" 18*UserScale
 	Width *= UserScale *.5, Height *= UserScale *.5
 	Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)	
 	Gdip_TextToGraphics(G, idleCount, "x"(DestX+Width+2*UserScale) "y"(DestY+(Height//4)) Options, Font, TextWidthHeight, TextWidthHeight)
@@ -5287,7 +5297,7 @@ DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Dr
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0
 	Overlay_RunCount ++
 	DestX := i := 0
-	Options := "Center cFFFFFFFF r4 s" 17*UserScale					;these cant be static	
+	Options := " cFFFFFFFF r4 s" 17*UserScale					;these cant be static	
 	If (Redraw = -1)
 	{
 		Try Gui, IncomeOverlay: Destroy
@@ -5324,7 +5334,7 @@ DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Dr
 	hdc := CreateCompatibleDC()
 	obm := SelectObject(hdc, hbm)
 	G := Gdip_GraphicsFromHDC(hdc)
-	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)		
+	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)	
 	For slot_number in a_Player
 	{
 		If ( a_LocalPlayer["Team"] <> a_Player[slot_number, "Team"] )
@@ -5334,15 +5344,20 @@ DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Dr
 			If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 )
 			{	
 				IF (PlayerIdentifier = 2)
-					OptionsName := "Right Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
+					OptionsName := " Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
 				Else IF (PlayerIdentifier = 1)
-					OptionsName := "Right Bold cFFFFFFFF r4 s" 17*UserScale	
+					OptionsName := " Bold cFFFFFFFF r4 s" 17*UserScale	
 				pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"Mineral",Background]
 				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 				Width *= UserScale *.5, Height *= UserScale *.5		
-				TextData := gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font)
-				StringSplit, TextSize, TextData, | ;retrieve the length of the string
-				DestX := TextSize3+10*UserScale
+				gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font)
+				if !LongestNameSize
+				{
+					LongestNameData :=	gdip_TextToGraphics(G, getLongestEnemyPlayerName(a_Player), "x0" "y"(DestY+(Height//4))  " Bold c00FFFFFF r4 s" 17*UserScale	, Font) ; text is invisible ;get string size	
+					StringSplit, LongestNameSize, LongestNameData, | ;retrieve the length of the string
+					LongestNameSize := LongestNameSize3
+				}
+				DestX := LongestNameSize+10*UserScale
 			}
 			Else If (PlayerIdentifier = 3)
 			{		
@@ -5397,7 +5412,7 @@ DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0		
 	Overlay_RunCount ++	
 	DestX := i := 0
-	Options := "Center cFFFFFFFF r4 s" 17*UserScale					;these cant be static	
+	Options := " cFFFFFFFF r4 s" 17*UserScale					;these cant be static	
 	If (Redraw = -1)
 	{
 		Try Gui, ResourcesOverlay: Destroy
@@ -5446,15 +5461,20 @@ DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0
 			If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 )
 			{	
 				IF (PlayerIdentifier = 2)
-					OptionsName := "Right Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
+					OptionsName := " Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
 				Else IF (PlayerIdentifier = 1)
-					OptionsName := "Right Bold cFFFFFFFF r4 s" 17*UserScale		
+					OptionsName := " Bold cFFFFFFFF r4 s" 17*UserScale		
 				pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"Mineral",Background]
-				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
+				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)		
 				Width *= UserScale *.5, Height *= UserScale *.5
-				TextData :=	gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font) ;get string size	
-				StringSplit, TextSize, TextData, | ;retrieve the length of the string	
-				DestX := TextSize3+10*UserScale
+				gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font) ;get string size	
+				if !LongestNameSize
+				{
+					LongestNameData :=	gdip_TextToGraphics(G, getLongestEnemyPlayerName(a_Player), "x0" "y"(DestY+(Height//4))  " Bold c00FFFFFF r4 s" 17*UserScale	, Font) ; text is invisible ;get string size	
+					StringSplit, LongestNameSize, LongestNameData, | ;retrieve the length of the string
+					LongestNameSize := LongestNameSize3
+				}
+				DestX := LongestNameSize+10*UserScale
 			}
 			Else If (PlayerIdentifier = 3)
 			{	pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"RaceFlat"]
@@ -5511,7 +5531,7 @@ DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0	
 	Overlay_RunCount ++	
 	DestX := i := 0
-	Options := "Center cFFFFFFFF r4 Bold s" 17*UserScale					;these cant be static
+	Options := " cFFFFFFFF r4 Bold s" 17*UserScale					;these cant be static
 	If (Redraw = -1)
 	{
 		Try Gui, ArmySizeOverlay: Destroy
@@ -5558,15 +5578,20 @@ DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,
 			If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 )
 			{	
 				IF (PlayerIdentifier = 2)
-					OptionsName := "Right Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
+					OptionsName := " Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
 				Else IF (PlayerIdentifier = 1)
-					OptionsName := "Right Bold cFFFFFFFF r4 s" 17*UserScale	
+					OptionsName := " Bold cFFFFFFFF r4 s" 17*UserScale	
 				pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"Mineral",Background]
 				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 				Width *= UserScale *.5, Height *= UserScale *.5		
-				TextData := gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font)
-				StringSplit, TextSize, TextData, | ;retrieve the length of the string
-				DestX := TextSize3+10*UserScale
+				gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font)		
+				if !LongestNameSize
+				{
+					LongestNameData :=	gdip_TextToGraphics(G, getLongestEnemyPlayerName(a_Player), "x0" "y"(DestY+(Height//4))  " Bold c00FFFFFF r4 s" 17*UserScale	, Font) ; text is invisible ;get string size	
+					StringSplit, LongestNameSize, LongestNameData, | ;retrieve the length of the string
+					LongestNameSize := LongestNameSize3
+				}
+				DestX := LongestNameSize+10*UserScale
 			}
 			Else If (PlayerIdentifier = 3)
 			{		
@@ -5621,7 +5646,7 @@ DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,
 DrawWorkerOverlay(ByRef Redraw, UserScale=1,Drag=0)
 {	global a_LocalPlayer, GameIdentifier, config_file, WorkerOverlayX, WorkerOverlayY, a_pBitmap
 	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0				
-	Options := "Center cFFFFFFFF r4 s" 18*UserScale
+	Options := " cFFFFFFFF r4 s" 18*UserScale
 	Overlay_RunCount ++	
 	DestX := DestY := 0
 	If (Redraw = -1)
@@ -5683,6 +5708,7 @@ DestroyOverlays()
 	Try Gui, ArmySizeOverlay: Destroy
 	Try Gui, WorkerOverlay: Destroy			
 	Try Gui, idleWorkersOverlay: Destroy			
+	Try Gui, UnitOverlay: Destroy			
 }
 
 setDrawingQuality(G)
@@ -6736,28 +6762,33 @@ return
 
 
 
-getEnemyUnits(byref aEnemyUnits)
+getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction)
 {
-	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer
-	aEnemyUnits := []
+	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter
+	aEnemyUnits := [], aEnemyBuildingConstruction := []
 	While (A_Index <= getHighestUnitIndex()) 
 	{
 		unit := A_Index - 1
-		If (getUnitTargetFilter(unit) & DeadFilterFlag)
+		TargetFilter := getUnitTargetFilter(unit)
+		If (TargetFilter & DeadFilterFlag)
 			Continue
 		Owner := getUnitOwner(unit)
 		If  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] AND Owner) ; Owner 0 = neutral
 		{
 			Type := getunittype(unit)
-			if aEnemyUnits[Owner, Type]
-				aEnemyUnits[Owner, Type]++
-			Else aEnemyUnits[Owner, Type] := 1		
+			if (TargetFilter & a_UnitTargetFilter.UnderConstruction)
+			{
+				aEnemyBuildingConstruction[Owner, Type] := aEnemyBuildingConstruction[Owner, Type] ? aEnemyBuildingConstruction[Owner, Type] + 1 : 1
+				aEnemyBuildingConstruction[Owner, "TotalCount"] := aEnemyBuildingConstruction[Owner, "TotalCount"] ? aEnemyBuildingConstruction[Owner, "TotalCount"] + 1 : 1	
+			}		; this is a cheat and very lazy way of incorporating a count into the array without stuffing the for loop and having another variable
+			Else
+				aEnemyUnits[Owner, Type] := aEnemyUnits[Owner, Type] ? aEnemyUnits[Owner, Type] + 1 : 1 ;note +1 (++ will not work!!!)
 		}
 	}
 	Return
 }
 
-FilterUnits(byref aEnemyUnits, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
+FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
 {	
 	;	aEnemyUnits[Owner, Type]
 	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab"]
@@ -6772,6 +6803,7 @@ FilterUnits(byref aEnemyUnits, byref aUnitID, a_Player)	;care have used A_unitID
 
 									; note - could have just done - if name contains "Burrowed" check, substring = minus burrowed
 									; overlorrd cocoon = morphing overseer
+									;also need to account for morphing drones into buildings 
 
 	for owner, object in aEnemyUnits
 	{
@@ -6792,6 +6824,9 @@ FilterUnits(byref aEnemyUnits, byref aUnitID, a_Player)	;care have used A_unitID
 					continue
 				}					
 		}
+		if (race = "Zerg" && object[aUnitID["Drone"]] && aEnemyBuildingConstruction[Owner, "TotalCount"])
+			object[aUnitID["Drone"]] -= aEnemyBuildingConstruction[Owner, "TotalCount"] ; as drones morphing are still counted as 'alive' so have to remove them
+
 		for subUnit, mainUnit in aAddUnits[Race]
 			if (total := object[subUnit])
 			{
@@ -6810,38 +6845,33 @@ FilterUnits(byref aEnemyUnits, byref aUnitID, a_Player)	;care have used A_unitID
 }
 
 ; unit 123 owner 4
-+f2::
-	aEnemyUnits := []
-	getEnemyUnits(aEnemyUnits)
-	objtree(aEnemyUnits, 1)
-	sleep 5000
-	FilterUnits(aEnemyUnits, a_UnitID, a_Player)
-	objtree(aEnemyUnits, "Filtered")
-
-
-return
-
 
 !F1::
-msgbox % getSelectionType(0) "`n" getUnitOwner(getSelectedUnitIndex())
+msgbox % getSelectionType(0) "`n" getUnitOwner(getSelectedUnitIndex()) "`n" isUnderConstruction(getSelectedUnitIndex()) "`n" getSubGroupPriority(getSelectedUnitIndex())
+
 return
 
 !F2::
-objtree(a_pBitmap)
+;	getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction)
+;	FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
+objtree(a_Player)
+objtree(a_LocalPlayer)
+msgbox % getLongestEnemyPlayerName(a_Player)
 return
 
-!f3::
-	soundplay *-1
-		getEnemyUnits(aEnemyUnits)
-		FilterUnits(aEnemyUnits, a_UnitID, a_Player)
-		RedrawUnit := 1
-		DrawUnitOverlay(RedrawUnit, UnitOverlayScale, OverlayIdent, DragOverlay)
-return
-
-DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Background = 0, Drag = 0)
+getLongestEnemyPlayerName(a_Player)
 {
-	GLOBAL aEnemyUnits, a_pBitmap, a_Player, a_LocalPlayer, HexColour, GameIdentifier, config_file, UnitOverlayX, UnitOverlayY, MatrixColour 
-	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0
+	localTeam := getPlayerTeam(getLocalPlayerNumber())
+	for index, Player in a_Player
+		if (player.team != localTeam && StrLen(player.name) > StrLen(LongestName))
+			LongestName := player.name
+	return player.name
+}
+
+DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
+{
+	GLOBAL aEnemyUnits, aEnemyBuildingConstruction, a_pBitmap, a_Player, a_LocalPlayer, HexColour, GameIdentifier, config_file, UnitOverlayX, UnitOverlayY, MatrixColour 
+	static Font := "Arial", Overlay_RunCount, hwnd1, DragPrevious := 0, a_pBrush := [], TransparentBlack := 0x78000000
 	Overlay_RunCount ++	
 	DestX := i := 0
 	Options := "Center cFFFFFFFF r4 s" 17*UserScale					;these cant be static	
@@ -6864,6 +6894,8 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Background = 
 		Gui, UnitOverlay: Show, NA X%UnitOverlayX% Y%UnitOverlayY% W400 H400, UnitOverlay
 		OnMessage(0x201, "OverlayMove_LButtonDown")
 		OnMessage(0x20A, "OverlayResize_WM_MOUSEWHEEL")
+		if !a_pBrush[TransparentBlack]	;faster than creating same colour again 
+			a_pBrush[TransparentBlack] := Gdip_BrushCreateSolid(TransparentBlack)	; Create a partially transparent, black brush
 	}	
 	If (Drag AND !DragPrevious)
 	{	DragPrevious := 1
@@ -6873,38 +6905,47 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Background = 
 	{	DragPrevious := 0
 		Gui, UnitOverlay: +E0x20 +LastFound
 		WinGetPos,UnitOverlayX,UnitOverlayY		
-		IniWrite, %UnitOverlayX%, %config_file%, Overlays, UnitOverlayY
-		Iniwrite, %UnitOverlayX%, %config_file%, Overlays, UnitOverlayY		
+		IniWrite, %UnitOverlayX%, %config_file%, Overlays, UnitOverlayX
+		Iniwrite, %UnitOverlayY%, %config_file%, Overlays, UnitOverlayY		
 	}
 	hbm := CreateDIBSection(A_ScreenWidth, A_ScreenHeight)
 	hdc := CreateCompatibleDC()
 	obm := SelectObject(hdc, hbm)
 	G := Gdip_GraphicsFromHDC(hdc)
-	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)	
-
+	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)
+	setDrawingQuality(G)	
 	for slot_number, object in aEnemyUnits ; slotnumber = owner and slotnuber is an object
 	{
 		DestY := i ? i*Height : 0
-		for unit, count in object
+		DestX := 0
+		for unit, unitCount in object
 		{
 			If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 ) && (A_Index = 1)
 			{	
 				IF (PlayerIdentifier = 2)
-					OptionsName := "Right Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
+					OptionsName := " Bold cFF" HexColour[a_Player[slot_number, "Colour"]] " r4 s" 17*UserScale
 				Else IF (PlayerIdentifier = 1)
-					OptionsName := "Right Bold cFFFFFFFF r4 s" 17*UserScale		
+					OptionsName := " Bold cFFFFFFFF r4 s" 17*UserScale		
 				pBitmap := a_pBitmap[unit]
 				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 				Width *= UserScale *.5, Height *= UserScale *.5
-				TextData :=	gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font) ;get string size	
-				StringSplit, TextSize, TextData, | ;retrieve the length of the string	
-				DestX := TextSize3+10*UserScale
+				gdip_TextToGraphics(G, getPlayerName(slot_number), "x0" "y"(DestY+(Height//4))  OptionsName, Font) ;get string size	
+			;	StringSplit, TextSize, TextData, | ;retrieve the length of the string		
+				if !LongestNameSize
+				{
+					LongestNameData :=	gdip_TextToGraphics(G, getLongestEnemyPlayerName(a_Player), "x0" "y"(DestY+(Height//4))  " Bold c00FFFFFF r4 s" 17*UserScale	, Font) ; text is invisible ;get string size	
+					StringSplit, LongestNameSize, LongestNameData, | ;retrieve the length of the string
+					LongestNameSize := LongestNameSize3
+				}
+				DestX := LongestNameSize+10*UserScale
+
+			;	DestX := TextSize3+10*UserScale
 			}
-			Else If (PlayerIdentifier = 3)	&& (A_Index = 1)
+			Else If (PlayerIdentifier = 3) && (A_Index = 1)
 			{	pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"RaceFlat"]
 				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 				Width *= UserScale *.5, Height *= UserScale *.5	
-				Gdip_DrawImage(G, pBitmap, 12*UserScale, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight, MatrixColour[a_Player[slot_number, "Colour"]])
+				Gdip_DrawImage(G, pBitmap, 12*UserScale, DestY + Height/5, Width, Height, 0, 0, SourceWidth, SourceHeight, MatrixColour[a_Player[slot_number, "Colour"]])
 				;Gdip_DisposeImage(pBitmap)
 				pBitmap := a_pBitmap[unit]
 				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
@@ -6912,19 +6953,55 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Background = 
 				DestX := Width+10*UserScale
 			}
 
-			pBitmap := a_pBitmap[unit]
+			if !(pBitmap := a_pBitmap[unit])
+				continue ; as i dont have a picture for that unit - not a real unit?
 			SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 			Width *= UserScale *.5, Height *= UserScale *.5	
 
-			Gdip_DrawImage(G, pBitmap, DestX + ((A_index-1) * (Width+5*UserScale)), DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
+			Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
+			Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX + .6*Width, DestY + .6*Height, Width/2.5, Height/2.5, 5)
+			if (unitCount >= 10)
+				gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
+			Else
+					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
+
+			if (unitCount := aEnemyBuildingConstruction[slot_number, unit])	; so there are some of this unit being built lets draw the count on top of the completed units
+			{
+				;	Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX, DestY + .6*Height, Width/2.5, Height/2.5, 5)
+					Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX + .6*Width, DestY, Width/2.5, Height/2.5, 5)
+					if (unitCount >= 10)
+						gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
+					Else
+						gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) "y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
+					aEnemyBuildingConstruction[slot_number].remove(unit, "")
+			}
+
+			DestX += (Width+5*UserScale)
+			if (DestX + Width > WindowWidth)
+				WindowWidth := DestX
 		}
+		for unit, unitCount in aEnemyBuildingConstruction[slot_number]		;	lets draw the buildings under construction (these are ones which werent already drawn above)
+			if (unit <> "TotalCount" && pBitmap := a_pBitmap[unit])				;	i.e. there are no already completed buildings of same type
+			{
+				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
+				Width *= UserScale *.5, Height *= UserScale *.5	
+				Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
+				Gdip_FillRoundedRectangle(G, a_pBrush[TransparentBlack], DestX + .6*Width, DestY, Width/2.5, Height/2.5, 5)
+				if (unitCount >= 10)
+					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
+				Else
+					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) " y"(DestY + .15*Height/2)  " Bold Italic cFFFFFFFF r4 s" 9*UserScale, Font)
+				DestX += (Width+5*UserScale)
+				if (DestX + Width > WindowWidth)
+					WindowWidth := DestX
+			}
+
 			Height += 5*userscale	;needed to stop the edge of race pic overlap'n due to Supply pic -prot then zerg
 			i++ 
-
 	}
 	WindowHeight := DestY+Height
 	Gdip_DeleteGraphics(G)
-	UpdateLayeredWindow(hwnd1, hdc) ; ,,,WindowWidth,WindowHeight)
+	UpdateLayeredWindow(hwnd1, hdc,,,WindowWidth,WindowHeight)
 	SelectObject(hdc, obm)
 	DeleteObject(hbm)
 	DeleteDC(hdc)
