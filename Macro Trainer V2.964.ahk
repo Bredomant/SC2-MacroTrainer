@@ -2657,7 +2657,7 @@ Gui, Options:New
 gui, font, norm s9	;here so if windows user has +/- font size this standardises it. But need to do other menus one day
 ;Gui, +ToolWindow  +E0x40000 ; E0x40000 gives it a icon on taskbar
 options_menu := "home32.png|radarB32.png|map32.png|Inject32.png|Group32.png|reticule32.png|Robot32.png|key.png|warning32.ico|miscB32.png|speakerB32.png|bug32.png|settings.ico"
-l_UnitNames := "Colossus|TechLab|Reactor|InfestorTerran|BanelingCocoon|Baneling|Mothership|PointDefenseDrone|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|PlanetaryFortress|UltraliskBurrowed|OrbitalCommand|WarpGate|OrbitalCommandFlying|ForceField|WarpPrismPhasing|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|Archon|NydusCanal|BroodlingEscort|Mule|Larva|HellionTank|MothershipCore|Locust|SwarmHostBurrowed|SwarmHost|Oracle|Tempest|WidowMine|Viper|WidowMineBurrowed"
+l_UnitNames := "Colossus|TechLab|Reactor|InfestorTerran|BanelingCocoon|Baneling|Mothership|PointDefenseDrone|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|PlanetaryFortress|UltraliskBurrowed|OrbitalCommand|WarpGate|OrbitalCommandFlying|ForceField|WarpPrismPhasing|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|Archon|NydusCanal|BroodlingEscort|Mule|Larva|HellBat|MothershipCore|Locust|SwarmHostBurrowed|SwarmHost|Oracle|Tempest|WidowMine|Viper|WidowMineBurrowed"
 
 ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity for 10 icons, grows it by 5 if need be, and 1=large icons
  
@@ -6761,9 +6761,39 @@ isWorkerInProduction(unit) ; units can only be t or P, no Z
 	return state
 }
 
-return
-
-
+isCommandCenterMorphing(unit)
+{
+	local state
+	state := ReadMemory(getUnitAbilityPointer(unit) + 0x9, GameIdentifier, 1)
+	if (state = 32 )	;	->PF
+		return A_unitID["PlanetaryFortress"]
+	else if (state = 64)	; 	-> Orbital
+		return A_unitID["OrbitalCommand"]
+	return 0
+}
+isHatchOrLairMorphing(unit)
+{
+			/*
+			hatchery
+			getUnitAbilityPointer(unit) + 0x8
+			111 / 0x6f idle (same if making drones etc - doesnt effect it)
+			103 / 0x67 when researching e.g. burrow, pneumatic carapace, ventral sacs
+			9 / 0x9 when going to lair
+			lair
+			119  / 0x77 idle
+			103 / 0x67 when researching e.g. burrow, pneumatic carapace, ventral sacs
+			9 / 0x9 when going to lair
+			17 /0x11 when going to hive
+			*/
+	local state, Type
+	type := getUnitType(unit)
+	state := ReadMemory(getUnitAbilityPointer(unit) + 0x8, GameIdentifier, 1)
+	if (state = 9 && type = A_unitID["Hatchery"])	;	->PF
+		return A_unitID["Lair"]
+	else if (state = 64 && type = A_unitID["Lair"])	; 	-> Orbital
+		return A_unitID["Hive"]
+	return 0
+}
 
 /*
 	object looks like this
@@ -6793,14 +6823,18 @@ getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID
 			else Priority := aEnemyUnitPriorities[Type] ; faster than reading the priority each time - this is splitting hairs!!!
 			if (TargetFilter & a_UnitTargetFilter.UnderConstruction)
 			{
-
 				aEnemyBuildingConstruction[Owner, Priority, Type] := aEnemyBuildingConstruction[Owner, Priority, Type] ? aEnemyBuildingConstruction[Owner, Priority, Type] + 1 : 1
 				aEnemyBuildingConstruction[Owner, "TotalCount"] := aEnemyBuildingConstruction[Owner, "TotalCount"] ? aEnemyBuildingConstruction[Owner, "TotalCount"] + 1 : 1
-
-
 			}		; this is a cheat and very lazy way of incorporating a count into the array without stuffing the for loop and having another variable
-			Else
-				aEnemyUnits[Owner, Priority, Type] := aEnemyUnits[Owner, Priority, Type] ? aEnemyUnits[Owner, Priority, Type] + 1 : 1 ;note +1 (++ will not work!!!)
+			Else 
+			{
+				if (Type = aUnitID["CommandCenter"] && MorphingType := isCommandCenterMorphing(unit))	; this allows the orbital to show as a 'under construction' unit on the right
+					aEnemyBuildingConstruction[Owner, 4, MorphingType] := aEnemyBuildingConstruction[Owner, 4, MorphingType] ? aEnemyBuildingConstruction[Owner, 4, MorphingType] + 1 : 1 ;*** use 4 as morphing has no 0 priority, which != 4/CC
+				else if (Type = aUnitID["Hatchery"] || aUnitID["Lair"]) && MorphingType := isHatchOrLairMorphing(unit)
+					aEnemyBuildingConstruction[Owner, 2, MorphingType] := aEnemyBuildingConstruction[Owner, 2, MorphingType] ? aEnemyBuildingConstruction[Owner, 2, MorphingType] + 1 : 1
+				else
+					aEnemyUnits[Owner, Priority, Type] := aEnemyUnits[Owner, Priority, Type] ? aEnemyUnits[Owner, Priority, Type] + 1 : 1 ;note +1 (++ will not work!!!)
+			}
 		}
 	}
 	Return
@@ -6811,13 +6845,11 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 	;	aEnemyUnits[Owner, Type]
 	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab","StarportReactor"]
 							, "Protoss": ["Interceptor"]
-							, "Zerg": ["OverlordCocoon","CreepTumorBurrowed","Broodling","Locust"]}
+							, "Zerg": ["CreepTumorBurrowed","Broodling","Locust"]}
 
 	STATIC aAddUnits 	:=	{"Terran": {SupplyDepotLowered: "SupplyDepot"}
-							, "Protoss": {DroneBurrowed: "Drone"} 
 							, "Zerg": {DroneBurrowed: "Drone", ZerglingBurrowed: "Zergling", HydraliskBurrowed: "Hydralisk", UltraliskBurrowed: "Ultralisk", RoachBurrowed: "Roach"
-							, InfestorBurrowed: "Infestor", BanelingBurrowed: "Baneling", QueenBurrowed: "Queen", SporeCrawlerUprooted: "SporeCrawler", SpineCrawlerUprooted: "SpineCrawler"  
-							, Zergling: "BanelingCocoon"}}
+							, InfestorBurrowed: "Infestor", BanelingBurrowed: "Baneling", QueenBurrowed: "Queen", SporeCrawlerUprooted: "SporeCrawler", SpineCrawlerUprooted: "SpineCrawler"}} 
 
 	STATIC aAddConstruction := {"Terran": {BarracksTechLab: "TechLab", BarracksReactor: "Reactor", FactoryTechLab: "TechLab", FactoryReactor: "Reactor", StarportTechLab: "TechLab", StarportReactor: "Reactor"}}
 
@@ -6826,7 +6858,7 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 									;also need to account for morphing drones into buildings 
 /*
 	object looks like this
-	(owner)	|----3
+	(owner)		 3
 	(Priority)	 |-----2
 	(unit)			   |------247
 
@@ -6850,7 +6882,7 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 		{
 			subunit := aUnitID[subUnit]
 			priority := aEnemyUnitPriorities[subunit]
-			if (total := priorityObject[priority, subunit])
+			if (total := priorityObject[priority, subunit])			;** care as if unit has not been seen before, then this priority may be blank!!
 			{
 				mainUnit := aUnitID[mainUnit]
 				priority := aEnemyUnitPriorities[mainUnit]
@@ -6858,6 +6890,8 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 					priorityObject[priority, mainUnit] += total
 				else priorityObject[priority, mainUnit] := total
 				priorityObject[priority].remove(subunit, "")
+			;	aEnemyUnits[owner, priority, subunit] := ""
+			;	aEnemyUnits[owner, priority].remove(subunit, "")
 			}	
 		}
 
@@ -6880,24 +6914,18 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 					priorityObject[priority, mainUnit] += total
 				else priorityObject[priority, mainUnit] := total
 				priorityObject[priority].remove(subunit, "")
-			}
-
-			
+				aEnemyBuildingConstruction[Owner, "TotalCount"] -= total 	;these counts still seem to be out, but works for zerg?
+			}		
 		}
 
 	}
-
-;	objtree(aDeleteKeys, "aDeleteKeys")
-;	objtree(aEnemyUnits, "aEnemyUnits")
-;	msgbox stop
 	return
-
 }
 
 ; unit 123 owner 4
 
 !F1::
-msgbox % getSelectionType(0) "`n" getUnitOwner(getSelectedUnitIndex()) "`n" isUnderConstruction(getSelectedUnitIndex()) "`n" getSubGroupPriority(getSelectedUnitIndex()) "`n" getUnitOwner(getSelectedUnitIndex())
+msgbox % getSelectionType(0) "`n" getUnitOwner(getSelectedUnitIndex()) "`n" isUnderConstruction(getSelectedUnitIndex()) "`np " getSubGroupPriority(getSelectedUnitIndex()) "`n" getUnitOwner(getSelectedUnitIndex())
 
 return
 
@@ -6906,9 +6934,10 @@ return
 ;	FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
 ;objtree(aEnemyUnits)
 ;objtree(aEnemyBuildingConstruction)
-
-;msgbox % getLongestEnemyPlayerName(a_Player) "`n" getLocalPlayerNumber() "`n" getPlayerTeam(getLocalPlayerNumber())
-objtree(aDeleteKeys)
+;objtree(aEnemyUnits)
+unit := getSelectedUnitIndex()
+msgbox % state := ReadMemory(getUnitAbilityPointer(unit) + 0x9, GameIdentifier, 1)
+msgbox % clipboard := dectohex(getUnitAbilityPointer(unit))
 
 
 return
@@ -7049,8 +7078,7 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 				}
 
 				Height += 5*userscale	;needed to stop the edge of race pic overlap'n due to Supply pic -prot then zerg
-				i++ 
-		
+				i++ 	
 	}
 	WindowHeight := DestY+Height
 	Gdip_DeleteGraphics(G)

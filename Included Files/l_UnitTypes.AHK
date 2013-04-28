@@ -408,6 +408,7 @@ l_UnitTypes =
 	GreaterObservatory = 404,
 	AssaultMorphModel = 405,
 	FighterMorphModel = 406,
+	HellBat = 407,
 	HellionTank = 407,
 	TalonsMissileWeapon = 408,
 	MothershipCore = 411,
