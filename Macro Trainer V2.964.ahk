@@ -3,6 +3,7 @@
 ;	Change version number in exe and config file
 ;	Upload the changelog, file version  and new exe files to the ftp server
 ; 	check dont have debugging hotkeys and clipboards at end of script
+;	check dont have the 'or debug' uncommented
 ;-----------------------
 ;	git add -A
 ;	git commit -m "Msg"
@@ -59,7 +60,7 @@ url.HelpFile := "http://www.users.on.net/~jb10/Macro Trainer Help File.htm"
 url.Homepage := "http://www.users.on.net/~jb10/"
 url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 
-version := 2.963
+version := 2.964
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -440,34 +441,34 @@ Toggle_Identifier:
 		OverlayIdent := 0
 	Else OverlayIdent ++
 	Iniwrite, %OverlayIdent%, %config_file%, Overlays, OverlayIdent
+	gosub, overlay_timer
+	gosub, g_unitPanelOverlay_timer
 Return
 
 	
 Overlay_Toggle:
 	if (A_ThisHotkey = CycleOverlayKey)
 	{
-		If (3 = ActiveOverlays := DrawIncomeOverlay + DrawResourcesOverlay + DrawArmySizeOverlay)
+		If ((ActiveOverlays := DrawIncomeOverlay + DrawResourcesOverlay + DrawArmySizeOverlay + DrawUnitOverlay) > 1)
 		{
-			DrawResourcesOverlay := DrawArmySizeOverlay := DrawIncomeOverlay := 0
-			DrawResourcesOverlay(-1), DrawArmySizeOverlay(-1), DrawIncomeOverlay(-1)
-		}
-		Else if ( 2 = ActiveOverlays)
-		{
-			DrawResourcesOverlay := DrawArmySizeOverlay := !DrawIncomeOverlay := 1
-			DrawResourcesOverlay(-1),DrawArmySizeOverlay(-1)
+			DrawResourcesOverlay := DrawArmySizeOverlay := DrawIncomeOverlay := DrawUnitOverlay := 0
+			DrawResourcesOverlay(-1), DrawArmySizeOverlay(-1), DrawIncomeOverlay(-1), DrawUnitOverlay(-1)
 		}
 		Else If (ActiveOverlays = 0)
 			DrawIncomeOverlay := 1
 		Else
 		{
 			If DrawIncomeOverlay
-				DrawResourcesOverlay := !DrawIncomeOverlay := 0, DrawIncomeOverlay(-1) 				
+				DrawResourcesOverlay := !DrawIncomeOverlay := DrawUnitOverlay := 0, DrawIncomeOverlay(-1) 				
 			Else If DrawResourcesOverlay
-				DrawArmySizeOverlay := !DrawResourcesOverlay := 0, DrawResourcesOverlay(-1)
+				DrawArmySizeOverlay := !DrawResourcesOverlay := DrawUnitOverlay := 0, DrawResourcesOverlay(-1)
 			Else If DrawArmySizeOverlay
-				DrawResourcesOverlay := DrawArmySizeOverlay := DrawIncomeOverlay := 1	
+				DrawUnitOverlay := !DrawResourcesOverlay := DrawArmySizeOverlay :=  0, DrawArmySizeOverlay(-1)
+			Else If DrawUnitOverlay 	; turn them all on
+				DrawResourcesOverlay := DrawArmySizeOverlay := DrawIncomeOverlay := 1 	
 		}
-
+		gosub, overlay_timer
+		gosub, g_unitPanelOverlay_timer
 	}	
 	Else If (A_ThisHotkey = ToggleIncomeOverlayKey)
 	{
@@ -499,7 +500,7 @@ Overlay_Toggle:
 		If (!DrawUnitOverlay := !DrawUnitOverlay)
 			DrawUnitOverlay(-1)
 	}
-	If (A_ThisHotkey = ToggleUnitOverlayKey) || (A_ThisHotkey = ToggleBuildingConstructionOverlayKey) 
+	If (A_ThisHotkey = ToggleUnitOverlayKey)
 		gosub, g_unitPanelOverlay_timer
 	else gosub, overlay_timer ;this makes the change take effect immediately. 
 Return
@@ -530,7 +531,7 @@ clock:
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
-	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)    OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
+	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)  ;  OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
 	{
 		game_status := "game", warpgate_status := "not researched"
 		Alert_TimedOut := [], Alerted_Buildings := [], Alerted_Buildings_Base := []  
@@ -578,7 +579,6 @@ clock:
 		{
 			Hotkey, If, WinActive(GameIdentifier) && time
 			hotkey, >!g, g_GLHF
-			hotkey, +ESC, g_DeselectUnit
 			Hotkey, If
 		}	
 		If (DrawMiniMap OR DrawAlerts OR DrawSpawningRaces)
@@ -1627,9 +1627,8 @@ overlay_timer: 	;DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdent=0, Bac
 	}
 Return
 
-g_unitPanelOverlay_timer:
-	DrawUnitOverlay := 1
-	If (DrawUnitOverlay || DrawBuildingConstructionOverlay) && (WinActive(GameIdentifier) || Dragoverlay)
+g_unitPanelOverlay_timer: 
+	If (DrawUnitOverlay && (WinActive(GameIdentifier) || Dragoverlay))
 	{
 		getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID)
 		FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
@@ -2153,6 +2152,8 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, SleepSplitUnits, %config_file%, %section%, SleepSplitUnits, 20
 	IniRead, l_DeselectArmy, %config_file%, %section%, l_DeselectArmy, %A_Space%
 	IniRead, DeselectSleepTime, %config_file%, %section%, DeselectSleepTime, 0
+	IniRead, RemoveUnitEnable, %config_file%, %section%, RemoveUnitEnable, 0
+	IniRead, castRemoveUnit_key, %config_file%, %section%, castRemoveUnit_key, +Esc
 
 	;[Alert Location]
 	IniRead, Playback_Alert_Key, %config_file%, Alert Location, Playback_Alert_Key, <#F7
@@ -2280,7 +2281,8 @@ ini_settings_write:
 			hotkey, %ToggleIncomeOverlayKey%, off
 			hotkey, %ToggleResourcesOverlayKey%, off
 			hotkey, %ToggleArmySizeOverlayKey%, off			
-			hotkey, %ToggleWorkerOverlayKey%, off			
+			hotkey, %ToggleWorkerOverlayKey%, off	
+			hotkey, %ToggleUnitOverlayKey%, off						
 			hotkey, %CycleOverlayKey%, off		
 		Try	hotkey, %read_races_key%, off
 		try	hotkey, %inject_start_key%, off
@@ -2290,6 +2292,8 @@ ini_settings_write:
 			hotkey, %castSelectArmy_key%, off
 			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
 			hotkey, %castSplitUnit_key%, off
+			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable
+			hotkey, %castRemoveUnit_key%, off
 			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time
 			hotkey, %cast_inject_key%, off
 			hotkey, %F_InjectOff_Key%, Cast_DisableInject, on	
@@ -2542,6 +2546,8 @@ ini_settings_write:
 	IniWrite, %SleepSplitUnits%, %config_file%, %section%, SleepSplitUnits
 	IniWrite, %l_DeselectArmy%, %config_file%, %section%, l_DeselectArmy
 	IniWrite, %DeselectSleepTime%, %config_file%, %section%, DeselectSleepTime
+	IniWrite, %RemoveUnitEnable%, %config_file%, %section%, RemoveUnitEnable
+	IniWrite, %castRemoveUnit_key%, %config_file%, %section%, castRemoveUnit_key
 		
 	;[Misc Hotkey]
 	IniWrite, %worker_count_local_key%, %config_file%, Misc Hotkey, worker_count_key
@@ -3274,7 +3280,7 @@ Gui, Tab, Delay
 	Gui, Add, UpDown,  Range0-1500 vAG_Delay, %AG_Delay%	
 
 
-Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiscAutomation_TAB, Select Army||Split|	
+Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiscAutomation_TAB, Select Army||Split|Remove Unit|
 Gui, Tab, Select Army
 	Gui, Add, Checkbox, y+25 x+15 vSelectArmyEnable Checked%SelectArmyEnable% , Enable Select Army Function		
 	Gui, Add, Checkbox, yp+25 xp+15 section vModifierBeepSelectArmy Checked%ModifierBeepSelectArmy%, Beep if modifier is held down		
@@ -3314,6 +3320,13 @@ Gui, Tab, Split
 	Gui, Add, Edit, Number Right xp+145 yp-2 w45 vTT_SleepSplitUnits
 	Gui, Add, UpDown,  Range0-100 vSleepSplitUnits, %SleepSplitUnits%
 	Gui, Add, Text, Xs yp+150, ****This is in a very beta stage and will be improved later***
+
+Gui, Tab, Remove Unit
+	Gui, Add, Checkbox, y+25 x+25 vRemoveUnitEnable Checked%RemoveUnitEnable% , Enable Remove Unit Function	
+	Gui, Add, Text, section yp+35, Hotkey:
+	Gui, Add, Edit, Readonly yp-2 xs+85 center w65 vcastRemoveUnit_key gedit_hotkey, %castRemoveUnit_key%
+	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#castRemoveUnit_key,  Edit
+	Gui, Add, Text, Xs yp+70 w380, This removes the first unit (top left of selection card) from the selected units.`n`nThis is very usefuly for 'cloning' workers to geisers or sending 1 ling towards a group of banelings etc.
 				
 Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vAutoMine_TAB, Settings||Hotkeys|
 Gui, Tab, Settings	
@@ -3428,7 +3441,7 @@ Gui, Tab, Emergency
 	Gui, Font, norm 
 	Gui, Font,
 
-Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||Overlays|Info
+Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||Overlays|Hotkeys|Info
 
 Gui, Tab, MiniMap
 	
@@ -3478,14 +3491,30 @@ Gui, Tab, MiniMap
 
 Gui, Tab, Overlays
 		;Gui, add, text, y+20 X%XTabX%, Display Overlays:
-		Gui, Add, GroupBox, y+15 X+5 w170 h165 section, Display Overlays:
-		Gui, Add, Checkbox, X%XTabX% yp+30 vDrawIncomeOverlay Checked%DrawIncomeOverlay% , Income Overlay
-		Gui, Add, Checkbox, X%XTabX% y+15 vDrawResourcesOverlay Checked%DrawResourcesOverlay% , Resource Overlay
-		Gui, Add, Checkbox, X%XTabX% y+15 vDrawArmySizeOverlay Checked%DrawArmySizeOverlay% , Army Size Overlay
-		Gui, Add, Checkbox, X%XTabX% y+15 vDrawWorkerOverlay Checked%DrawWorkerOverlay% , Local Harvester Count
-		Gui, Add, Checkbox, X%XTabX% y+15 vDrawIdleWorkersOverlay Checked%DrawIdleWorkersOverlay%, Idle Worker Count
+		Gui, Add, GroupBox, y+30 x+20  w170 h200 section, Display Overlays:
+		Gui, Add, Checkbox, xp+10 yp+30 vDrawIncomeOverlay Checked%DrawIncomeOverlay% , Income Overlay
+		Gui, Add, Checkbox, xp y+15 vDrawResourcesOverlay Checked%DrawResourcesOverlay% , Resource Overlay
+		Gui, Add, Checkbox, xp y+15 vDrawArmySizeOverlay Checked%DrawArmySizeOverlay% , Army Size Overlay
+		Gui, Add, Checkbox, xp y+15 vDrawWorkerOverlay Checked%DrawWorkerOverlay% , Local Harvester Count
+		Gui, Add, Checkbox, xp y+15 vDrawIdleWorkersOverlay Checked%DrawIdleWorkersOverlay%, Idle Worker Count
+		Gui, Add, Checkbox, xp y+15 vDrawUnitOverlay Checked%DrawUnitOverlay%, Unit Panel
 		
-		Gui, Add, Text, X%XTabX% yp+40, Toggle Income:
+		Gui, Add, GroupBox, ys XS+205 w170 h200, Overlays Misc:
+		Gui, Add, Checkbox, yp+25 xp+10 vOverlayBackgrounds Checked%OverlayBackgrounds% , Show Icon Background		
+		Gui, Add, Text, yp+30 w80, Player Identifier:
+		if OverlayIdent in 0,1,2,3
+			droplist3_var := OverlayIdent + 1
+		Else droplist3_var := 3 
+		Gui, Add, DropDownList, xp+20 yp+25 vOverlayIdent Choose%droplist3_var%, Hidden|Name (White)|Name (Coloured)|Coloured Race Icon
+		Gui, Add, Text, yp+40 xp-20, Refresh Rate (ms):
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_OverlayRefresh
+				Gui, Add, UpDown,  Range1-5000 vOverlayRefresh, %OverlayRefresh%
+		Gui, Add, Text, yp+35 XS+215, Unit Panel`nRefresh Rate (ms):
+			Gui, Add, Edit, Number Right x+5 yp+6 w55 vTT_UnitOverlayRefresh
+				Gui, Add, UpDown,  Range1-15000 vUnitOverlayRefresh, %UnitOverlayRefresh%
+
+Gui, Tab, Hotkeys 
+		Gui, Add, Text, X%XTabX% y+40, Toggle Income:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleIncomeOverlayKey gedit_hotkey, %ToggleIncomeOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleIncomeOverlayKey,  Edit 		
 		
@@ -3500,6 +3529,10 @@ Gui, Tab, Overlays
 		Gui, Add, Text, X%XTabX% yp+35, Toggle Workers:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleWorkerOverlayKey gedit_hotkey, %ToggleWorkerOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleWorkerOverlayKey,  Edit 		
+
+		Gui, Add, Text, X%XTabX% yp+35, Toggle Unit Panel:
+		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleUnitOverlayKey gedit_hotkey, %ToggleUnitOverlayKey%
+		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleUnitOverlayKey,  Edit 		
 		
 		Gui, Add, Text, X%XTabX% yp+35, Cycle Overlays:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vCycleOverlayKey gedit_hotkey, %CycleOverlayKey%
@@ -3513,19 +3546,7 @@ Gui, Tab, Overlays
 		gui, font, Norm 
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vAdjustOverlayKey gedit_hotkey, %AdjustOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#AdjustOverlayKey,  Edit 
-		Gui, Add, Text, x+10 yp+5, * See 'Info' Tab for Instructions
-		
-		Gui, Add, GroupBox, ys XS+220 w170 h165, Overlays Misc:
-		Gui, Add, Checkbox, yp+25 xp+10 vOverlayBackgrounds Checked%OverlayBackgrounds% , Show Icon Background		
-		Gui, Add, Text, yp+30 w80, Player Identifier:
-		if OverlayIdent in 0,1,2,3
-			droplist3_var := OverlayIdent + 1
-		Else droplist3_var := 3 
-		Gui, Add, DropDownList, xp+20 yp+25 vOverlayIdent Choose%droplist3_var%, Hidden|Name (White)|Name (Coloured)|Coloured Race Icon
-		Gui, Add, Text, yp+40 xp-20, Refresh Rate (ms):
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_OverlayRefresh
-				Gui, Add, UpDown,  Range1-5000 vOverlayRefresh, %OverlayRefresh%	
-		
+		Gui, Add, Text, x+10 yp+5, * See 'Info' Tab for Instructions		
 		
 Gui, Tab, Info
 	Gui, Font, S11 CDefault bold UNDERLINE, Verdana
@@ -3656,6 +3677,9 @@ TT_UserMiniMapXScale_TT := TT_UserMiniMapYScale_TT := UserMiniMapYScale_TT := Us
 TT_MiniMapRefresh_TT := MiniMapRefresh_TT := "Dictates how frequently the minimap is redrawn"
 BlendUnits_TT := "This will draw the units 'blended together', like SC2 does.`nIn other words, units/buildings grouped together will only have one border around all of them"
 
+TT_OverlayRefresh_TT := OverlayRefresh_TT := "Determines how frequently these overlays are refreshed:`nIncome, Resource, Army, Local Harvesters, and Idle Workers."
+TT_UnitOverlayRefresh_TT := UnitOverlayRefresh_TT := "Determines how frequently the unit panel is refreshed.`nThis requires more resources than the other overlays and so it has its own refresh rate."
+
 
 SleepSplitUnit_TT := TT_SleepSplitUnits_TT := TT_SleepSelectArmy_TT := SleepSelectArmy_TT := "Increase this value if the function doesn't work properly`nTime between deselecting Units."
 Sc2SelectArmy_Key_TT := #Sc2SelectArmy_Key_TT := "The in game (SC2) button used to select your entire army.`nDefault is F2"
@@ -3666,7 +3690,7 @@ SelectArmyDeselectPatrolling_TT := "Patrolling units will be removed from the se
 SelectArmyDeselectHoldPosition_TT := "Units on hold position will be removed from the selection group."
 SelectArmyDeselectFollowing_TT := "Units on a follow command will be removed from the selection group."
 
-castSplitUnit_key_TT := #castSplitUnit_key_TT := "The hotkey used to invoke this function."
+castRemoveUnit_key_TT := #castRemoveUnit_key_TT := castSplitUnit_key_TT := #castSplitUnit_key_TT := "The hotkey used to invoke this function."
 SplitctrlgroupStorage_key_TT := #SplitctrlgroupStorage_key_TT := "This ctrl group is used during the function.`nAssign it to a control group you DON'T use!"
 DeselectSleepTime_TT := "Time between deselecting units from the unit panel.`nThis is used by the split and select army, and deselect unit functions"
 
@@ -5794,6 +5818,7 @@ CreateHotkeys()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
+	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable
 	#If, WinActive(GameIdentifier) && !isMenuOpen() && time
 	#If, WinActive(GameIdentifier) && time
 	#If
@@ -5822,6 +5847,7 @@ CreateHotkeys()
 		hotkey, %ToggleResourcesOverlayKey%, Overlay_Toggle, on
 		hotkey, %ToggleArmySizeOverlayKey%, Overlay_Toggle, on
 		hotkey, %ToggleWorkerOverlayKey%, Overlay_Toggle, on
+		hotkey, %ToggleUnitOverlayKey%, Overlay_Toggle, on
 		hotkey, %CycleOverlayKey%, Overlay_Toggle, on
 
 	
@@ -5836,6 +5862,8 @@ CreateHotkeys()
 		hotkey, %castSelectArmy_key%, g_SelectArmy, on
 	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
 		hotkey, %castSplitUnit_key%, g_SplitUnits, on	
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable
+		hotkey, %castRemoveUnit_key%, g_DeselectUnit, on	
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time
 		hotkey, %cast_inject_key%, cast_inject, on	
 		hotkey, %F_InjectOff_Key%, Cast_DisableInject, on			
@@ -6804,8 +6832,10 @@ isHatchOrLairMorphing(unit)
 */
 getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID)
 {
-	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter, aEnemyUnitPriorities := []
+	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter, aEnemyUnitPriorities
 	aEnemyUnits := [], aEnemyBuildingConstruction := []
+	if !aEnemyUnitPriorities	;because having  GLOBAL aEnemyUnitPriorities := [] results in it getting cleared each function run
+		aEnemyUnitPriorities := []
 	While (A_Index <= getHighestUnitIndex()) 
 	{
 		unit := A_Index - 1
@@ -6856,11 +6886,11 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 									; note - could have just done - if name contains "Burrowed" check, substring = minus burrowed
 									; overlorrd cocoon = morphing overseer (and it isnt under construction)
 									;also need to account for morphing drones into buildings 
-/*
+/*									; SupplyDepotDrop
 	object looks like this
 	(owner)		 3
 	(Priority)	 |-----2
-	(unit)			   |------247
+	(unit)			   |------247--->Count
 
 */
 	for owner, priorityObject in aEnemyUnits
@@ -6881,15 +6911,19 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 		for subUnit, mainUnit in aAddUnits[Race]
 		{
 			subunit := aUnitID[subUnit]
-			priority := aEnemyUnitPriorities[subunit]
-			if (total := priorityObject[priority, subunit])			;** care as if unit has not been seen before, then this priority may be blank!!
-			{
+			subPriority := aEnemyUnitPriorities[subunit]
+			if (total := priorityObject[subPriority, subunit])			;** care as if unit has not been seen before, then this priority may be blank!!
+			{														;** actually its the other unit priority which may be blank
 				mainUnit := aUnitID[mainUnit]
-				priority := aEnemyUnitPriorities[mainUnit]
+				if !priority := aEnemyUnitPriorities[mainUnit]
+					priority := subPriority		;take a change, hopefully they will have same priority
+
+
+
 				if priorityObject[priority, mainUnit]
 					priorityObject[priority, mainUnit] += total
 				else priorityObject[priority, mainUnit] := total
-				priorityObject[priority].remove(subunit, "")
+				priorityObject[subPriority].remove(subunit, "")
 			;	aEnemyUnits[owner, priority, subunit] := ""
 			;	aEnemyUnits[owner, priority].remove(subunit, "")
 			}	
@@ -6905,15 +6939,17 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 		for subUnit, mainUnit in aAddConstruction[Race]
 		{
 			subunit := aUnitID[subUnit]
-			priority := aEnemyUnitPriorities[subunit]
-			if (total := priorityObject[priority, subunit])
+			subPriority := aEnemyUnitPriorities[subunit]
+			if (total := priorityObject[subPriority, subunit])
 			{
 				mainUnit := aUnitID[mainUnit]
-				priority := aEnemyUnitPriorities[mainUnit]
+				if !priority := aEnemyUnitPriorities[mainUnit]
+					priority := subPriority		;take a change, hopefully they will have same priority can cause issues
+
 				if priorityObject[priority, mainUnit]
 					priorityObject[priority, mainUnit] += total
 				else priorityObject[priority, mainUnit] := total
-				priorityObject[priority].remove(subunit, "")
+				priorityObject[subPriority].remove(subunit, "")
 				aEnemyBuildingConstruction[Owner, "TotalCount"] -= total 	;these counts still seem to be out, but works for zerg?
 			}		
 		}
@@ -6922,25 +6958,6 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 	return
 }
 
-; unit 123 owner 4
-
-!F1::
-msgbox % getSelectionType(0) "`n" getUnitOwner(getSelectedUnitIndex()) "`n" isUnderConstruction(getSelectedUnitIndex()) "`np " getSubGroupPriority(getSelectedUnitIndex()) "`n" getUnitOwner(getSelectedUnitIndex())
-
-return
-
-!F2::
-;	getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID)
-;	FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
-;objtree(aEnemyUnits)
-;objtree(aEnemyBuildingConstruction)
-;objtree(aEnemyUnits)
-unit := getSelectedUnitIndex()
-msgbox % state := ReadMemory(getUnitAbilityPointer(unit) + 0x9, GameIdentifier, 1)
-msgbox % clipboard := dectohex(getUnitAbilityPointer(unit))
-
-
-return
 
 getLongestEnemyPlayerName(a_Player)
 {
@@ -7077,7 +7094,7 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 						WindowWidth := DestX
 				}
 
-				Height += 5*userscale	;needed to stop the edge of race pic overlap'n due to Supply pic -prot then zerg
+				Height += 10*userscale	;needed to stop the edge of race pic overlap'n due to Supply pic -prot then zerg
 				i++ 	
 	}
 	WindowHeight := DestY+Height

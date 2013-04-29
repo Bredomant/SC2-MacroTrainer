@@ -1,18 +1,26 @@
 V2.964
 New:
 	• UNIT PANEL!!
+		-This displays a count of each unit type and shows which buildings are in production.
+	• Remove unit from selection function
 
 Fixes:
 	• Fixed an issue which could cause the program to fail if a folder with the name "Starcraft II" was open.
 	• After destroying an enemies spawning base those small red squares will no longer be visible on the minimap.
 	• If using the player name identifier in overlays, the resources/units will be aligned regardless of the name length
+	• The select army and split functions should function much faster, work better, and 'feel' more normal
 
-Changes:	
-	• Added deselect unit sleep time.
-	• Queens will no longer inject on hatcheries which are on a different mapheight to themselves
-		e.g. queen on high ground hatch on the low ground
+Changes:
+	• Added deselect unit sleep time. (found in options -> settings)
+	• Queens will no longer inject on hatcheries which are on a different map height to themselves
+		e.g. queen on high ground with the hatch on the low ground
 		Note: A queen standing on a ramp will not inject her hatch (even if she is nearby)
-	•The normal inject alerts will not be heard if 'force injects' have been enabled. 
+	• The normal inject alerts will not be heard if 'force injects' have been enabled. 
+	• Unit HellionTank renamed to Hellbat (note: HellionTank associated warnings and groupings will still work)
+
+To-do: Determine if a hatch was successfully injected.
+
+--------------------------------------------------------------------------------------------	
 
 V2.963
 Changes:
@@ -77,8 +85,6 @@ Fixes:
 	• Hotkey & Send Key GUI:
 		- The key ' 0 ' can now be used i.e. the 'accept' button will remain clickable.
 
-
---------------------------------------------------------------------------------------------	
 	
 V2.96
 
