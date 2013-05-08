@@ -60,7 +60,7 @@ url.HelpFile := "http://www.users.on.net/~jb10/Macro Trainer Help File.htm"
 url.Homepage := "http://www.users.on.net/~jb10/"
 url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 
-version := 2.964
+version := 2.967
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -99,7 +99,7 @@ InstallSC2Files()
 #include %A_ScriptDir%\Included Files\Colour Selector.ahk
 
 CreatepBitmaps(a_pBitmap, a_unitID)
-
+aUnitInfo := []
 
 If (auto_update AND A_IsCompiled  AND HideTrayIcon <> 1 AND CheckForUpdates(version, url.vr ))
 {
@@ -133,7 +133,7 @@ If (auto_update AND A_IsCompiled  AND HideTrayIcon <> 1 AND CheckForUpdates(vers
 Launch:
 
 If (A_GuiControl = "Disable_Auto_Update")
-	Iniwrite, % auto_check_updates := 0, %config_file%, Misc Settings, auto_check_updates
+	Iniwrite, % auto_update := 0, %config_file%, Misc Settings, auto_check_updates
 If (A_GuiControl = "Disable_Auto_Update" OR A_GuiControl = "Cancel_Auto_Update")
 	Gui Destroy
 
@@ -534,10 +534,10 @@ clock:
 	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)  ;  OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
 	{
 		game_status := "game", warpgate_status := "not researched"
-		Alert_TimedOut := [], Alerted_Buildings := [], Alerted_Buildings_Base := []  
+		doUnitDetection(0, 0, 0, 0) ; clear the variables within the function
 		MiniMapWarning := [], a_BaseList := []
 		if WinActive(GameIdentifier)
-			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := RedrawConstruction := 1
+			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := 1
 		if idle_enable	;this is the idle AFK
 			settimer, user_idle, 1000
 ;		if (MaxWindowOnStart && !Auto_Mine && time < 5)  ;as automine has its own
@@ -570,9 +570,9 @@ clock:
 		SetMiniMap(minimap)
 		setupMiniMapUnitLists()
 		l_ActiveDeselectArmy := setupSelectArmyUnits(l_DeselectArmy, A_unitID)
-		ShortRace := substr(LongRace := a_LocalPlayer["Race"], 1, 4) ;because i changed the local race var from prot to protoss i.e. short to long
+		ShortRace := substr(LongRace := a_LocalPlayer["Race"], 1, 4) ;because i changed the local race var from prot to protoss i.e. short to long - MIGHT NO be needed  now
 		setupAutoGroup(a_LocalPlayer["Race"], A_AutoGroup, A_unitID, A_UnitGroupSettings)
-		If A_UnitGroupSettings["AutoGroup", ShortRace, "Enabled"]
+		If A_UnitGroupSettings["AutoGroup", a_LocalPlayer["Race"], "Enabled"]
 			settimer, Auto_Group, %AutoGroupTimer%
 		CreateHotkeys()
 		if (a_LocalPlayer["Name"] == "Kalamity")
@@ -649,18 +649,63 @@ Cast_ChronoGates:
 	SetMouseDelay, %CG_KeyDelay%	; 10 is default
 	SetKeyDelay, %CG_KeyDelay%	
 	BufferInput(aButtons.List, "Block")
+	CastChronoWarpgates()
+	BufferInput(aButtons.List) ;re-enable keys without sending buffer
+	SetMouseDelay, 10	; default
+	SetKeyDelay, 10		
+	Critical Off	
+Return
+
+CastChronoWarpgates()	
+{	global A_unitID, DeadFilterFlag, CG_control_group, chrono_key, CG_nexus_Ctrlgroup_key, CG_chrono_remainder, Chrono_Gate_Sleep, CG_Random_off, HumanMouse, HumanMouseTimeLo
+	, HumanMouseTimeLo, HumanMouseTimeHi
+	a_warpgates := [], a_gateways := [],
+	a_WarpgatesOnCoolDown := [], F_baselist_var := [],  a_Result := []
+	
 	MouseGetPos, start_x, start_y
+	HighlightedGroup := getSelectionHighlightedGroup()
 	send % "^" CG_control_group
-	;Send, ^%CG_control_group%
-	warp_gate_chrono(a_WarpGates, nexus_list, chrono_count)
-	max_chronod := chrono_count - CG_chrono_remainder
-	if (max_chronod >= 1)
+	send % CG_nexus_Ctrlgroup_key
+	sleep % Chrono_Gate_Sleep / 3 ;needs a few ms to update the selection buffer
+	SelectionCount := getSelectionCount()
+	While (A_index <= SelectionCount)
 	{
-		send % CG_nexus_Ctrlgroup_key
-		for index, unit in a_WarpGates
+		unit := getSelectedUnitIndex(A_Index -1)
+		IF (A_unitID["Nexus"] = getUnitType(Unit) && !isUnderConstruction(unit))
+			nexus_chrono_count += Floor(getUnitEnergy(unit)/25)	
+	}
+
+	IF nexus_chrono_count
+	{
+		While (A_index <= getHighestUnitIndex())
+		{
+			unit := A_Index - 1
+			Filter := getUnitTargetFilter(unit)	
+			type := getUnitType(unit)
+			If (Filter & DeadFilterFlag) || (type = "Fail")
+				Continue
+			If !isUnitLocallyOwned(Unit)
+				continue
+			IF ( type = A_unitID["WarpGate"] && !isUnitChronoed(unit)) && (cooldown := getWarpGateCooldown(unit))
+				a_WarpgatesOnCoolDown.insert({"Unit": unit, "Cooldown": cooldown})
+			Else IF (type = A_unitID["Gateway"] AND !isUnderConstruction(unit) && !isUnitChronoed(unit)) ; 0 means its completed 
+				a_gateways.insert(unit)
+		}
+		if a_WarpgatesOnCoolDown.MaxIndex()
+			Sort2DArray(a_WarpgatesOnCoolDown, "Cooldown", 0)	;so warpgates with longest cooldown get chronod first
+		if a_gateways.MaxIndex()	
+			RandomiseSimpleArray(a_gateways)
+		
+		for index, Warpgate in a_WarpgatesOnCoolDown
+			a_Result.insert(Warpgate.Unit)	
+		for index, Gateways in a_gateways
+			a_Result.insert(Gateways)
+
+		max_chronod := nexus_chrono_count - CG_chrono_remainder
+		for  index, unit in a_Result
 		{
 			If (A_index > max_chronod)
-				Break
+				Break		
 			sleep, %Chrono_Gate_Sleep% 
 			getMiniMapMousePos(unit, click_x, click_y)
 			If (CG_Random_off = 1)
@@ -673,16 +718,16 @@ Cast_ChronoGates:
 				MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 			send {click Left %click_x%, %click_y%}
 		}
-		send % CG_control_group
 		If HumanMouse
 			MouseMoveHumanSC2("x" start_x "y" start_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
-		MouseMove, start_x, start_y
+		else MouseMove, start_x, start_y
 	}
-	BufferInput(aButtons.List) ;re-enable keys without sending buffer
-	SetMouseDelay, 10	; default
-	SetKeyDelay, 10		
-	Critical Off	
-Return
+	send % CG_control_group
+	while (A_Index <= HighlightedGroup)
+		send {Tab}
+	Return 
+}
+
 
 Auto_Group:
 	critical
@@ -1495,7 +1540,6 @@ a_BaseListTmp := []
 While (A_Index <= getHighestUnitIndex()) ; Read +10% blanks in a row
 {
 	u_iteration := A_Index -1
-	unit_base := B_uStructure + (u_iteration * S_uStructure)
 	unit_type := getUnitType(u_iteration)
 	unit_owner := getUnitOwner(u_iteration)
 	Filter := getUnitTargetFilter(u_iteration)	
@@ -1504,91 +1548,106 @@ While (A_Index <= getHighestUnitIndex()) ; Read +10% blanks in a row
 		
 	If (Filter & DeadFilterFlag) || (type = "Fail")
 		Continue
-	IF (unit_type = supplytype && unit_owner = a_LocalPlayer["Slot"] AND isUnderConstruction(u_iteration))
-			SupplyInProductionCount ++		
-	if ( warpgate_warn_on AND (unit_type = A_unitID["Gateway"] OR unit_type = A_unitID["WarpGate"]) 
-		AND unit_owner = a_LocalPlayer["Slot"] AND !isUnderConstruction(u_iteration)) ; 0 means its completed 
+	
+	if (unit_owner = a_LocalPlayer["Slot"])
 	{
-		if ( unit_type = A_unitID["Gateway"]) 
+		IF (unit_type = supplytype AND isUnderConstruction(u_iteration))
+				SupplyInProductionCount ++		
+		if ( warpgate_warn_on AND (unit_type = A_unitID["Gateway"] OR unit_type = A_unitID["WarpGate"]) 
+			AND !isUnderConstruction(u_iteration)) ; 0 means its completed 
 		{
-			gateway_count ++	
-			if warpgate_warning_set
+			if ( unit_type = A_unitID["Gateway"]) 
 			{
-				isinlist := 0
-				For index in MiniMapWarning
+				gateway_count ++	
+				if warpgate_warning_set
 				{
-					if MiniMapWarning[index,"Unit"] = u_iteration
-					{	isinlist := 1
-						Break
-					}		
-				}
-				if !isinlist
-					MiniMapWarning.insert({"Unit": u_iteration, "Time": Time})
-			} 
+					isinlist := 0
+					For index in MiniMapWarning
+					{
+						if MiniMapWarning[index,"Unit"] = u_iteration
+						{	isinlist := 1
+							Break
+						}		
+					}
+					if !isinlist
+						MiniMapWarning.insert({"Unit": u_iteration, "Time": Time})
+				} 
+			}
+			Else if (unit_type = A_unitID["WarpGate"] && warpgate_status <> "researched") ; as unit_type must = warpgate_id
+			{
+				warpgate_status := "researched"
+				settimer warpgate_warn, 1000
+			}
 		}
-		Else if (unit_type = A_unitID["WarpGate"] && warpgate_status <> "researched") ; as unit_type must = warpgate_id
-		{
-			warpgate_status := "researched"
-			settimer warpgate_warn, 1000
-		}
+		if (unit_type = A_unitID["Nexus"] || unit_type = A_unitID["CommandCenter"] 
+		|| unit_type =  A_unitID["PlanetaryFortress"] || unit_type =  A_unitID["OrbitalCommand"])
+		&& !isUnderConstruction(u_iteration)
+			a_BaseListTmp.insert(u_iteration)
 	}
-	if (unit_type = A_unitID["Nexus"] || unit_type = A_unitID["CommandCenter"] 
-	|| unit_type =  A_unitID["PlanetaryFortress"] || unit_type =  A_unitID["OrbitalCommand"])
-	&& unit_owner = a_LocalPlayer["Slot"] && !isUnderConstruction(u_iteration)
-		a_BaseListTmp.insert(u_iteration)
-		
-	if (alert_array[GameType, "Enabled"])	
-	{
-		loop_AlertList:
+	
+	if (alert_array[GameType, "Enabled"] && a_Player[unit_owner, "Team"] <> a_LocalPlayer["Team"])	
+		doUnitDetection(u_iteration, unit_type, unit_owner)
+} ; While ((UnitRead_i + EndCount) / getUnitCount() < 1.1)
+SupplyInProduction := SupplyInProductionCount
+a_BaseList := a_BaseListTmp
+return
+
+
+doUnitDetection(unit, type, owner, mode = 1)
+{	global 
+	static Alert_TimedOut := [], Alerted_Buildings := [], Alerted_Buildings_Base := []
+
+	if !mode 
+		Alert_TimedOut := [],, Alerted_Buildings := [], Alerted_Buildings_Base := []
+
+		;i should really compare the unit type, as theres a chance that the warned unit has died and was replaced with another unit which should be warned
+	loop_AlertList:
 		loop, % alert_array[GameType, "list", "size"]
 		{ 			; the below if statement for time		
 			Alert_Index := A_Index	;the alert index number which corresponds to the ini file/config
-			if  ( unit_type = A_unitID[alert_array[GameType, A_Index, "IDName"]] AND a_Player[unit_owner, "Team"] <> a_LocalPlayer["Team"]) ;So if its a shrine and the player is not on ur team
+			if  ( type = A_unitID[alert_array[GameType, A_Index, "IDName"]] ) ;So if its a shrine and the player is not on ur team
 			{
 				if ( time < alert_array[GameType, A_Index, "DWB"] OR time > alert_array[GameType, A_Index, "DWA"]  ) ; too early/late to warn - add unit to 'warned list'
 				{			
 					For index, warned_base in Alert_TimedOut	; ;checks if the exact unit is in the time list already (eg if time > dont_warn_before, the original if statement wont be true so BAS_Warning will remain "give warning")			
-						if ( unit_base = Alert_TimedOut[index, unit_owner] ) ;checks if unit_type is in the list already
+						if ( unit = Alert_TimedOut[index, owner] ) ;checks if type is in the list already
 							continue, loop_AlertList ; dont break, as could be other alerts for same unit but with different times later/lower in list									
-					Alert_TimedOut[Alert_TimedOut.maxindex() ? Alert_TimedOut.maxindex()+1 : 1, unit_owner, Alert_Index] := unit_base
+					Alert_TimedOut[Alert_TimedOut.maxindex() ? Alert_TimedOut.maxindex()+1 : 1, owner, Alert_Index] := unit
 					continue, loop_AlertList
 				}
 				Else
 				{	;during warn time lets check if the unit has already been warned			
 					For index, warned_base in Alert_TimedOut	; ;checks if the exact unit is in the time list already (eg if time > dont_warn_before, the original if statement wont be true so BAS_Warning will remain "give warning")			
-						if ( unit_base = Alert_TimedOut[index, unit_owner, Alert_Index] ) ;checks if unit_base is in the list already					
+						if ( unit = Alert_TimedOut[index, owner, Alert_Index] ) ;checks if unit is in the list already					
 								break loop_AlertList
 																						
 					If  !alert_array[GameType, A_Index, "Repeat"] ;else check if this unit type has already been warned												
-						For index, warned_type in Alerted_Buildings ;	if ( unit_type = Alerted_Buildings[index, unit_owner] ) ;checks if unit_type is in the list already						
-							if ( Alert_Index = Alerted_Buildings[index, unit_owner] ) ;checks if alert index i.e. alert 1,2,3 is in the list already						
+						For index, warned_type in Alerted_Buildings ;	if ( type = Alerted_Buildings[index, owner] ) ;checks if type is in the list already						
+							if ( Alert_Index = Alerted_Buildings[index, owner] ) ;checks if alert index i.e. alert 1,2,3 is in the list already						
 								break loop_AlertList			
 								
 					For index, warned_unit in Alerted_Buildings_Base  ; this list contains all the exact units which have already been warned				
-						if ( unit_base = Alerted_Buildings_Base[index, unit_owner] ) ;checks if unit_type is in the list already				
+						if ( unit = Alerted_Buildings_Base[index, owner] ) ;checks if type is in the list already				
 							break loop_AlertList ; this warning is for the exact unitbase Address																				
 				}										
-				MiniMapWarning.insert({"Unit": u_iteration, "Time": Time})
+				MiniMapWarning.insert({"Unit": unit, "Time": Time})
 
 				If ( alert_array[GameType, "Clipboard"] && WinActive(GameIdentifier))
-					clipboard := alert_array[GameType, A_Index, "Name"] " Detected - " a_Player[unit_owner, "Colour"] " - " a_Player[unit_owner, "Name"]
+					clipboard := alert_array[GameType, A_Index, "Name"] " Detected - " a_Player[owner, "Colour"] " - " a_Player[owner, "Name"]
 				PrevWarning := []
 				PrevWarning.speech := alert_array[GameType, A_Index, "Name"]
-				PrevWarning.unitIndex := u_iteration
+				PrevWarning.unitIndex := unit
 				DSpeak(alert_array[GameType, A_Index, "Name"])
-				if (!alert_array[GameType, A_Index, "Repeat"])	; =0 these below setup a list like above, but contins the unit_type - to prevent rewarning
-					Alerted_Buildings.insert({(unit_owner): Alert_Index})
-					;Alerted_Buildings[Alerted_Buildings.maxindex() ? Alerted_Buildings.maxindex()+1 : 1, unit_owner] :=  Alert_Index					
-				Alerted_Buildings_Base.insert({(unit_owner): unit_base})
-				;Alerted_Buildings_Base[Alerted_Buildings_Base.maxindex() ? Alerted_Buildings_Base.maxindex()+1 : 1, unit_owner] := unit_base	; prevents the same exact unit beings warned on next run thru
+				if (!alert_array[GameType, A_Index, "Repeat"])	; =0 these below setup a list like above, but contins the type - to prevent rewarning
+					Alerted_Buildings.insert({(owner): Alert_Index})
+					;Alerted_Buildings[Alerted_Buildings.maxindex() ? Alerted_Buildings.maxindex()+1 : 1, owner] :=  Alert_Index					
+				Alerted_Buildings_Base.insert({(owner): unit})
+				;Alerted_Buildings_Base[Alerted_Buildings_Base.maxindex() ? Alerted_Buildings_Base.maxindex()+1 : 1, owner] := unit	; prevents the same exact unit beings warned on next run thru
 				break loop_AlertList	
 			} ;End of if unit is on list and player not on our team 
 		} ; loop, % alert_array[GameType, "list", "size"]
-	} ; if (alert_array[GameType, "Enabled"])	 
-} ; While ((UnitRead_i + EndCount) / getUnitCount() < 1.1)
-SupplyInProduction := SupplyInProductionCount
-a_BaseList := a_BaseListTmp
-return
+	return
+}
 
 
 OverlayKeepOnTop:
@@ -2034,12 +2093,19 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 			A_UnitGroupSettings["LimitGroup", A_LoopField, i, "Enabled"] := IniRead(config_file, section, A_LoopField "_LimitGroup_" i, 0)
 	loop, parse, Short_Race_List, |
 	{			
-		A_UnitGroupSettings["AutoGroup", A_LoopField, "Enabled"] := IniRead(config_file, section, "AG_Enable_" A_LoopField , 0)
+		If (A_LoopField = "Terr")
+			Race := "Terran"
+		Else if (A_LoopField = "Prot")
+			Race := "Protoss"
+		Else If (A_LoopField = "Zerg")
+			Race := "Zerg"	
+
+		A_UnitGroupSettings["AutoGroup", Race, "Enabled"] := IniRead(config_file, section, "AG_Enable_" A_LoopField , 0)
 		loop, 10		;this reads the auto group and removes the final |/, 
 		{				;and repalces all | with better looking ,
 			String := RTrim(IniRead(config_file, section, "AG_" A_LoopField A_Index - 1 , A_Space), "`, |")
 			StringReplace, String, String, |, `, %a_space%, All ;replace | with ,
-			A_UnitGroupSettings[A_LoopField, A_Index - 1] := String			
+			A_UnitGroupSettings[Race, A_Index - 1] := String			
 		}
 	}
 	IniRead, AG_Delay, %config_file%, %section%, AG_Delay, 0
@@ -2214,7 +2280,6 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, TempHideMiniMapKey, %config_file%, %section%, TempHideMiniMapKey, !Space
 	IniRead, DrawSpawningRaces, %config_file%, %section%, DrawSpawningRaces, 1
 	IniRead, DrawAlerts, %config_file%, %section%, DrawAlerts, 1
-	IniRead, BlendUnits, %config_file%, %section%, BlendUnits, 1
 	
 	;[Hidden Options]
 	section := "Hidden Options"
@@ -2412,13 +2477,21 @@ ini_settings_write:
 	loop, parse, Short_Race_List, |
 	{	
 		i := 0
+		If (A_LoopField = "Terr")
+			Race := "Terran"
+		Else if (A_LoopField = "Prot")
+			Race := "Protoss"
+		Else If (A_LoopField = "Zerg")
+			Race := "Zerg"	
+
+
 		if (Tmp_GuiControl = "save" OR Tmp_GuiControl = "Apply")
-			A_UnitGroupSettings["AutoGroup", A_LoopField, "Enabled"] := AG_Enable_%A_LoopField%
-		IniWrite, % A_UnitGroupSettings["AutoGroup", A_LoopField, "Enabled"], %config_file%, %section%, AG_Enable_%A_LoopField%		
+			A_UnitGroupSettings["AutoGroup", Race, "Enabled"] := AG_Enable_%A_LoopField%
+		IniWrite, % A_UnitGroupSettings["AutoGroup", Race, "Enabled"], %config_file%, %section%, AG_Enable_%A_LoopField%		
 		loop, 10
 		{	if (Tmp_GuiControl = "save" OR Tmp_GuiControl = "Apply")			
-				A_UnitGroupSettings[A_LoopField, i] := AG_%A_LoopField%%i%
-			IniWrite, % A_UnitGroupSettings[A_LoopField, i], %config_file%, %section%, AG_%A_LoopField%%i%
+				A_UnitGroupSettings[Race, i] := AG_%Race%%i%
+			IniWrite, % A_UnitGroupSettings[Race, i], %config_file%, %section%, AG_%A_LoopField%%i%
 			i++
 		}
 	}
@@ -2625,7 +2698,6 @@ ini_settings_write:
 	IniWrite, %TempHideMiniMapKey%, %config_file%, %section%, TempHideMiniMapKey
 	IniWrite, %DrawSpawningRaces%, %config_file%, %section%, DrawSpawningRaces
 	IniWrite, %DrawAlerts%, %config_file%, %section%, DrawAlerts
-	Iniwrite, %BlendUnits%, %config_file%, %section%, BlendUnits
 
 	;this writes back the unit detection lists and settings
 	if (read_version >= 2.943)		;This is due to wol 2.04 changing ID codes - Easier just to start fresh
@@ -2664,6 +2736,11 @@ gui, font, norm s9	;here so if windows user has +/- font size this standardises 
 ;Gui, +ToolWindow  +E0x40000 ; E0x40000 gives it a icon on taskbar
 options_menu := "home32.png|radarB32.png|map32.png|Inject32.png|Group32.png|reticule32.png|Robot32.png|key.png|warning32.ico|miscB32.png|speakerB32.png|bug32.png|settings.ico"
 l_UnitNames := "Colossus|TechLab|Reactor|InfestorTerran|BanelingCocoon|Baneling|Mothership|PointDefenseDrone|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|PlanetaryFortress|UltraliskBurrowed|OrbitalCommand|WarpGate|OrbitalCommandFlying|ForceField|WarpPrismPhasing|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|Archon|NydusCanal|BroodlingEscort|Mule|Larva|HellBat|MothershipCore|Locust|SwarmHostBurrowed|SwarmHost|Oracle|Tempest|WidowMine|Viper|WidowMineBurrowed"
+l_UnitNamesTerran := "TechLab|Reactor|PointDefenseDrone|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|PlanetaryFortress|OrbitalCommand|OrbitalCommandFlying|MULE|HellBat|WidowMine|WidowMineBurrowed"
+l_UnitNamesProtoss := "Colossus|Mothership|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|WarpGate|WarpPrismPhasing|Archon|MothershipCore|Oracle|Tempest"
+l_UnitNamesZerg := "InfestorTerran|BanelingCocoon|Baneling|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|UltraliskBurrowed|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|NydusCanal|BroodlingEscort|Larva|Locust|SwarmHostBurrowed|SwarmHost|Viper"
+l_UnitPanelZerg := "BanelingCocoon|Baneling|Changeling|InfestedTerran|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|Queen|OverlordCocoon|Overseer|NydusCanal|Larva|SwarmHost|Viper"
+
 
 ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity for 10 icons, grows it by 5 if need be, and 1=large icons
  
@@ -2730,7 +2807,7 @@ Gui, Tab,  Auto
 					Gui, Add, UpDown,  Range0-10 vI_KeyDelay, %I_KeyDelay%						
 				
 		
-Gui, Add, GroupBox, w200 h240 ys xs+210 section, Backspace Setup
+Gui, Add, GroupBox, w200 h240 ys xs+210 section, Backspace && Forced Setup
 		Gui, Add, Text, xs+10 yp+25, Drag Origin:
 		if (Drag_origin = "Right")
 			droplist_var :=2
@@ -3130,7 +3207,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 			droplist2_var := 1
 			Gui, Add, DropDownList, x+5 yp-2 w55 Vinput_method Choose%droplist2_var%, Event|Play|Input
 		
-		Gui, Add, Checkbox,xs+10 yp+30 Vauto_check_updates checked%auto_check_updates%, Auto Check For Updates
+		Gui, Add, Checkbox,xs+10 yp+30 Vauto_update checked%auto_update%, Auto Check For Updates
 	
 	Gui, Add, GroupBox, xs yp+30 w161 h170, Key Blocking
 		Gui, Add, Checkbox,xp+10 yp+25 vBlockingStandard checked%BlockingStandard%, Standard Keys	
@@ -3142,7 +3219,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 	
 	Gui, Add, GroupBox, xs yp+30 w161 h60, Unit Deselection
 		Gui, Add, Text, xp+10 yp+25, Sleep Time:
-		Gui, Add, Edit, Number Right x+25 yp-2 w45 
+		Gui, Add, Edit, Number Right x+25 yp-2 w45 vTT_DeselectSleepTime
 			Gui, Add, UpDown,  Range0-300 vDeselectSleepTime, %DeselectSleepTime%,
 
 	Gui, Add, GroupBox, Xs+171 ys w245 h85, Stealth Mode (Hide Icons/Menus)
@@ -3241,7 +3318,7 @@ loop, parse, Short_Race_List, |
 	{	Gui, Tab, Zerg
 		Tmp_LongRace := "Zerg"
 	}
-	checked := A_UnitGroupSettings["AutoGroup", A_LoopField, "Enabled"]
+	checked := A_UnitGroupSettings["AutoGroup", Tmp_LongRace, "Enabled"]
 	AGX := MenuTabX + 20, AGY := MenuTabY +50
 	Gui, Add, Checkbox, X%AGX%  Y%AGY%  vAG_Enable_%A_LoopField% checked%checked%, Enable Auto Grouping
 	checked := A_UnitGroupSettings["LimitGroup", Tmp_LongRace, "Enabled"]
@@ -3252,11 +3329,13 @@ loop, parse, Short_Race_List, |
 	{		
 		if (10 = i := A_Index)	; done like this so 0 comes after 9
 			i := 0
-		Units := A_UnitGroupSettings[A_LoopField, i]
+		Units := A_UnitGroupSettings[Tmp_LongRace, i]
 		 
 		Gui, add, text, y+20 X%XLeft%, Group %i%
-		Gui, Add, Edit, yp-2 x+10 w280  center r1 vAG_%A_LoopField%%i%, %Units%
-		Gui, Add, Button, yp-2 x+10 gEdit_AG v#AG_%A_LoopField%%i%,  Edit
+		Gui, Add, Edit, yp-2 x+10 w280  center r1 vAG_%Tmp_LongRace%%i%, %Units%
+	;	Gui, Add, Edit, yp-2 x+10 w280  center r1 vAG_%A_LoopField%%i%, %Units%
+	;	Gui, Add, Button, yp-2 x+10 gEdit_AG v#AG_%A_LoopField%%i%,  Edit ;old
+		Gui, Add, Button, yp-2 x+10 gEdit_AG v#AG_%Tmp_LongRace%%i%,  Edit
 		checked := A_UnitGroupSettings["LimitGroup", Tmp_LongRace, i,"Enabled"]
 		Gui, Add, Checkbox, yp+4 x+20 vLG_%Tmp_LongRace%%i% checked%checked%
 	}	
@@ -3448,7 +3527,6 @@ Gui, Tab, MiniMap
 	Gui, Add, Checkbox, X%XTabX% Y+20 vDrawMiniMap Checked%DrawMiniMap% gG_GuiSetupDrawMiniMapDisable, Enable MiniMap
 	Gui, Add, Checkbox, xp+20 Y+10 vDrawSpawningRaces Checked%DrawSpawningRaces%, Display Spawning Races
 	Gui, Add, Checkbox, vDrawAlerts Checked%DrawAlerts%, Display Alerts
-	Gui, Add, Checkbox, vBlendUnits Checked%BlendUnits%, Blend Units
 		
 	Gui, add, text, yp+30 X%XTabX%, Exclude Units:
 
@@ -3652,7 +3730,7 @@ speech_volume_down_key_TT := speech_volume_up_key_TT := "Changes the programs TT
 program_volume_up_key_TT := program_volume_down_key_TT := "Changes the programs overall volume."
 input_method_TT := "Sets the method of artificial input.`n""Event"" is the most 'reliable' across systems, but ""Input"" offers better performance and key buffering.`n Hence, use ""Input"" if it works."
 
-auto_check_updates_TT := "While enabled the program will automatically check for new versions during startup."
+auto_update_TT := "While enabled the program will automatically check for new versions during startup."
 launch_settings_TT := "Display the options menu on startup."
 
 HideTrayIcon_TT := "Hides the tray icon and all popups/menus."
@@ -3681,7 +3759,7 @@ TT_OverlayRefresh_TT := OverlayRefresh_TT := "Determines how frequently these ov
 TT_UnitOverlayRefresh_TT := UnitOverlayRefresh_TT := "Determines how frequently the unit panel is refreshed.`nThis requires more resources than the other overlays and so it has its own refresh rate."
 
 
-SleepSplitUnit_TT := TT_SleepSplitUnits_TT := TT_SleepSelectArmy_TT := SleepSelectArmy_TT := "Increase this value if the function doesn't work properly`nTime between deselecting Units."
+SleepSplitUnit_TT := TT_SleepSplitUnits_TT := TT_SleepSelectArmy_TT := SleepSelectArmy_TT := "Increase this value if the function doesn't work properly`nThis time is required to update the selection buffer."
 Sc2SelectArmy_Key_TT := #Sc2SelectArmy_Key_TT := "The in game (SC2) button used to select your entire army.`nDefault is F2"
 ModifierBeepSelectArmy_TT := "Will play a beep if a modifer key is being held down.`nModifiers include the ctrl, alt, shift and windows keys."
 castSelectArmy_key_TT := #castSelectArmy_key_TT := "The button used to invoke this function."
@@ -3692,7 +3770,7 @@ SelectArmyDeselectFollowing_TT := "Units on a follow command will be removed fro
 
 castRemoveUnit_key_TT := #castRemoveUnit_key_TT := castSplitUnit_key_TT := #castSplitUnit_key_TT := "The hotkey used to invoke this function."
 SplitctrlgroupStorage_key_TT := #SplitctrlgroupStorage_key_TT := "This ctrl group is used during the function.`nAssign it to a control group you DON'T use!"
-DeselectSleepTime_TT := "Time between deselecting units from the unit panel.`nThis is used by the split and select army, and deselect unit functions"
+TT_DeselectSleepTime_TT :=  DeselectSleepTime_TT := "Time between deselecting units from the unit panel.`nThis is used by the split and select army, and deselect unit functions"
 
 #Sc2SelectArmyCtrlGroup_TT := Sc2SelectArmyCtrlGroup_TT := "The control Group (key) in which to store the army.`nE.G. 1,2,3-0"
 l_DeselectArmy_TT := #l_DeselectArmy_TT := "These unit types will be deselected."
@@ -4413,10 +4491,12 @@ areUnitsNearEachOther(unit1, unit2, x_max_dist = "", y_max_dist = "", compareZ =
 	Else x_max_dist := y_max_dist
 	
 	x_dist := Abs(getUnitPositionX(unit1) - getUnitPositionX(unit2))
-	y_dist := Abs(getUnitPositionY(unit1) - getUnitPositionY(unit2))
-																										;round Height Z to 1 decimal place, as there is a small amount of variation in 'flat ground'
-	Return Result := (x_dist > x_max_dist) || (y_dist > y_max_dist) || (compareZ && round(getUnitPositionZ(unit1), 1) != round(getUnitPositionZ(unit2), 1)) ? 0 : 1 ; 0 Not near
+	y_dist := Abs(getUnitPositionY(unit1) - getUnitPositionY(unit2))																									
+																								; there is a substantial difference in height even on 'flat ground' - using a max value of 1 should give decent results
+	Return Result := (x_dist > x_max_dist) || (y_dist > y_max_dist) || (compareZ && Abs(getUnitPositionZ(unit1) - getUnitPositionZ(unit2)) > 1) ? 0 : 1 ; 0 Not near
 }
+
+
 
 getMapLeft()
 {	global
@@ -4540,23 +4620,40 @@ Edit_AG:	;AutoGroup and Unit include/exclude come here
 	TMP_AG_ControlName := SubStr(A_GuiControl, 2)
 	GuiControlGet, TMP_EditAG_Units,, %TMP_AG_ControlName%
 
-	
-	IfInString, A_GuiControl, UnitHighlight
-		TMP_EditAG_Units .= AG_GUI_ADD("", TMP_EditAG_Units ? 1 : 0)
+	IfInString, A_GuiControl, Terran
+		Race := "Terran"
+	else IfInString, A_GuiControl, Protoss
+		Race := "Protoss"
+	else IfInString, A_GuiControl, Zerg
+		Race := "Zerg"
 	Else
-		TMP_EditAG_Units .= AG_GUI_ADD(SubStr(A_GuiControl, 0, 1), TMP_EditAG_Units ? 1 : 0) ;retrieve the last character of name ie control number 0/1/2 etc		
+		Race := "All"
+	IfInString, A_GuiControl, UnitHighlight
+		TMP_EditAG_Units .= AG_GUI_ADD("", TMP_EditAG_Units ? 1 : 0, Race)
+	Else
+		TMP_EditAG_Units .= AG_GUI_ADD(SubStr(A_GuiControl, 0, 1), TMP_EditAG_Units ? 1 : 0, Race) ;retrieve the last character of name ie control number 0/1/2 etc		
 	GUIControl,, %TMP_AG_ControlName%, %TMP_EditAG_Units%
 Return
-AG_GUI_ADD(Control_Group = "", comma=1)
+AG_GUI_ADD(Control_Group = "", comma=1, Race=1)
 {
-	static F_drop_Name 
-	global l_UnitNames
+	static F_drop_Name 	; as a controls variable must by global or static
+	global l_UnitNames, l_UnitNamesTerran, l_UnitNamesProtoss, l_UnitNamesZerg
+
 	If (Control_Group = "")
 		Title := "Select Unit"
 	else Title := "Auto Group " Control_Group
-	
+	if (race = "Terran")
+		list := l_UnitNamesTerran
+	else if (race = "Protoss")
+		list := l_UnitNamesProtoss
+	else if (race = "Zerg")
+		list := l_UnitNamesZerg
+	else list := l_UnitNames
+
+
+
 	Gui, Add2AG:Add, Text, x5 y+10, Select Unit Type:
-	Gui, Add2AG:Add, ListBox, x5 y+10 w150 h280 VF_drop_Name  sort, %l_UnitNames%
+	Gui, Add2AG:Add, ListBox, x5 y+10 w150 h280 VF_drop_Name  sort, %list%
 	Gui, Add2AG:Add, Button, y+20 x5 w60 h35 gB_ADD, Add
 	Gui, Add2AG:Add, Button, yp+0 x95 w60 h35  gB_close, Close
 	GUI, Add2AG:+AlwaysOnTop +ToolWindow
@@ -4853,9 +4950,13 @@ getMiniMapRadius(Unit)
 	Return ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mMiniMapSize, GameIdentifier) /4096
 }
 getSubGroupPriority(Unit)	;this is a messy workaround fix
-{	local Filter := getUnitTargetFilter(unit)	
-	local Priority := ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mSubgroupPriority, GameIdentifier, 2)
-	local type := getunittype(unit)
+{	local Filter, type, Priority
+
+	Filter := getUnitTargetFilter(unit)	
+	type := getunittype(unit)
+
+	if (!Priority := aUnitInfo[type, "Priority"])	; faster to check array than read a value
+		 Priority := aUnitInfo[type, "Priority"] := ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mSubgroupPriority, GameIdentifier, 2)
 	
 	if (type = A_unitID.SwarmHostBurrowed)
 		Priority += .2		;can't use .5 as then if 1 is 18 and other 17 can both equal 17.5 which isnt right
@@ -4876,7 +4977,7 @@ getUnitCount()
 		count := 1	;so dont get stuck with dividing by 0 and infinite loop in iterations
 	Return count
 }
-getHighestUnitIndex() 	; this is the highest alive units index - note its out by 1
+getHighestUnitIndex() 	; this is the highest alive units index - note its out by 1 - ie it starts at 1
 {	global				; if 1 unit is alive it will return 1 (NOT 0)
 	Return ReadMemory(B_uHighestIndex, GameIdentifier)	
 }
@@ -5078,7 +5179,7 @@ setupAutoGroup(Race, ByRef A_AutoGroup, A_unitID, A_UnitGroupSettings)
 	loop, 10
 	{	
 		ControlGroup := A_index - 1		;for control group 0			
-		Race := substr(Race, 1, 4)	;cos used Terr in ini
+	;	Race := substr(Race, 1, 4)	;cos used Terr in ini
 		List := A_UnitGroupSettings[Race, ControlGroup]				
 		StringReplace, List, List, %A_Space%, , All ; Remove Spaces
 		StringReplace, List, List, |, `,, All ;replace | with ,
@@ -5142,9 +5243,13 @@ DrawMiniMap()
 				Owner := getUnitOwner(Unit)			
 				If type in %ActiveUnitHighlightExcludeList% ; cant use or/expressions with type in
 					Continue
-				if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] AND Owner) ; Owner 0 = neutral
-				{ 					
-					Radius := getMiniMapRadius(Unit)
+			;	if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] AND Owner) ; Owner 0 = neutral
+				if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] && Owner && type >= A_unitID["Colossus"]) ; Owner 0 = neutral ; colossus is lowest unit - this gets rid of spawning beacons beneath bases
+				{ 
+
+					if (!Radius := aUnitInfo[Type, "Radius"])
+						Radius := aUnitInfo[Type, "Radius"] := getMiniMapRadius(Unit)
+
 					if (Radius < minimap.UnitMinimumRadius ) ; probes and such ;|| (Radius > minimap.UnitMaximumRadius ) I DONT believe this occurs for actual units
 						Radius := minimap.UnitMinimumRadius 
 				;	Radius += (minimap.AddToRadius/2)
@@ -5162,19 +5267,12 @@ DrawMiniMap()
 				}
 			}
 		} 
-		if !blendunits
-			for index, unit in A_MiniMapUnits
-			{
-				drawUnitRectangle(G, unit.X, unit.Y, unit.Radius + minimap.AddToRadius, unit.Radius + minimap.AddToRadius)	;draw rectangles first
-				FillUnitRectangle(G, unit.X, unit.Y,  unit.Radius, unit.Radius, unit.Colour)
-			}
-		else
-		{
-			for index, unit in A_MiniMapUnits
-				drawUnitRectangle(G, unit.X, unit.Y, unit.Radius + minimap.AddToRadius, unit.Radius + minimap.AddToRadius)	;draw rectangles first
-			for index, unit in A_MiniMapUnits
-				FillUnitRectangle(G, unit.X, unit.Y,  unit.Radius, unit.Radius, unit.Colour)
-		}
+
+		for index, unit in A_MiniMapUnits
+			drawUnitRectangle(G, unit.X, unit.Y, unit.Radius + minimap.AddToRadius, unit.Radius + minimap.AddToRadius)	;draw rectangles first
+		for index, unit in A_MiniMapUnits
+			FillUnitRectangle(G, unit.X, unit.Y,  unit.Radius, unit.Radius, unit.Colour)
+
 	}
 	If (DrawSpawningRaces) && (Time - round(TimeReadRacesSet) <= 14) ;round used to change undefined var to 0 for resume so dont display races
 	{	Gdip_SetInterpolationMode(G, 7)				;TimeReadRacesSet gets set to 0 at start of match
@@ -6212,8 +6310,8 @@ ParseWarningArrays() ;synchs the warning arrays from the config file after a rel
 LoadMemoryAddresses(SC2EXE)
 {	global
 	;	[Memory Addresses]
-	B_LocalPlayerSlot := SC2EXE + 0x10E29C8 	; note 1byte and has a second copy just after +1byte eg LS =16d=10h, hex 1010 (2bytes)
-	B_pStructure := SC2EXE + 0x2577EC0			;0x02578EE0 
+	B_LocalPlayerSlot := SC2EXE + 0x10EB938 ; 0x10E29C8 	; note 1byte and has a second copy just after +1byte eg LS =16d=10h, hex 1010 (2bytes) & LS =01d = hex 0101
+	B_pStructure := SC2EXE + 0x257CA88		; 0x2577EC0	 
 	S_pStructure := 0xCE0
 		O_pName := 0x58
 		O_pSupply := 0x848
@@ -6230,23 +6328,25 @@ LoadMemoryAddresses(SC2EXE)
 		O_pRacePointer := 0x150
 		O_pMineralIncome := 0x900, O_pGasIncome := 0x908
 		O_pArmyMineralSize := 0xB68, O_pArmyGasSize := 0xB88
-	P_IdleWorker := SC2EXE + 0x020AB1B4		
-		O1_IdleWorker := 0x194
+	P_IdleWorker := SC2EXE + 0x0209C3C8 		
+		O1_IdleWorker := 0x394
 		O2_IdleWorker := 0x268
-	B_Timer := SC2EXE + 0x24C531C				;0x24C633C -1020h
+	B_Timer := SC2EXE + 0x24C9EE0 				;0x24C531C				;0x24C633C -1020h
 	B_rStructure := SC2EXE + 0x1EC8E00	;old
 		S_rStructure := 0x10
 
-	P_ChatFocus := SC2EXE + 0x02097818		;Just when chat box is in focus
+	P_ChatFocus := SC2EXE + 0x0209C3C8 		;Just when chat box is in focus
 		O1_ChatFocus := 0x3D0 
 		O2_ChatFocus := 0x198
 	
-	P_MenuFocus := SC2EXE + 0x03F03C14		;this is all menus and includes chat box when in focus ; old 0x3F04C04
+	P_MenuFocus := SC2EXE + 0x03F1211C 		;this is all menus and includes chat box when in focus ; old 0x3F04C04
 		O1_MenuFocus := 0x1A0
 		
-	B_uCount := SC2EXE + 0x2CF4588		; This is the units alive (and includes missiles) ;0x02CF5588			
-	B_uHighestIndex := SC2EXE + 0x25F4700		;this is actually the highest currently alive unit (includes missiles while alive)
-	B_uStructure := SC2EXE + 0x25F4740			 ;0x25F5740	
+		; changed by 4BC0
+
+	B_uCount := SC2EXE + 0x2CF9148			; 0x2CF4588		; This is the units alive (and includes missiles) ;0x02CF5588			
+	B_uHighestIndex := SC2EXE + 0x25F92C0			;0x25F4700		;this is actually the highest currently alive unit (includes missiles while alive)
+	B_uStructure := SC2EXE + 0x25F9300 		;0x25F4740			 ;0x25F5740	
 	S_uStructure := 0x1C0
 		O_uModelPointer := 0x8
 		O_uTargetFilter := 0x14
@@ -6258,7 +6358,6 @@ LoadMemoryAddresses(SC2EXE)
 		O_P_uCmdQueuePointer := 0xD0
 		O_P_uAbilityPointer := 0xD8
 		O_uChronoState := 0xE2
-
 		O_uEnergy := 0x118
 		O_uTimer := 0x168
 		O_XelNagaActive := 0x34
@@ -6270,18 +6369,18 @@ LoadMemoryAddresses(SC2EXE)
 	O_mMiniMapSize := 0x39C
 	O_mSubgroupPriority := 0x398
 	; selection and ctrl groups
-	B_SelectionStructure := SC2EXE + 0x0215AF90 	
-	B_CtrlGroupStructure := SC2EXE + 0x021601B8 
+	B_SelectionStructure := SC2EXE + 0x0215FB50 	
+	B_CtrlGroupStructure := SC2EXE + 0x02164D78 
 	S_CtrlGroup := 0x1B60
 	S_scStructure := 0x4	; Unit Selection & Ctrl Group Structures
 		O_scTypeCount := 0x2
 		O_scTypeHighlighted := 0x4
 		O_scUnitIndex := 0x8
-	P_PlayerColours := SC2EXE + 0x03D23EC4 ; 0 when enemies red  1 when player colours
+	P_PlayerColours := SC2EXE + 0x03D28A84 ; 0 when enemies red  1 when player colours
 		O1_PlayerColours := 0x4
 		O2_PlayerColours := 0x17c
 		
-	P_SelectionPage := SC2EXE + 0x02097818 ;theres one other 3 lvl pointer
+	P_SelectionPage := SC2EXE + 0x0209C3C8 ;	0x02097818 ;theres one other 3 lvl pointer
 		O1_SelectionPage := 0x35C			;this is for the currently selected unit portrait page ie 1-6 in game (really starts at 0-5)
 		O2_SelectionPage := 0x180			;might actually be a 2 or 1 byte value....but works fine as 4
 		O3_SelectionPage := 0x170
@@ -6289,13 +6388,13 @@ LoadMemoryAddresses(SC2EXE)
 	DeadFilterFlag := 0x0000000200000000	
 	BuriedFilterFlag :=	0x0000000010000000
 	
-	B_MapStruct := SC2EXE + 0x024C52B4   ;-1020h
+	B_MapStruct := SC2EXE + 0X024C9E7C ;0x024C52B4  ;-1020h
 		O_mLeft := B_MapStruct + 0xDC	                                   
 		O_mBottom := B_MapStruct + 0xE0	                                   
-		O_mRight := B_MapStruct + 0xE4	                                    
-		O_mTop := B_MapStruct + 0xE8	   
+		O_mRight := B_MapStruct + 0xE4	    ; MapRight 157.999756 (akilon wastes) after dividing 4096                     
+		O_mTop := B_MapStruct + 0xE8	   	; MapTop: 622591 (akilon wastes) before dividing 4096  
 
-	uMovementFlags := {Amove: 0
+	uMovementFlags := {Amove: 0 		;these arent real
 	, Patrol: 1
 	, HoldPosition: 2
 	, Move: 256
@@ -6304,14 +6403,12 @@ LoadMemoryAddresses(SC2EXE)
 	; note I have Converted these hex numbers from their true decimal conversion 
 	; so that they can be used as bit flags with bit wise &
 
-	P_IsUserCasting := SC2EXE + 0x02097818	; this is probably something to do with the cursor icon or control card
+	P_IsUserCasting := SC2EXE +	0x0209C3C8	; 0x02097818	; this is probably something to do with the control card
 		O1_IsUserCasting := 0x364 			; 1 indicates user is casting a spell e.g. fungal, snipe, or is trying to place a structure
 		O2_IsUserCasting := 0x19C 			; auto casting e.g. swarm host displays 1 always 
 		O3_IsUserCasting := 0x228
 		O4_IsUserCasting := 0x168
 
-		
-		
 	return	
 	
 	
@@ -6366,7 +6463,7 @@ getScreenAspectRatio()
 		AspectRatio := "5:4"
 	else if (AspectRatio = 1600/1200)
 		AspectRatio := "4:3"
-	else AspectRatio := "Unkown"
+	else AspectRatio := "Unknown"
 	return AspectRatio
 }
 findUnitsToRemoveFromArmy(byref a_Units, DeselectXelnaga = 1, DeselectPatrolling = 1, DeselectHoldPosition = 0, DeselectFollowing = 0, l_Types = "")
@@ -6380,7 +6477,7 @@ findUnitsToRemoveFromArmy(byref a_Units, DeselectXelnaga = 1, DeselectPatrolling
 		|| (DeselectHoldPosition && state = uMovementFlags.HoldPosition)
 		|| (DeselectFollowing && (state = uMovementFlags.Follow || state = uMovementFlags.FollowNoAttack)) ;no attack follow is used by spell casters e.g. HTs & infests which dont have and attack
 			a_Units.insert({"Unit": unit, "Priority": getSubGroupPriority(unit)})
-		if l_Types  
+		else if l_Types  
 		{
 			type := getunittype(unit)
 			If type in %l_Types%
@@ -6528,8 +6625,9 @@ getUnitSelectionPage()	;0-5 indicates which unit page is currently selected (in 
 }
 
 debugData()
-{ 	global a_Player
+{ 	global a_Player, O_mTop, GameIdentifier
 	Player := getLocalPlayerNumber()
+	unit := getSelectedUnitIndex()
 	return data := "GetGameType: " GetGameType(a_Player) "`n"
 	. "Enemy Team Size: " getEnemyTeamsize() "`n"
 	. "Time: " gettime() "`n"
@@ -6563,6 +6661,10 @@ debugData()
 	. A_Tab "Map Right: " getMapRight() "`n"
 	. A_Tab "Map Bottom: " getMapBottom() "`n"
 	. A_Tab "Map Top: " getMapTop() "`n"
+	. A_Tab "Map Top: "ReadMemory(O_mTop, GameIdentifier) "`n"
+	. A_Tab "`n`n"
+	. A_Tab "PosZ Round: " round(getUnitPositionZ(unit), 1)
+	. A_Tab "`nPosZ : " getUnitPositionZ(unit)
 }
 
 SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
@@ -6667,13 +6769,6 @@ SplitUnitsWorking(SplitctrlgroupStorage_key, SleepSplitUnits)
 	send {click  %Xorigin%, %Yorigin%, 0}
 		return
 }
-
-
-
-
-
-
-
 
 
 FindAngle(byref Direction, byref Angle, x1,y1,x2,y2)
@@ -6832,10 +6927,10 @@ isHatchOrLairMorphing(unit)
 */
 getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID)
 {
-	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter, aEnemyUnitPriorities
+	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter, aUnitInfo
 	aEnemyUnits := [], aEnemyBuildingConstruction := []
-	if !aEnemyUnitPriorities	;because having  GLOBAL aEnemyUnitPriorities := [] results in it getting cleared each function run
-		aEnemyUnitPriorities := []
+;	if !aEnemyUnitPriorities	;because having  GLOBAL aEnemyUnitPriorities := [] results in it getting cleared each function run
+;		aEnemyUnitPriorities := []
 	While (A_Index <= getHighestUnitIndex()) 
 	{
 		unit := A_Index - 1
@@ -6848,9 +6943,9 @@ getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID
 			Type := getunittype(unit)
 			if  (Type < aUnitID["Colossus"])
 				continue		
-			if !aEnemyUnitPriorities[Type]
-				aEnemyUnitPriorities[Type] := Priority := getRealSubGroupPriority(unit)	
-			else Priority := aEnemyUnitPriorities[Type] ; faster than reading the priority each time - this is splitting hairs!!!
+			if (!Priority := aUnitInfo[Type, "Priority"]) ; faster than reading the priority each time - this is splitting hairs!!!
+				aUnitInfo[Type, "Priority"] := Priority := getRealSubGroupPriority(unit)	
+
 			if (TargetFilter & a_UnitTargetFilter.UnderConstruction)
 			{
 				aEnemyBuildingConstruction[Owner, Priority, Type] := aEnemyBuildingConstruction[Owner, Priority, Type] ? aEnemyBuildingConstruction[Owner, Priority, Type] + 1 : 1
@@ -6871,17 +6966,24 @@ getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID
 }
 
 FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
-{	global aEnemyUnitPriorities
+{	global aUnitInfo
 	;	aEnemyUnits[Owner, Type]
 	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab","StarportReactor"]
 							, "Protoss": ["Interceptor"]
 							, "Zerg": ["CreepTumorBurrowed","Broodling","Locust"]}
 
-	STATIC aAddUnits 	:=	{"Terran": {SupplyDepotLowered: "SupplyDepot"}
+	STATIC aAddUnits 	:=	{"Terran": {SupplyDepotLowered: "SupplyDepot", WidowMineBurrowed: "WidowMine", CommandCenterFlying: "CommandCenter", OrbitalCommandFlying: "OrbitalCommand", BarracksFlying: "Barracks", StarportFlying: "Starport"}
 							, "Zerg": {DroneBurrowed: "Drone", ZerglingBurrowed: "Zergling", HydraliskBurrowed: "Hydralisk", UltraliskBurrowed: "Ultralisk", RoachBurrowed: "Roach"
 							, InfestorBurrowed: "Infestor", BanelingBurrowed: "Baneling", QueenBurrowed: "Queen", SporeCrawlerUprooted: "SporeCrawler", SpineCrawlerUprooted: "SpineCrawler"}} 
 
 	STATIC aAddConstruction := {"Terran": {BarracksTechLab: "TechLab", BarracksReactor: "Reactor", FactoryTechLab: "TechLab", FactoryReactor: "Reactor", StarportTechLab: "TechLab", StarportReactor: "Reactor"}}
+
+								
+	STATIC aUnitOrder := 	{"Terran": ["SCV", "OrbitalCommand", "PlanetaryFortress", "CommandCenter"]
+							, "Protoss": ["Probe", "Nexus"]
+							, "Zerg": ["Drone","Hive","Lair", "Hatchery"]}
+
+
 
 									; note - could have just done - if name contains "Burrowed" check, substring = minus burrowed
 									; overlorrd cocoon = morphing overseer (and it isnt under construction)
@@ -6898,24 +7000,24 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 	;	aDeleteKeys := []					;****have to 'save' the delete keys, as deleting them during a for loop will cause you to go +2 keys on next loop, not 1
 		race := a_Player[owner, "Race"]		;it doesn't matter if it attempts to delete the same key a second time (doesn't effect anything)
 
-		if (race = "Zerg" && object[aEnemyUnitPriorities[aUnitID["Drone"]], aUnitID["Drone"]] && aEnemyBuildingConstruction[Owner, "TotalCount"])
-			object[aEnemyUnitPriorities[aUnitID["Drone"]], aUnitID["Drone"]] -= aEnemyBuildingConstruction[Owner, "TotalCount"] ; as drones morphing are still counted as 'alive' so have to remove them		
+		if (race = "Zerg" && priorityObject[aUnitInfo[aUnitID["Drone"], "Priority"], aUnitID["Drone"]] && aEnemyBuildingConstruction[Owner, "TotalCount"])
+			priorityObject[aUnitInfo[aUnitID["Drone"], "Priority"], aUnitID["Drone"]] -= aEnemyBuildingConstruction[Owner, "TotalCount"] ; as drones morphing are still counted as 'alive' so have to remove them		
 		
 		for index, removeUnit in aRemovedUnits[race]
 		{
 			removeUnit := aUnitID[removeUnit]
-			priority := aEnemyUnitPriorities[removeUnit]
+			priority := aUnitInfo[removeUnit, "Priority"]
 			priorityObject[priority].remove(removeUnit, "")
 		}
 
 		for subUnit, mainUnit in aAddUnits[Race]
 		{
 			subunit := aUnitID[subUnit]
-			subPriority := aEnemyUnitPriorities[subunit]
+			subPriority := aUnitInfo[subunit, "Priority"]
 			if (total := priorityObject[subPriority, subunit])			;** care as if unit has not been seen before, then this priority may be blank!!
 			{														;** actually its the other unit priority which may be blank
 				mainUnit := aUnitID[mainUnit]
-				if !priority := aEnemyUnitPriorities[mainUnit]
+				if !priority := aUnitInfo[mainUnit, "Priority"]
 					priority := subPriority		;take a change, hopefully they will have same priority
 
 
@@ -6929,6 +7031,18 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 			}	
 		}
 
+		for index, unit in aUnitOrder[race]
+			if (count := priorityObject[aUnitInfo[aUnitID[unit], "Priority"], aUnitID[unit]])
+			{
+				index := 0 - aUnitOrder[race].maxindex() + A_index ; hence so the first unit in array eg SCV will be on the left - last unit will have priority 0
+			 	priorityObject[index, aUnitID[unit]] := count 		;change priority to fake ones - so that Obital is on far left, followed by
+			 	priority := aUnitInfo[aUnitID[unit], "Priority"]		; PF and then CC
+			 	priorityObject[priority].remove(aUnitID[unit], "")	
+			}		
+
+
+
+
 ;		for index, unit in aDeleteKeys												; **********	remove(unit, "") Removes an integer key and returns its value, but does NOT affect other integer keys.
 ;			priorityObject[aEnemyUnitPriorities[unit]].remove(unit, "")				;				as the keys are integers, otherwise it will decrease the keys afterwards by 1 for each removed unit!!!!													
 	}
@@ -6939,11 +7053,11 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 		for subUnit, mainUnit in aAddConstruction[Race]
 		{
 			subunit := aUnitID[subUnit]
-			subPriority := aEnemyUnitPriorities[subunit]
+			subPriority := aUnitInfo[subunit, "Priority"]
 			if (total := priorityObject[subPriority, subunit])
 			{
 				mainUnit := aUnitID[mainUnit]
-				if !priority := aEnemyUnitPriorities[mainUnit]
+				if !priority := aUnitInfo[mainUnit, "Priority"]
 					priority := subPriority		;take a change, hopefully they will have same priority can cause issues
 
 				if priorityObject[priority, mainUnit]
@@ -7046,6 +7160,9 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 		}
 		for priority, object in priorityObject
 		{
+
+
+
 			for unit, unitCount in object
 			{
 				if !(pBitmap := a_pBitmap[unit])
@@ -7105,10 +7222,6 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 	DeleteDC(hdc)
 	Return
 }
-
-
-
-
 
 
 ; //fold

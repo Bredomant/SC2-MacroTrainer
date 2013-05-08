@@ -1,3 +1,22 @@
+V2.967		8/05/13
+Fixes:
+	• A bug introduced in version 2.964 which could cause hatcheries to miss injections.
+	• A bug in the 'select army function' which sometimes try to remove a unit twice 
+		Note: This function still isn't 100% reliable
+	• A bug in the GUI options menu which caused the check box 'auto update' to always be checked, regardless of its actual state.
+
+V2.966		7/05/13
+Changes:
+	• Updated offsets for HotS 2.08
+	•  Unit Grouping GUI (in the options menu) - only the units for the selected race will appear in the selection screen.
+Fixes:
+	• A bug preventing the checkbox in 'auto unit grouping' from displaying the correct on/off state (this bug was introduced in the version released an hour ago - 2.965)
+--------------------------------------------------------------------------------------------	
+V2.965		7/05/13
+Changes:
+	• Updated offsets for HotS 2.08
+	•  Unit Grouping GUI (in the options menu) - only the units for the selected race will appear in the selection screen.
+
 V2.964
 New:
 	• UNIT PANEL!!
@@ -11,6 +30,7 @@ Fixes:
 	• The select army and split functions should function much faster, work better, and 'feel' more normal
 
 Changes:
+	• ****Forced Injects now send the the create-camera/camera hotkey so make sure you set this if you use this function****** 
 	• Added deselect unit sleep time. (found in options -> settings)
 	• Queens will no longer inject on hatcheries which are on a different map height to themselves
 		e.g. queen on high ground with the hatch on the low ground
@@ -20,7 +40,6 @@ Changes:
 
 To-do: Determine if a hatch was successfully injected.
 
---------------------------------------------------------------------------------------------	
 
 V2.963
 Changes:
