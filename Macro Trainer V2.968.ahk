@@ -20,6 +20,26 @@
 
 */
 
+
+/*
+		MEMORY BENCHMARKS  	- 	NUMGET VS NORMAL METHOD
+		
+		Numget is ~20x faster when iterating the unit structure and gleaming same amount of information.
+			(this is achieved by dumping the entire unit structure, then using numget to retrieve the info for the units)
+		It is ~10x faster when iterating same unit structure but getting 2x the information
+
+		To just dump the raw unit structure for 993 units takes 0.050565 ms 
+			(this is done via ReadMemoryDump(B_uStructure, GameIdentifier, MVALUE, 0x1C0 * getHighestUnitIndex()))
+
+		Numget is still faster even for a single memory read!
+		for example, it takes 0.007222 ms for a single normal memory read e.g. unit x position
+		numget (when dumping the entire unit i.e 0x1c0 bytes) takes 0.004794 ms
+		numget (when dumping just the int/ x position - 4 bytes) takes 0.004575 ms
+
+		These numbers were averaged over 10,000 reads.
+
+*/
+
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #SingleInstance force
 #MaxHotkeysPerInterval 999999	; a user requested feature (they must have their own macro script)
@@ -676,7 +696,7 @@ CastChronoWarpgates()
 	HighlightedGroup := getSelectionHighlightedGroup()
 	send % "^" CG_control_group
 	send % CG_nexus_Ctrlgroup_key
-	sleep % Chrono_Gate_Sleep / 3 ;needs a few ms to update the selection buffer
+	sleep % Chrono_Gate_Sleep/2 ;needs a few ms to update the selection buffer
 	SelectionCount := getSelectionCount()
 	While (A_index <= SelectionCount)
 	{
@@ -697,7 +717,8 @@ CastChronoWarpgates()
 	    	Type := numgetUnitModelType(numgetUnitModelPointer(MemDump, Unit))
 	    	IF ( type = A_unitID["WarpGate"] && !isUnitChronoed(unit)) && (cooldown := getWarpGateCooldown(unit))
 				a_WarpgatesOnCoolDown.insert({"Unit": unit, "Cooldown": cooldown})
-			Else IF (type = A_unitID["Gateway"] AND !isTargetUnderConstruction(TargetFilter) && !isUnitChronoed(unit)) ; 0 means its completed 
+			Else IF (type = A_unitID["Gateway"] AND !isTargetUnderConstruction(TargetFilter) 
+												&& isGatewayProducingOrConvertingToWarpGate(unit) && !isUnitChronoed(unit)) ; 0 means its completed 
 				a_gateways.insert(unit)   
 		}
 
@@ -745,26 +766,22 @@ Auto_Group:
 	AutoGroup(A_AutoGroup, AG_Delay)
 	critical, off
 	Return
-	
+
 AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 { 	global GameIdentifier
 	static PrevSelectedUnits, SelctedTime
-	; CtrlList := "" ;if unit type not in listt add to it - give count of list type
-	CtrlType_i := 0 
-	selection_i := getSelectionCount()
-	UnitType_i := getSelectionTypeCount()
-	while ( A_Index <= selection_i )		;loop thru the units in the selection buffer	
+	numGetUnitSelectionObject(oSelection)
+	selectedUnits := oSelection.Count
+	, SelectedTypes := oSelection.Types
+	for index, Unit in oSelection.Units
 	{
-		unit := getSelectedUnitIndex(A_Index - 1) 
-		type := getUnitType(Unit) 					;note no -1 (as ctrl index starts at 0)
-		If !isUnitLocallyOwned(Unit)
+		type := unit.type				
+		If !isOwnerLocal(Unit.owner)
 		{
 				WrongUnit := 1
 				break
 		}
-		if (A_Index > 1) && (A_Index < selection_i)
-			CurrentlySelected .= "|"
-		CurrentlySelected .= unit
+		CurrentlySelected .= unit.UnitIndex
 		found := 0
 		For Player_Ctrl_Group, ID_List in A_AutoGroup	;check the array - player_ctrl_group = key 1,2,3 etc, ID_List is the value
 		{
@@ -777,7 +794,7 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 					CtrlList .= type "|"
 					CtrlGroupSet .= Player_Ctrl_Group "|"						
 				}
-				If !isInControlGroup(Player_Ctrl_Group, unit)  ; add to said ctrl group If not in group
+				If !isInControlGroup(Player_Ctrl_Group, unit.UnitIndex)  ; add to said ctrl group If not in group
 					Player_Ctrl_GroupSet := Player_Ctrl_Group
 				break		
 			}				
@@ -787,14 +804,14 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 			WrongUnit := 1
 			break
 		}
-	}
 
+	}
 	if (CurrentlySelected <> PrevSelectedUnits || WrongUnit)
 	{
 		PrevSelectedUnits := CurrentlySelected
 		SelctedTime := A_Tickcount
 	}
-	if (A_Tickcount - SelctedTime >= AGDelay) && !WrongUnit  && (CtrlType_i = UnitType_i) && (Player_Ctrl_GroupSet <> "") && WinActive(GameIdentifier) ; note <> "" as there is group 0! cant use " Player_Ctrl_GroupSet "
+	if (A_Tickcount - SelctedTime >= AGDelay) && !WrongUnit  && (CtrlType_i = SelectedTypes) && (Player_Ctrl_GroupSet <> "") && WinActive(GameIdentifier) ; note <> "" as there is group 0! cant use " Player_Ctrl_GroupSet "
 	{		;note, i use Alt as 'group 2' - so i have winactive here as i can 'alt tab out' thereby selecting a groupable unit and having the program send the command while outside sc2
 		Sort, CtrlGroupSet, D| N U			;also now needed due to possible AG_delay and user being altabbed out when sending
 		CtrlGroupSet := RTrim(CtrlGroupSet, "|")	
@@ -1886,9 +1903,6 @@ convertCoOrdindatesToMiniMapPos(ByRef  X, ByRef  Y) ; unit aray index Number
 	return	
 }
 
-
-
-
 Homepage:
 	run % url.homepage
 	return
@@ -1907,6 +1921,7 @@ return
 
 ShutdownProcedure:
 	Closed := ReadMemory()
+	close := ReadRawMemory()
 	Closed := ReadMemory_Str()
 	Gdip_Shutdown(pToken)
 	If A_IsCompiled
@@ -4965,6 +4980,52 @@ getTime()
 	Return Round(ReadMemory(B_Timer, GameIdentifier)/4096, 1)
 }
 
+
+numGetUnitSelectionObject(ByRef aSelection, GetPosition = 0)
+{	GLOBAL O_scTypeCount, O_scTypeHighlighted, S_scStructure, O_scUnitIndex, GameIdentifier, B_SelectionStructure
+	aSelection := []
+	selectionCount := getSelectionCount()
+	ReadRawMemory(B_SelectionStructure, GameIdentifier, MemDump, selectionCount * S_scStructure + O_scUnitIndex)
+	; aSelection.insert({"SelectedTypes:"})
+	aSelection["Count"]	:= numget(MemDump, 0, "Short")
+	aSelection["Types"]	:= numget(MemDump, O_scTypeCount, "Short")
+	aSelection["HighlightedGroup"]	:= numget(MemDump, O_scTypeHighlighted, "Short")
+
+	aSelection.units := []
+	if GetPosition 		
+	{
+		loop % aSelection["Count"]
+		{
+			unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
+			aSelection.units.insert({"Type": getUnitType(unit), "X": getUnitPositionX(unit), "Y": getUnitPositionY(unit)})	;NOTE this object will be accessed differently than the one below
+		}
+	}
+	else
+		loop % aSelection["Count"]
+		{
+			unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
+			, owner := getUnitOwner(unit), Type := getUnitType(unit), aSelection.units.insert({"UnitIndex": unit, "Type": Type, "Owner": Owner})
+		}
+	return aSelection["Count"]
+}
+
+
+getUnitInformationForAutoGrouping(Unit)
+{
+	unitInfo := []
+	ReadRawUnit(Unit, UnitDump)
+	unitInfo.Type := getUnitType(unit)
+	unitInfo.Owner := getUnitOwner(unit)
+
+}
+
+ReadRawUnit(unit, ByRef Memory)	; dumps the raw memory for one unit
+{	GLOBAL
+	ReadRawMemory(B_uStructure + unit * S_uStructure, GameIdentifier, Memory, S_scStructure)
+	return
+}
+
+
 getSelectionType(units*) 
 {
 	if !units.MaxIndex() ;no units passed to function
@@ -5020,8 +5081,13 @@ getPlayerWorkerCount(player="")
 }
 getUnitType(Unit) ;starts @ 0 i.e. first unit at 0
 { global 
-	Return ReadMemory(((ReadMemory(B_uStructure + (Unit * S_uStructure) 
-				+ O_uModelPointer, GameIdentifier)) << 5) + O_mUnitID, GameIdentifier, 2) ; note the pointer is 4byte, but the unit type is 2byte/word
+	
+	LOCAL pUnitModel := ReadMemory(B_uStructure + (Unit * S_uStructure) + O_uModelPointer, GameIdentifier) ; note - this isnt really the correct pointer still have to << 5 
+	if !aUnitModel[pUnitModel]
+    	getUnitModelInfo(pUnitModel)
+  	return aUnitModel[pUnitModel].Type
+;	Return ReadMemory(((ReadMemory(B_uStructure + (Unit * S_uStructure) 
+;				+ O_uModelPointer, GameIdentifier)) << 5) + O_mUnitID, GameIdentifier, 2) ; note the pointer is 4byte, but the unit type is 2byte/word
 }
 getUnitName(unit)
 {	global 
@@ -5037,14 +5103,24 @@ getUnitOwner(Unit) ;starts @ 0 i.e. first unit at 0 - 2.0.4 starts at 1?
 { 	global
 	Return	ReadMemory((B_uStructure + (Unit * S_uStructure)) + O_uOwner, GameIdentifier, 1) ; note the 1 to read 1 byte
 }
+
 getUnitTargetFilter(Unit) ;starts @ 0 i.e. first unit at 0
-{	global 
-	Return	ReadMemory((B_uStructure + (Unit * S_uStructure)) + O_uTargetFilter, GameIdentifier, 8) ; note the 8 to read 8 byte
+{	local Memory, result 		;ReadRawMemory/numget is only ~11% faster
+				
+	ReadRawMemory(B_uStructure + Unit * S_uStructure + O_uTargetFilter, GameIdentifier, Memory, 8)
+	loop 8 
+		result += numget(Memory, A_index-1 , "Uchar") << 8*(A_Index-1)
+	return result
+;	Return	ReadMemoryOld((B_uStructure + (Unit * S_uStructure)) + O_uTargetFilter, GameIdentifier, 8) ;This is required for the reading of the 8 bit target filter - cant work out how to do this properly with numget without looping a char
 }
 
 getMiniMapRadius(Unit)
-{	global
-	Return ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mMiniMapSize, GameIdentifier) /4096
+{	
+	LOCAL pUnitModel := ReadMemory(B_uStructure + (Unit * S_uStructure) + O_uModelPointer, GameIdentifier) ; note - this isnt really the correct pointer still have to << 5 
+	if !aUnitModel[pUnitModel]
+    	getUnitModelInfo(pUnitModel)
+  	return aUnitModel[pUnitModel].MiniMapRadius	
+	;Return ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mMiniMapSize, GameIdentifier) /4096
 }
 getSubGroupPriority(Unit)	;this is a messy workaround fix
 {	local Filter, type, Priority
@@ -5053,26 +5129,26 @@ getSubGroupPriority(Unit)	;this is a messy workaround fix
 	type := getunittype(unit)
 
 	if (!Priority := aUnitInfo[type, "Priority"])	; faster to check array than read a value
-		 Priority := aUnitInfo[type, "Priority"] := ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mSubgroupPriority, GameIdentifier, 2)
+		 Priority := aUnitInfo[type, "Priority"] := getRealSubGroupPriority(unit)
 	
 	if (type = A_unitID.SwarmHostBurrowed)
 		Priority += .2		;can't use .5 as then if 1 is 18 and other 17 can both equal 17.5 which isnt right
-else if (Filter & BuriedFilterFlag) && (type != A_unitID.WidowMineBurrowed)	; as this doesnt effect where the widow mine is in its subgroup
+	else if (Filter & BuriedFilterFlag) && (type != A_unitID.WidowMineBurrowed)	; as this doesnt effect where the widow mine is in its subgroup
 		Priority -= .2		;this is a work around, as burrowed units are a lower priority (come later in the selection group) except for swarm host which is higher!! :(
 	Return Priority
 }
 getRealSubGroupPriority(unit)	;needed as unit panel uses unit priotriy as key values - and cant have decimal places in keys
 {
-	Global
-	Return ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mSubgroupPriority, GameIdentifier, 2)
+	LOCAL pUnitModel := ReadMemory(B_uStructure + (Unit * S_uStructure) + O_uModelPointer, GameIdentifier) ; note - this isnt really the correct pointer still have to << 5 
+	if !aUnitModel[pUnitModel]
+    	getUnitModelInfo(pUnitModel)
+  	return aUnitModel[pUnitModel].RealSubGroupPriority	
+;	Return ReadMemory(((ReadMemory(B_uStructure + (unit * S_uStructure) + O_uModelPointer, GameIdentifier) << 5) & 0xFFFFFFFF) + O_mSubgroupPriority, GameIdentifier, 2)
 }
 
-
 getUnitCount()
-{ local count 	
-	if (!count := ReadMemory(B_uCount, GameIdentifier))
-		count := 1	;so dont get stuck with dividing by 0 and infinite loop in iterations
-	Return count
+{	global
+	return ReadMemory(B_uCount, GameIdentifier)
 }
 getHighestUnitIndex() 	; this is the highest alive units index - note its out by 1 - ie it starts at 1
 {	global				; if 1 unit is alive it will return 1 (NOT 0)
@@ -5396,14 +5472,14 @@ Return
 }
 
 getEnemyUnitsMiniMap(byref A_MiniMapUnits)
-{  LOCAL Unitcount, UnitAddress, pUnitModel, Filter, MemDump, Radius, x, y, PlayerColours
+{  LOCAL Unitcount, UnitAddress, pUnitModel, Filter, MemDump, Radius, x, y, PlayerColours, MemDump, PlayerColours, Unitcount, owner
   A_MiniMapUnits := []
   PlayerColours := arePlayerColoursEnabled()
   Unitcount := DumpUnitMemory(MemDump)
   while (A_Index <= Unitcount)
   {
      UnitAddress := (A_Index - 1) * S_uStructure
-     Filter := numget(MemDump, UnitAddress + O_uTargetFilter, "double")
+     Filter := numget(MemDump, UnitAddress + O_uTargetFilter, "Int64")
      if (Filter & DeadFilterFlag)
         Continue
 
@@ -5441,8 +5517,6 @@ getEnemyUnitsMiniMap(byref A_MiniMapUnits)
   Return
 }
 
-
-
 DumpUnitMemory(BYREF MemDump)
 {   
   LOCAL UnitCount := getHighestUnitIndex()
@@ -5463,8 +5537,21 @@ class cUnitModelInfo
 
 numgetUnitTargetFilter(ByRef Memory, unit)
 {
-   return numget(Memory, Unit * S_uStructure + O_uTargetFilter, "double")
+	local result 		;ahk has a problem with Uint64
+	loop 8 
+		result += numget(Memory, Unit * S_uStructure + O_uTargetFilter + A_index-1 , "Uchar") << 8*(A_Index-1)
+	return result
+  ; return numget(Memory, Unit * S_uStructure + O_uTargetFilter, "UDouble") ;not double!
 }
+
+getUnitTargetFilterFast(unit)	;only marginally faster ~12%
+{	local Memory, result
+	ReadRawMemory(B_uStructure + Unit * S_uStructure + O_uTargetFilter, GameIdentifier, Memory, 8)
+	loop 8 
+		result += numget(Memory, A_index-1 , "Uchar") << 8*(A_Index-1)
+	return result
+}
+
 numgetUnitOwner(ByRef Memory, Unit)
 { global 
   return numget(Memory, Unit * S_uStructure + O_uOwner, "Char")  
@@ -7032,7 +7119,10 @@ getWarpGateCooldown(WarpGate) ; unitIndex
 	if !(p2 := ReadMemory(p1 + 0x1C, GameIdentifier)) ; 0 if it has never warped in a unit
 		return 0
 	p3 := ReadMemory(p2 + 0xC, GameIdentifier)
-	return ReadMemory(p3 + 0x6, GameIdentifier, 2)
+	cooldown := ReadMemory(p3 + 0x6, GameIdentifier, 2)
+	if (cooldown >= 0) 		; as found in map editor some warpgates gave -1....but this could just be due to it being in the mapeditor (and was never a gateway...but doubtful)
+		return cooldown
+	else return 0
 }
 getUnitAbilityPointer(unit)
 {	global
@@ -7522,13 +7612,22 @@ DeselectUnitsFromPanel2(a_RemoveUnits, sleep=20)
 }
 
 
+isGatewayProducingOrConvertingToWarpGate(Gateway)
+{ 
+;	gateway 
+;	ability pointer + 0x8 
+;	0x2F Idle
+;	0x0F building unit
+;	0x21 when converting to warpgate
+;	0x40 when converting back to gateway from warpgate
+; 	note there is a byte at +0x4 which indicates the previous state of the gateway/warpgate while morphing
 
-
-
-
-
-
-return
+	GLOBAL GameIdentifier
+	state := readmemory(getUnitAbilityPointer(Gateway) + 0x8, GameIdentifier, 1)
+	if (state = 0x0F || state = 0x21)
+		return 1
+	else return 0
+}
 
 
 
