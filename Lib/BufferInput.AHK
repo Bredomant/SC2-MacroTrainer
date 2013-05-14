@@ -1,7 +1,9 @@
-BufferInput(byref aKeys, Mode="Off", MouseBlocking=1)
+BufferInput(byref aKeys, Mode="Off", MouseBlocking=1, IgnoreHotkey="")
 { 	STATIC aBuffer
 	If (Mode = "Buffer")
 		label := "g_bufferInput", aBuffer := []
+	Else if (Mode = "RetrieveKeys")
+		return aBuffer
 	Else if (Mode = "Block")
 		label := "g_Return", aBuffer := []
 	Else if (Mode = "Send" || Mode = "Off")
@@ -20,6 +22,13 @@ BufferInput(byref aKeys, Mode="Off", MouseBlocking=1)
 		BlockInput, MouseMove
 	for index, Button in aKeys
 		Try Hotkey, *%Button%, %label%, On
+	if IgnoreHotkey	;this hotkey will not be buffered - generally put the function hotkey here so it doesnt get spammed if the user holds it down for ages
+	{				; Actually after, testing this probably isnt required as with 1 maxthread hotkey, that hotkey cant fire (and probably wont be reassigned above)
+		StringReplace, IgnoreHotkey, IgnoreHotkey, ^
+		StringReplace, IgnoreHotkey, IgnoreHotkey, +
+		StringReplace, IgnoreHotkey, IgnoreHotkey, !
+		Try Hotkey, *%IgnoreHotkey%, g_Return, On
+	}
 	return
 
 	g_BufferInput:

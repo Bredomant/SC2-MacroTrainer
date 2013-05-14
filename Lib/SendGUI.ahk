@@ -633,6 +633,18 @@ SendGUI(p_Owner=0,p_Hotkey="",p_Limit="",p_OptionalAttrib=False,p_Title="")
         ;-- Update Hotkey field and description
         gosub SendGUI_UpdateHotkey
         }
+        
+  If (p_Limit = 2046)
+  {
+    GUIControl %s_GUI%:Disable, HG_CtrlModifier
+    GUIControl %s_GUI%:, HG_CtrlModifier, 0
+    GUIControl %s_GUI%:Disable, HG_ShiftModifier
+    GUIControl %s_GUI%:, HG_ShiftModifier,0
+    GUIControl %s_GUI%:Disable, HG_WinModifier, 0
+    GUIControl %s_GUI%:,HG_WinModifier,0
+    GUIControl %s_GUI%:Disable, HG_AltModifier
+    GUIControl %s_GUI%:, HG_AltModifier, 0  
+  }
 
     ;[=============]
     ;[  Set focus  ]

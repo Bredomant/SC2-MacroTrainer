@@ -1,3 +1,10 @@
+V2.968		8/05/13
+Fixes:
+	• A bug which resulted in already warned buildings being rewarned when the program was restarted during a match
+		-This bug was introduced a couple of versions ago and I never noticed.
+Changes:
+	• Double tapping the Select Army Button will result in the camera moving to the army location.
+
 V2.967		8/05/13
 Fixes:
 	• A bug introduced in version 2.964 which could cause hatcheries to miss injections.

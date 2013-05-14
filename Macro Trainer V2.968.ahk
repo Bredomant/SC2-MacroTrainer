@@ -12,15 +12,17 @@
 
 
 /*	Things to do
-	Find active units /army offsets and use them in army overlay
+	Team send warn message after clicking building
 	Unit Panel
 	Check if Hatch was actually injected
+	test bank read - eg supply
+	change cast chrono - so that it only boost gateways which r making things
 
 */
 
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #SingleInstance force
-#MaxHotkeysPerInterval 999999
+#MaxHotkeysPerInterval 999999	; a user requested feature (they must have their own macro script)
 #InstallMouseHook
 #InstallKeybdHook
 #UseHook
@@ -49,7 +51,6 @@ Else
 	debug_name := "Kalamity"
 }
 
-
 start:
 config_file := "MT_Config.ini"
 old_backup_DIR := "Old Macro Trainers"
@@ -70,7 +71,7 @@ GameExe := "SC2.exe"
 
 SAPI := ComObjCreate("SAPI.SpVoice")	; ComObjCreate("SAPI.SpVoice").Speak("Please read this file")
 pToken := Gdip_Startup()
-SetupUnitIDArray(A_unitID)
+SetupUnitIDArray(A_unitID, A_UnitName)
 setupTargetFilters(a_UnitTargetFilter)
 SetupColourArrays(HexColour, MatrixColour)
 
@@ -149,7 +150,7 @@ If !errorlevel
 }
 Process, wait, %GameExe%	; waits for starcraft to exist
 while (!(B_SC2Process := getProcessBaseAddress(GameIdentifier)) || B_SC2Process < 0)		;using just the window title could cause problems if a folder had the same name e.g. sc2 folder
-	sleep 250				; required to prevent memory read error - Handle closed: error 		;note the space before end quote
+	sleep 250				; required to prevent memory read error - Handle closed: error 		
 LoadMemoryAddresses(B_SC2Process)	
 settimer, clock, 200
 settimer, timer_exit, 5000
@@ -162,7 +163,7 @@ LWin & Space::
 		SetMouseDelay, 10	; to ensure release modifiers works
 		SetKeyDelay, 10			
 		releaseAllModifiers() 					;This will be active irrespective of the window
-		RestoreModifierPhysicalState("Unblock")		;input on
+		RestoreModifierPhysicalState("Unblock")		;input on ; this doesnt really do anything now - not needed
 		settimer, EmergencyInputCountReset, 5000	
 		EmergencyInputCount ++		 
 		If EmergencyInputCount >= 3
@@ -541,11 +542,10 @@ clock:
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
-	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)  ;  OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
+	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)    OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
 	{
-		game_status := "game", warpgate_status := "not researched"
-		doUnitDetection(0, 0, 0, 0) ; clear the variables within the function
-		MiniMapWarning := [], a_BaseList := []
+		game_status := "game", warpgate_status := "not researched"	
+		MiniMapWarning := [], a_BaseList := [], aUnitModel := []
 		if WinActive(GameIdentifier)
 			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := 1
 		if idle_enable	;this is the idle AFK
@@ -557,10 +557,10 @@ clock:
 			WinNotActiveAtStart := 1
 		}
 		Gosub, player_team_sorter
-		if (ResumeWarnings || UserSavedAppliedSettings) ; UserSavedAppliedSettings saved/applied from options as resume gets blanked
-			doUnitDetection(unit, type, owner, "Save")	;these first 3 vars are nothing - they wont get Read
-doUnitDetection(unit, type, owner, "Save")	;these first 3 vars are nothing - they wont get Read
-doUnitDetection(unit, type, owner, "Save")	;these first 3 vars are nothing - they wont get Read
+		if ResumeWarnings  
+			doUnitDetection(unit, type, owner, "Resume")	;these first 3 vars are nothing - they wont get Read
+		Else
+			doUnitDetection(unit, type, owner, "Reset") ; clear the variables within the function
 		if	mineralon
 			settimer, money, 500
 		if	gas_on
@@ -687,20 +687,20 @@ CastChronoWarpgates()
 
 	IF nexus_chrono_count
 	{
-		While (A_index <= getHighestUnitIndex())
+
+		Unitcount := DumpUnitMemory(MemDump)
+		while (A_Index <= Unitcount)
 		{
 			unit := A_Index - 1
-			Filter := getUnitTargetFilter(unit)	
-			type := getUnitType(unit)
-			If (Filter & DeadFilterFlag) || (type = "Fail")
-				Continue
-			If !isUnitLocallyOwned(Unit)
-				continue
-			IF ( type = A_unitID["WarpGate"] && !isUnitChronoed(unit)) && (cooldown := getWarpGateCooldown(unit))
+			if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(owner := numgetUnitOwner(MemDump, Unit))
+		       Continue
+	    	Type := numgetUnitModelType(numgetUnitModelPointer(MemDump, Unit))
+	    	IF ( type = A_unitID["WarpGate"] && !isUnitChronoed(unit)) && (cooldown := getWarpGateCooldown(unit))
 				a_WarpgatesOnCoolDown.insert({"Unit": unit, "Cooldown": cooldown})
-			Else IF (type = A_unitID["Gateway"] AND !isUnderConstruction(unit) && !isUnitChronoed(unit)) ; 0 means its completed 
-				a_gateways.insert(unit)
+			Else IF (type = A_unitID["Gateway"] AND !isTargetUnderConstruction(TargetFilter) && !isUnitChronoed(unit)) ; 0 means its completed 
+				a_gateways.insert(unit)   
 		}
+
 		if a_WarpgatesOnCoolDown.MaxIndex()
 			Sort2DArray(a_WarpgatesOnCoolDown, "Cooldown", 0)	;so warpgates with longest cooldown get chronod first
 		if a_gateways.MaxIndex()	
@@ -901,8 +901,8 @@ cast_inject:
 				SoundPlay, %A_Temp%\Windows Ding3.wav 
 	}
 	Thread, NoTimers, true  ;cant use critical with input buffer, as prevents hotkey threads launching and hence tracking input
-	Inject := []
 	SetBatchLines -1
+	Inject := []
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
 
@@ -1545,25 +1545,27 @@ return
 unit_bank_read:
 SupplyInProductionCount := gateway_count := warpgate_count := 0
 a_BaseListTmp := []
-;UnitBankCount := getUnitCount()
-While (A_Index <= getHighestUnitIndex()) ; Read +10% blanks in a row
+UnitBankCount := DumpUnitMemory(UBMemDump)
+while (A_Index <= UnitBankCount)
 {
 	u_iteration := A_Index -1
-	unit_type := getUnitType(u_iteration)
-	unit_owner := getUnitOwner(u_iteration)
-	Filter := getUnitTargetFilter(u_iteration)	
+
+	pUnitModel := numgetUnitModelPointer(UBMemDump, u_iteration)
+
+	unit_type := numgetUnitModelType(pUnitModel)
+	unit_owner := numgetUnitOwner(UBMemDump, u_iteration) 
+	Filter := numgetUnitTargetFilter(UBMemDump, u_iteration)
 	; unit_HP := MAXHP - sustained dmg
 	; unit_HP := (ReadMemory((( ReadMemory(B_uStructure + ((A_Index - 1) * S_uStructure) + O_uModelPointer,"StarCraft II") << 5) & 0xFFFFFFFF) + u_MaxHP_Off,"StarCraft II") /4096) - (ReadMemory(B_uStructure + ((A_Index - 1) * S_uStructure) + 0x10C,"StarCraft II")/4096)
 		
-	If (Filter & DeadFilterFlag) || (type = "Fail")
+	If (Filter & DeadFilterFlag)
 		Continue
-	
 	if (unit_owner = a_LocalPlayer["Slot"])
 	{
-		IF (unit_type = supplytype AND isUnderConstruction(u_iteration))
+		IF (unit_type = supplytype AND Filter & a_UnitTargetFilter.UnderConstruction)
 				SupplyInProductionCount ++		
 		if ( warpgate_warn_on AND (unit_type = A_unitID["Gateway"] OR unit_type = A_unitID["WarpGate"]) 
-			AND !isUnderConstruction(u_iteration)) ; 0 means its completed 
+			AND !(Filter & a_UnitTargetFilter.UnderConstruction))
 		{
 			if ( unit_type = A_unitID["Gateway"]) 
 			{
@@ -1590,11 +1592,10 @@ While (A_Index <= getHighestUnitIndex()) ; Read +10% blanks in a row
 		}
 		if (unit_type = A_unitID["Nexus"] || unit_type = A_unitID["CommandCenter"] 
 		|| unit_type =  A_unitID["PlanetaryFortress"] || unit_type =  A_unitID["OrbitalCommand"])
-		&& !isUnderConstruction(u_iteration)
+		&&  !(Filter & a_UnitTargetFilter.UnderConstruction)
 			a_BaseListTmp.insert(u_iteration)
 	}
-	
-	if (alert_array[GameType, "Enabled"] && a_Player[unit_owner, "Team"] <> a_LocalPlayer["Team"])	
+	else if (alert_array[GameType, "Enabled"] && a_Player[unit_owner, "Team"] <> a_LocalPlayer["Team"])	
 		doUnitDetection(u_iteration, unit_type, unit_owner)
 } ; While ((UnitRead_i + EndCount) / getUnitCount() < 1.1)
 SupplyInProduction := SupplyInProductionCount
@@ -1602,11 +1603,11 @@ a_BaseList := a_BaseListTmp
 return
 
 
-doUnitDetection(unit, type, owner, mode = 1)
+doUnitDetection(unit, type, owner, mode = "")
 {	global 
 	static Alert_TimedOut := [], Alerted_Buildings := [], Alerted_Buildings_Base := []
 	static l_WarningArrays := "Alert_TimedOut,Alerted_Buildings,Alerted_Buildings_Base"
-	if !mode 
+	if (Mode = "Reset")
 	{
 		Alert_TimedOut := [],, Alerted_Buildings := [], Alerted_Buildings_Base := []
 		return
@@ -1666,25 +1667,25 @@ doUnitDetection(unit, type, owner, mode = 1)
 			{
 				if ( time < alert_array[GameType, A_Index, "DWB"] OR time > alert_array[GameType, A_Index, "DWA"]  ) ; too early/late to warn - add unit to 'warned list'
 				{			
-					For index, warned_base in Alert_TimedOut	; ;checks if the exact unit is in the time list already (eg if time > dont_warn_before, the original if statement wont be true so BAS_Warning will remain "give warning")			
-						if ( unit = Alert_TimedOut[index, owner] ) ;checks if type is in the list already
+					For index, object in Alert_TimedOut	; ;checks if the exact unit is in the time list already (eg if time > dont_warn_before, the original if statement wont be true so BAS_Warning will remain "give warning")			
+						if ( unit = object[owner, Alert_Index] ) ;checks if type is in the list already
 							continue, loop_AlertList ; dont break, as could be other alerts for same unit but with different times later/lower in list									
 					Alert_TimedOut[Alert_TimedOut.maxindex() ? Alert_TimedOut.maxindex()+1 : 1, owner, Alert_Index] := unit
 					continue, loop_AlertList
 				}
 				Else
 				{	;during warn time lets check if the unit has already been warned			
-					For index, warned_base in Alert_TimedOut	; ;checks if the exact unit is in the time list already (eg if time > dont_warn_before, the original if statement wont be true so BAS_Warning will remain "give warning")			
-						if ( unit = Alert_TimedOut[index, owner, Alert_Index] ) ;checks if unit is in the list already					
+					For index, object in Alert_TimedOut	; ;checks if the exact unit is in the time list already (eg if time > dont_warn_before, the original if statement wont be true so BAS_Warning will remain "give warning")			
+						if ( unit = object[owner, Alert_Index] ) ;checks if type is in the list already									
 								break loop_AlertList
 																						
 					If  !alert_array[GameType, A_Index, "Repeat"] ;else check if this unit type has already been warned												
 						For index, warned_type in Alerted_Buildings ;	if ( type = Alerted_Buildings[index, owner] ) ;checks if type is in the list already						
-							if ( Alert_Index = Alerted_Buildings[index, owner] ) ;checks if alert index i.e. alert 1,2,3 is in the list already						
+							if ( Alert_Index = warned_type[owner] ) ;checks if alert index i.e. alert 1,2,3 is in the list already						
 								break loop_AlertList			
 								
 					For index, warned_unit in Alerted_Buildings_Base  ; this list contains all the exact units which have already been warned				
-						if ( unit = Alerted_Buildings_Base[index, owner] ) ;checks if type is in the list already				
+						if ( unit = warned_unit[owner] ) ;checks if type is in the list already				
 							break loop_AlertList ; this warning is for the exact unitbase Address																				
 				}										
 				MiniMapWarning.insert({"Unit": unit, "Time": Time})
@@ -1746,7 +1747,7 @@ Return
 g_unitPanelOverlay_timer: 
 	If (DrawUnitOverlay && (WinActive(GameIdentifier) || Dragoverlay))
 	{
-		getEnemyUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID)
+		getEnemyUnitCount(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID)
 		FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
 		if DrawUnitOverlay
 			DrawUnitOverlay(RedrawUnit, UnitOverlayScale, OverlayIdent, Dragoverlay)
@@ -1874,6 +1875,14 @@ getMiniMapPos(Unit, ByRef  Xvar="", ByRef  Yvar="") ; unit aray index Number
 	uX -= minimap.MapLeft, uY -= minimap.MapBottom ; correct units position as mapleft/start of map can be >0
 	Xvar := minimap.ScreenLeft + (uX/minimap.MapPlayableWidth * minimap.Width)
 	Yvar := minimap.Screenbottom - ( uY/minimap.MapPlayableHeight * minimap.Height)		;think about rounding mouse clicks igornore decimals
+	return	
+}
+convertCoOrdindatesToMiniMapPos(ByRef  X, ByRef  Y) ; unit aray index Number
+{
+	global minimap
+	X -= minimap.MapLeft, Y -= minimap.MapBottom ; correct units position as mapleft/start of map can be >0
+	, X := minimap.ScreenLeft + (X/minimap.MapPlayableWidth * minimap.Width)
+	, Y := minimap.Screenbottom - (Y/minimap.MapPlayableHeight * minimap.Height)		;think about rounding mouse clicks igornore decimals
 	return	
 }
 
@@ -2770,8 +2779,6 @@ ini_settings_write:
 		Tmp_GuiControl := ""
 		CreateHotkeys()	; to reactivate the hotkeys
 		UserSavedAppliedSettings := 1
-		if time && alert_array[GameType, "Enabled"]
-			doUnitDetection(unit, type, owner, "Save")	;these first 3 vars are nothing - they wont get Read
 		If (game_status = "game") ; so if they change settings during match will update timers
 			UpdateTimers := 1
 		
@@ -2795,6 +2802,8 @@ l_UnitNamesTerran := "TechLab|Reactor|PointDefenseDrone|CommandCenter|SupplyDepo
 l_UnitNamesProtoss := "Colossus|Mothership|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|WarpGate|WarpPrismPhasing|Archon|MothershipCore|Oracle|Tempest"
 l_UnitNamesZerg := "InfestorTerran|BanelingCocoon|Baneling|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|UltraliskBurrowed|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|NydusCanal|BroodlingEscort|Larva|Locust|SwarmHostBurrowed|SwarmHost|Viper"
 l_UnitPanelZerg := "BanelingCocoon|Baneling|Changeling|InfestedTerran|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|Queen|OverlordCocoon|Overseer|NydusCanal|Larva|SwarmHost|Viper"
+l_UnitPanelTerran := "TechLab|Reactor|PointDefenseDrone|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTank|VikingFighter|SCV|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|PlanetaryFortress|OrbitalCommand|MULE|HellBat|WidowMine"
+l_UnitPanelProtoss := := "Colossus|Mothership|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|WarpGate|WarpPrismPhasing|Archon|MothershipCore|Oracle|Tempest"
 
 
 ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity for 10 icons, grows it by 5 if need be, and 1=large icons
@@ -3417,7 +3426,7 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiscAutomation_TAB, Select A
 Gui, Tab, Select Army
 	Gui, Add, Checkbox, y+25 x+15 vSelectArmyEnable Checked%SelectArmyEnable% , Enable Select Army Function		
 	Gui, Add, Checkbox, yp+25 xp+15 section vModifierBeepSelectArmy Checked%ModifierBeepSelectArmy%, Beep if modifier is held down		
-	Gui, Add, Text, yp+35, Hotkey:
+	Gui, Add, Text, yp+35, Hotkey: **
 	Gui, Add, Edit, Readonly yp-2 xs+85 center w65 vcastSelectArmy_key gedit_hotkey, %castSelectArmy_key%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#castSelectArmy_key,  Edit ;have to use a trick eg '#' as cant write directly to above edit var, or it will activate its own label!
 
@@ -3441,6 +3450,8 @@ Gui, Tab, Select Army
 	Gui, Add, Edit, yp-2 x+10 w300 section  center r1 vl_DeselectArmy, %l_DeselectArmy%
 	Gui, Add, Button, yp-2 x+10 gEdit_AG v#l_DeselectArmy,  Edit
 
+	Gui, Add, Text, X420 y115 w160, ** This function will work better && FAR more reliably if this hotkey does not contain a modifier i.e Shift, Ctrl, or Alt.`n`n'F1' or 'F2' should work well.
+
 Gui, Tab, Split
 	Gui, Add, Checkbox, y+25 x+25 vSplitUnitsEnable Checked%SplitUnitsEnable% , Enable Split Unit Function	
 	Gui, Add, Text, section yp+35, Hotkey:
@@ -3452,7 +3463,7 @@ Gui, Tab, Split
 	Gui, Add, Text, Xs yp+35, Sleep time (ms):
 	Gui, Add, Edit, Number Right xp+145 yp-2 w45 vTT_SleepSplitUnits
 	Gui, Add, UpDown,  Range0-100 vSleepSplitUnits, %SleepSplitUnits%
-	Gui, Add, Text, Xs yp+150, ****This is in a very beta stage and will be improved later***
+	Gui, Add, Text, Xs yp+150 w380, Note: This is designed to spread your units BEFORE the engagement - Dont unit while being attacked!`n`n****This is in a very beta stage and will be improved later***
 
 Gui, Tab, Remove Unit
 	Gui, Add, Checkbox, y+25 x+25 vRemoveUnitEnable Checked%RemoveUnitEnable% , Enable Remove Unit Function	
@@ -3789,7 +3800,7 @@ speaker_volume_up_key_TT := speaker_volume_down_key_TT := "Changes the windows m
 speech_volume_down_key_TT := speech_volume_up_key_TT := "Changes the programs TTS volume."
 program_volume_up_key_TT := program_volume_down_key_TT := "Changes the programs overall volume."
 input_method_TT := "Sets the method of artificial input.`n""Event"" is the most 'reliable' across systems, but ""Input"" offers better performance and key buffering.`n Hence, use ""Input"" if it works."
-TT_EventKeyDelayText_TT := TT_EventKeyDelay_TT := EventKeyDelay_TT "Sets the mouse and key delay used when in SendEvent mode.`nLower values sends keystrokes faster - but setting this too low may cause some strokes to be missed.`nValid Values -1 to 300.`n`nSendInput is faster and generally more reliable."
+TT_EventKeyDelay_TT := EventKeyDelay_TT := "Sets the mouse and key delay (in ms) used when in SendEvent mode.`nLower values sends keystrokes faster - but setting this too low MAY cause some strokes to be missed.`nCommon values are (-1 to 10).`nNote: These delays are accumulative, and for functions which require numerous keystrokes e.g. split this delay can become quite substantial`n`nSendInput is faster and generally more reliable, hence SendInput should be used if it works on your system."
 
 auto_update_TT := "While enabled the program will automatically check for new versions during startup."
 launch_settings_TT := "Display the options menu on startup."
@@ -4136,6 +4147,8 @@ edit_hotkey:
 		hotkey_name := SubStr(A_GuiControl, 2)	;this label (and hotkeygui) for a 2nd time 
 		if (hotkey_name = "AdjustOverlayKey")		
 			hotkey_var := HotkeyGUI("Options",%hotkey_name%,2046,True, "Select Hotkey:   " hotkey_name)  ;as due to toggle keywait cant use modifiers
+		else if (hotkey_name = "castSelectArmy_key") ;disable the modifiers
+			hotkey_var := HotkeyGUI("Options",%hotkey_name%, 2+4+8+16+32+64+128+256+512+1024,True, "Select Hotkey:   " hotkey_name) ;the hotkey		
 		Else hotkey_var := HotkeyGUI("Options",%hotkey_name%,,True, "Select Hotkey:   " hotkey_name) ;the hotkey
 		if (hotkey_var <> "")
 			GUIControl,, %hotkey_name%, %hotkey_var%
@@ -4147,7 +4160,7 @@ Alert_List_Editor:
 Gui, New 
 alert_array := [] ; [1v1, unit#, parameter] - [A_LoopField, "list", "size"] alert_array[A_LoopField, "list", "size"] := temp_count
 alert_list_fields :=  "Name,DWB,DWA,Repeat,Code"
-SetupUnitIDArray(A_unitID)
+SetupUnitIDArray(A_unitID, A_UnitName)
 gosub iniread_alert_list
 Gui -MaximizeBox
 Gui, Add, GroupBox,  w220 h370 section, Current Detection List
@@ -4432,45 +4445,6 @@ WM_MOUSEMOVE()
     return
 }
 
-warp_gate_chrono(ByRef a_Result, ByRef F_baselist_var, ByRef F_chronocount_var)	
-{	global A_unitID, DeadFilterFlag
-	a_warpgates := [], a_gateways := [],
-	a_WarpgatesOnCoolDown := [], F_baselist_var := [], a_Result := []
-	While (A_index <= getHighestUnitIndex())
-	{
-		unit := A_Index - 1
-		Filter := getUnitTargetFilter(unit)	
-		type := getUnitType(unit)
-		If (Filter & DeadFilterFlag) || (type = "Fail")
-			Continue
-		If !isUnitLocallyOwned(Unit)
-			continue
-		IF ( type = A_unitID["WarpGate"] && !isUnitChronoed(unit)) && (cooldown := getWarpGateCooldown(unit))
-				a_WarpgatesOnCoolDown.insert({"Unit": unit, "Cooldown": cooldown})
-		Else IF (type = A_unitID["Gateway"] AND !isUnderConstruction(unit) && !isUnitChronoed(unit)) ; 0 means its completed 
-			a_gateways.insert(unit)
-		Else If (type = A_unitID["Nexus"] AND !isUnderConstruction(unit))
-		{ 
-			F_baselist_var.insert(unit)
-			nexus_chrono_count += Floor(getUnitEnergy(unit)/25)	
-		}
-	}
-	if a_WarpgatesOnCoolDown.MaxIndex()
-		Sort2DArray(a_WarpgatesOnCoolDown, "Cooldown", 0)	;so warpgates with longest cooldown get chronod first
-	if a_gateways.MaxIndex()	
-		RandomiseSimpleArray(a_gateways)
-	
-	for index, Warpgate in a_WarpgatesOnCoolDown
-		a_Result.insert(Warpgate.Unit)	
-	for index, Gateways in a_gateways
-		a_Result.insert(Gateways)
-
-	If IsByRef(F_chronocount_var)
-		F_chronocount_var := nexus_chrono_count
-	Return 
-}
-
-
 
 local_minerals(ByRef Return_Base_index, SortBy="Index") ;Returns a list of [Uints] index position for minerals And optionaly the [unit] index for the local base
 {	;	Nexus = 90 CommandCenter = 48 Hatchery = 117
@@ -4649,25 +4623,37 @@ local u_x, u_y, tx, ty
 		Return 1
 }
 getBuildingList(F_building_var*)	
-{ global DeadFilterFlag
-	;unitcount:= getUnitCount()
-	While (A_index <= getHighestUnitIndex())
-	{	unit := A_Index - 1
-		type := getUnitType(Unit)
-		Filter := getUnitTargetFilter(Unit)		
-		If (Filter & DeadFilterFlag) || (type = "Fail")
-			Continue
-			
-		For index, building_type in F_building_var
-		{	IF (type = building_type) And (isUnitLocallyOwned(Unit))
-			AND (isUnderConstruction(Unit) = 0 ) ; 0 means its completed 
+{ 
+	Unitcount := DumpUnitMemory(MemDump)
+	while (A_Index <= Unitcount)
+	{
+		unit := A_Index - 1
+	    if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(owner := numgetUnitOwner(MemDump, Unit))
+	       Continue
+	    pUnitModel := numgetUnitModelPointer(MemDump, Unit)
+	    Type := numgetUnitModelType(pUnitModel)
+	    For index, building_type in F_building_var
+		{	
+			IF (type = building_type && !isTargetUnderConstruction(TargetFilter))
 				List .= unit "|"  ; x|x|	
 		}
-	}
+
+	}	
 	List := SubStr(List, 1, -1)	
 	sort list, D| Random
 	Return List
 }
+
+isTargetDead(TargetFilter)
+{	global a_UnitTargetFilter
+	return TargetFilter & a_UnitTargetFilter.Dead
+}
+
+isTargetUnderConstruction(TargetFilter)
+{	global a_UnitTargetFilter
+	return TargetFilter & a_UnitTargetFilter.UnderConstruction
+}
+
 
 isUserCastingOrBuilding()	;note auto casting e.g. swarm host will always activate this. There are separate bool values indicating buildings at certain spells
 {	global
@@ -4767,16 +4753,23 @@ AG_GUI_ADD(Control_Group = "", comma=1, Race=1)
 	Return ;this is needed to for the above if (if the canel/escape gui)
 
 }
+; 	provides two simple arrays
+;	A_unitID takes the unit name e.g. "Stalker" and return the unit ID
+; 	A_UnitName takes the unit ID and Returns the unit name
 
-SetupUnitIDArray(byref A_unitID)
+SetupUnitIDArray(byref A_unitID, byref A_UnitName)
 {
 	#include %A_ScriptDir%\Included Files\l_UnitTypes.AHK
-	A_unitID := []
+	if !isobject(A_unitID)
+		A_unitID := []
+	if !isobject(A_UnitName)
+		A_UnitName := []
 	loop, parse, l_UnitTypes, `,
 	{
 		StringSplit, Item , A_LoopField, = 		; Format "Colossus = 38"
 		name := trim(Item1, " `t `n"), UnitID := trim(Item2, " `t `n")
 		A_unitID[name] := UnitID
+		A_UnitName[UnitID] := name
 	}
 	Return
 }
@@ -4899,23 +4892,20 @@ GetEnemyTeamSize()
 GetEBases()
 {	global a_Player, a_LocalPlayer, A_unitID, DeadFilterFlag
 	EnemyBase_i := GetEnemyTeamSize()
-	;UnitCount := getUnitCount()
-	While (A_index <= getHighestUnitIndex()) 
-						AND (Found_i < EnemyBase_i)  
-	{	unit := A_Index - 1
-		type := getUnitType(Unit)
-		Filter := getUnitTargetFilter(Unit)	
-		Owner := getUnitOwner(Unit)		
-
-		If (Filter & DeadFilterFlag) || (type = "Fail")
-			Continue
-		Else
-		{	
-			IF (( type = A_unitID["Nexus"] ) OR ( type = A_unitID["CommandCenter"] ) OR ( type = A_unitID["Hatchery"] )) AND (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"])
-			{
-				Found_i ++
-				list .=  unit "|"
-			}
+	Unitcount := DumpUnitMemory(MemDump)
+	while (A_Index <= Unitcount)
+	{
+		unit := A_Index - 1
+		TargetFilter := numgetUnitTargetFilter(MemDump, unit)
+		if (TargetFilter & DeadFilterFlag)
+	    	Continue	
+	    pUnitModel := numgetUnitModelPointer(MemDump, Unit)
+	   	Type := numgetUnitModelType(pUnitModel)
+	   	owner := numgetUnitOwner(MemDump, Unit) 
+		IF (( type = A_unitID["Nexus"] ) OR ( type = A_unitID["CommandCenter"] ) OR ( type = A_unitID["Hatchery"] )) AND (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"])
+		{
+			Found_i ++
+			list .=  unit "|"
 		}
 	}
 	Return SubStr(list, 1, -1)	; remove last "|"	
@@ -4923,7 +4913,7 @@ GetEBases()
 
 
 
-dSpeak(Message, fSapi_vol="", fOverall_vol="")
+dSpeakOldMethod(Message, fSapi_vol="", fOverall_vol="")
 {	global overall_program, speech_volume
 	if (fSapi_vol = "")
 		fSapi_vol := speech_volume
@@ -4943,6 +4933,31 @@ SoundSet, %overall_program%
 Try SAPI.Speak(Message)
 ExitApp
 Dspeak>:
+}
+
+dSpeak(Message, fSapi_vol="", fOverall_vol="")
+{	global overall_program, speech_volume
+	
+	if !fSapi_vol
+		fSapi_vol := speech_volume
+	if !fOverall_vol
+		fOverall_vol := overall_program
+	Header := 	"overall_program := " fOverall_vol "`r`n"		; windows files require both `r`n to correctly signal end of line - but `n will work by itself....
+				. "speech_volume := " fSapi_vol  "`r`n"
+				. "Message := """ Message """`r`n"			; ***note "" double consecutive quotes resolve to a literal "  quote!!!
+	static Footer := "
+					(Join`r`n
+						#NoTrayIcon
+						SAPI := ComObjCreate(""SAPI.SpVoice"")	; Unlike above, these lines can take comments and formatting!
+						SAPI.volume := speech_volume
+						SoundSet, %overall_program%
+						Try SAPI.Speak(Message)
+						ExitApp
+					)"
+
+	DynaRun(CreateScript(Header . Footer), "MT_Speech.AHK", A_Temp "\AHK.exe") ; note as this script doesnt have any #includes/formatting changes - dont need to pass it to create script eg. could just DynaRun(Header . Footer)
+	Return 
+
 }
 
 getTime()
@@ -5253,6 +5268,10 @@ isUnitLocallyOwned(Unit) ; 1 its local player owned
 {	global a_LocalPlayer
 	Return a_LocalPlayer["Slot"] = getUnitOwner(Unit) ? 1 : 0
 }
+isOwnerLocal(Owner) ; 1 its local player owned
+{	global a_LocalPlayer
+	Return a_LocalPlayer["Slot"] = Owner ? 1 : 0
+}
 
 
 setupAutoGroup(Race, ByRef A_AutoGroup, A_unitID, A_UnitGroupSettings)
@@ -5312,43 +5331,8 @@ DrawMiniMap()
 	{
 		setDrawingQuality(G)
 		A_MiniMapUnits := []
-		PlayerColours := arePlayerColoursEnabled()
 		
-		While (A_index <= getHighestUnitIndex()) 
-		{	unit := A_Index - 1
-			type := getUnitType(Unit)
-			Filter := getUnitTargetFilter(Unit)	
-			If (Filter & DeadFilterFlag) || (type = "Fail")
-				Continue
-			Else 
-			{		
-				Owner := getUnitOwner(Unit)			
-				If type in %ActiveUnitHighlightExcludeList% ; cant use or/expressions with type in
-					Continue
-			;	if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] AND Owner) ; Owner 0 = neutral
-				if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] && Owner && type >= A_unitID["Colossus"]) ; Owner 0 = neutral ; colossus is lowest unit - this gets rid of spawning beacons beneath bases
-				{ 
-
-					if (!Radius := aUnitInfo[Type, "Radius"])
-						Radius := aUnitInfo[Type, "Radius"] := getMiniMapRadius(Unit)
-
-					if (Radius < minimap.UnitMinimumRadius ) ; probes and such ;|| (Radius > minimap.UnitMaximumRadius ) I DONT believe this occurs for actual units
-						Radius := minimap.UnitMinimumRadius 
-				;	Radius += (minimap.AddToRadius/2)
-					getMiniMapPos(unit, DrawX, DrawY)
-					if type in %ActiveUnitHighlightList1%
-						Colour := UnitHighlightList1Colour
-					Else If type in %ActiveUnitHighlightList2%
-						Colour := UnitHighlightList2Colour						
-					Else If type in %ActiveUnitHighlightList3%
-						Colour := UnitHighlightList3Colour				
-					Else if PlayerColours
-						Colour := 0xcFF HexColour[a_Player[Owner, "Colour"]]   ;FF=Transparency
-					Else Colour := 0xcFF HexColour["Red"]	
-					A_MiniMapUnits.insert({"X": DrawX, "Y": DrawY, "Colour": Colour, "Radius": Radius*2})						
-				}
-			}
-		} 
+ 		getEnemyUnitsMiniMap(A_MiniMapUnits)
 
 		for index, unit in A_MiniMapUnits
 			drawUnitRectangle(G, unit.X, unit.Y, unit.Radius + minimap.AddToRadius, unit.Radius + minimap.AddToRadius)	;draw rectangles first
@@ -5410,6 +5394,114 @@ DrawMiniMap()
 	DeleteDC(hdc) ; Also the device context related to the bitmap may be deleted
 Return
 }
+
+getEnemyUnitsMiniMap(byref A_MiniMapUnits)
+{  LOCAL Unitcount, UnitAddress, pUnitModel, Filter, MemDump, Radius, x, y, PlayerColours
+  A_MiniMapUnits := []
+  PlayerColours := arePlayerColoursEnabled()
+  Unitcount := DumpUnitMemory(MemDump)
+  while (A_Index <= Unitcount)
+  {
+     UnitAddress := (A_Index - 1) * S_uStructure
+     Filter := numget(MemDump, UnitAddress + O_uTargetFilter, "double")
+     if (Filter & DeadFilterFlag)
+        Continue
+
+     pUnitModel := numget(MemDump, UnitAddress + O_uModelPointer, "Int")  
+     Type := numgetUnitModelType(pUnitModel)
+
+     owner := numget(MemDump, UnitAddress + O_uOwner, "Char")     
+     If type in %ActiveUnitHighlightExcludeList% ; cant use or/expressions with type in
+           Continue
+     if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] && Owner && type >= A_unitID["Colossus"])
+     {
+           if (!Radius := aUnitInfo[Type, "Radius"])
+              Radius := aUnitInfo[Type, "Radius"] := numgetUnitModelMiniMapRadius(pUnitModel)
+          
+          ; if (Radius < minimap.UnitMinimumRadius ) ; probes and such ;|| (Radius > minimap.UnitMaximumRadius ) I DONT believe this occurs for actual units
+           ;   Radius := minimap.UnitMinimumRadius 
+           x :=  numget(MemDump, UnitAddress + O_uX, "int")/4096
+           y :=  numget(MemDump, UnitAddress + O_uY, "int")/4096
+
+        ;  Radius += (minimap.AddToRadius/2)
+           convertCoOrdindatesToMiniMapPos(x, y)
+           if type in %ActiveUnitHighlightList1%
+              Colour := UnitHighlightList1Colour
+           Else If type in %ActiveUnitHighlightList2%
+              Colour := UnitHighlightList2Colour                 
+           Else If type in %ActiveUnitHighlightList3%
+              Colour := UnitHighlightList3Colour           
+           Else if PlayerColours
+              Colour := 0xcFF HexColour[a_Player[Owner, "Colour"]]   ;FF=Transparency
+           Else Colour := 0xcFF HexColour["Red"]  
+           A_MiniMapUnits.insert({"X": x, "Y": y, "Colour": Colour, "Radius": Radius*2})  
+
+     }
+  }
+  Return
+}
+
+
+
+DumpUnitMemory(BYREF MemDump)
+{   
+  LOCAL UnitCount := getHighestUnitIndex()
+  ReadRawMemory(B_uStructure, GameIdentifier, MemDump, UnitCount * S_uStructure)
+  return UnitCount
+}
+class cUnitModelInfo
+{
+   __New(pUnitModel) 
+   {  global GameIdentifier, O_mUnitID, O_mMiniMapSize, O_mSubgroupPriority
+      ReadRawMemory((pUnitModel<< 5) & 0xFFFFFFFF, GameIdentifier, uModelData, O_mMiniMapSize+4) ; O_mMiniMapSize - 0x39C + 4 (int) is the highest offset i get from the unitmodel
+      this.Type := numget(uModelData, O_mUnitID, "Short") 
+      this.MiniMapRadius := numget(uModelData, O_mMiniMapSize, "int")/4096
+      this.RealSubGroupPriority := numget(uModelData, O_mSubgroupPriority, "Short")
+   }
+
+}
+
+numgetUnitTargetFilter(ByRef Memory, unit)
+{
+   return numget(Memory, Unit * S_uStructure + O_uTargetFilter, "double")
+}
+numgetUnitOwner(ByRef Memory, Unit)
+{ global 
+  return numget(Memory, Unit * S_uStructure + O_uOwner, "Char")  
+}
+
+numgetUnitModelPointer(ByRef Memory, Unit)
+{ global 
+  return numget(Memory, Unit * S_uStructure + O_uModelPointer, "Int")  
+}
+
+
+numgetUnitModelType(pUnitModel)
+{  global aUnitModel
+   if !aUnitModel[pUnitModel]
+      getUnitModelInfo(pUnitModel)
+   return aUnitModel[pUnitModel].Type
+}
+numgetUnitModelMiniMapRadius(pUnitModel)
+{  global aUnitModel
+   if !aUnitModel[pUnitModel]
+      getUnitModelInfo(pUnitModel)
+   return aUnitModel[pUnitModel].MiniMapRadius
+}
+numgetUnitModelPriority(pUnitModel)
+{  global aUnitModel
+   if !aUnitModel[pUnitModel]
+      getUnitModelInfo(pUnitModel)
+   return aUnitModel[pUnitModel].RealSubGroupPriority
+}
+
+getUnitModelInfo(pUnitModel)
+{  global aUnitModel
+   aUnitModel[pUnitModel] := new cUnitModelInfo(pUnitModel)
+   return
+}
+
+
 
 HiWord(number)
 {
@@ -5979,10 +6071,11 @@ CreatepBitmaps(byref a_pBitmap, a_unitID)
 }
 
 
-
-
-
-
+;	Some commands which can come in handy for some functions - but cant be used with hotkey command
+; 	#MaxThreadsBuffer on 		- this will buffer a hotkeys own key for 1 second, hence this is more in series - subsequent threads will begin when the previous one finishes
+;	#MaxThreadsPerHotkey 3 		- this will allow a simultaneous 'thread' of hotkeys i.e. parallel
+;	#MaxThreadsPerHotkey 1 		- 
+;	#MaxThreadsBuffer off
 CreateHotkeys()
 {	global
 	Hotkeys:	 
@@ -6448,8 +6541,8 @@ LoadMemoryAddresses(SC2EXE)
 	
 	; Unit Model Structure	
 	O_mUnitID := 0x6	
-	O_mMiniMapSize := 0x39C
 	O_mSubgroupPriority := 0x398
+	O_mMiniMapSize := 0x39C
 	; selection and ctrl groups
 	B_SelectionStructure := SC2EXE + 0x0215FB50 	
 	B_CtrlGroupStructure := SC2EXE + 0x02164D78 
@@ -6507,18 +6600,42 @@ LoadMemoryAddresses(SC2EXE)
 }
 
 g_SplitUnits:
+	Thread, NoTimers, true
+	SetBatchLines, -1
 	BufferInput(aButtons.List, "Buffer", 0)
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
 	SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 	BufferInput(aButtons.List) ;re-enable keys without sending buffer
+	SetBatchLines, %SetBatchLines%
 	return
 	
+
+;	Function works fare more reliable if macro function hotkey does not contain modifier
+;	Works slighty more reliably if the macro function hotkey =! sc2 select army hotkey
 g_SelectArmy:
 	ReleaseModifiers(ModifierBeepSelectArmy)
+	Thread, NoTimers, true
+	SetBatchLines, -1
 	BufferInput(aButtons.List, "Buffer", 0)
+	If !isobject(SelectArmy)
+		SelectArmy := []
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
+	if (A_TickCount - SelectArmy.LastHotKeyPress < 700 && A_PriorKey = A_ThisHotkey)
+	{
+		if SelectArmyControlGroupEnable 	; && getControlGroupCount() - cant use this as some poeple wont have keys where 1 = group 1 etc or use ` key
+		{
+			SelectArmy.LastHotKeyPress := A_TickCount
+			send % Sc2SelectArmyCtrlGroup Sc2SelectArmyCtrlGroup ; to move the camera
+			BufferInput(aButtons.List)
+			KeyWait, %castSelectArmy_key%, T3
+			return
+		}
+		Else
+			send %Sc2SelectArmy_Key% 	; this along with the send command below will make the camera move
+	}
+	SelectArmy.LastHotKeyPress := A_TickCount
 	send %Sc2SelectArmy_Key%
 	sleep SleepSelectArmy ; every now and then it needs a few ms to update
 	mousegetpos, Xarmyselect, Yarmyselect
@@ -6536,7 +6653,9 @@ g_SelectArmy:
 	if SelectArmyControlGroupEnable
 		send ^%Sc2SelectArmyCtrlGroup%
 	BlockInput, MouseMoveOff
-	BufferInput(aButtons.List) ;re-enable keys without sending buffer
+	SetBatchLines, %SetBatchLines%
+	BufferInput(aButtons.List, "Off")
+	KeyWait, %castSelectArmy_key%, T3	;needed if the user just holds down the hotkey - can stuff things up - BUT THE buffer thing can still stuff things?
 return
 
 getScreenAspectRatio()
@@ -7011,26 +7130,33 @@ isHatchOrLairMorphing(unit)
 	(unit)			   |------247
 
 */
-getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID)
+
+
+getEnemyUnitCount(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID)
 {
-	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter, aUnitInfo
+	GLOBAL DeadFilterFlag, a_Player, a_LocalPlayer, a_UnitTargetFilter, aUnitInfo, 
 	aEnemyUnits := [], aEnemyBuildingConstruction := []
 ;	if !aEnemyUnitPriorities	;because having  GLOBAL aEnemyUnitPriorities := [] results in it getting cleared each function run
 ;		aEnemyUnitPriorities := []
-	While (A_Index <= getHighestUnitIndex()) 
+	
+	Unitcount := DumpUnitMemory(MemDump)
+	while (A_Index <= Unitcount)
 	{
-		unit := A_Index - 1
-		TargetFilter := getUnitTargetFilter(unit)
-		If (TargetFilter & DeadFilterFlag)
-			Continue
-		Owner := getUnitOwner(unit)
-		If  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] AND Owner) ; Owner 0 = neutral
-		{
-			Type := getunittype(unit)
-			if  (Type < aUnitID["Colossus"])
-				continue		
+
+ 		unit := A_Index - 1
+	    TargetFilter := numgetUnitTargetFilter(MemDump, unit)
+	    if (TargetFilter & DeadFilterFlag)
+	       Continue
+		owner := numgetUnitOwner(MemDump, Unit) 
+
+	    if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] && Owner)
+	    {
+	    	pUnitModel := numgetUnitModelPointer(MemDump, Unit)
+	    	Type := numgetUnitModelType(pUnitModel)
+	    	if  (Type < aUnitID["Colossus"])
+				continue	
 			if (!Priority := aUnitInfo[Type, "Priority"]) ; faster than reading the priority each time - this is splitting hairs!!!
-				aUnitInfo[Type, "Priority"] := Priority := getRealSubGroupPriority(unit)	
+				aUnitInfo[Type, "Priority"] := Priority := numgetUnitModelPriority(pUnitModel)
 
 			if (TargetFilter & a_UnitTargetFilter.UnderConstruction)
 			{
@@ -7046,10 +7172,11 @@ getEnemyUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID
 				else
 					aEnemyUnits[Owner, Priority, Type] := aEnemyUnits[Owner, Priority, Type] ? aEnemyUnits[Owner, Priority, Type] + 1 : 1 ;note +1 (++ will not work!!!)
 			}
-		}
+	   	}
 	}
 	Return
 }
+
 
 FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
 {	global aUnitInfo
@@ -7068,6 +7195,21 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 	STATIC aUnitOrder := 	{"Terran": ["SCV", "OrbitalCommand", "PlanetaryFortress", "CommandCenter"]
 							, "Protoss": ["Probe", "Nexus"]
 							, "Zerg": ["Drone","Hive","Lair", "Hatchery"]}
+
+
+		/*
+		units.insert({"Unit": unitID, Priority: UnitPriority, built: count, constructing: conCount})
+		this will look like
+		index 	1
+				|
+				|----- Unit:
+				|------Priority etc
+				= etc
+				|
+				2
+				|----- Unit:
+		Then use sort to arrange correctly
+			*/
 
 
 
@@ -7116,6 +7258,9 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 			;	aEnemyUnits[owner, priority].remove(subunit, "")
 			}	
 		}
+
+
+
 
 		for index, unit in aUnitOrder[race]
 			if (count := priorityObject[aUnitInfo[aUnitID[unit], "Priority"], aUnitID[unit]])
@@ -7319,7 +7464,8 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 
 
 
-f1::
+;f1::
+/*
 mousegetpos, mx, my 
 unit := getSelectedUnitIndex()
 clipboard := dectohex(  unit * S_uStructure + B_uStructure  )
@@ -7345,7 +7491,7 @@ msgbox %  	clipboard := dectohex(((ReadMemory(B_uStructure + (Unit * S_uStructur
 return
 
 
-
+*/
 
 
 
@@ -7374,15 +7520,6 @@ DeselectUnitsFromPanel2(a_RemoveUnits, sleep=20)
 	}	
 	return
 }
-
-
-
-
-
-
-
-
-
 
 
 
