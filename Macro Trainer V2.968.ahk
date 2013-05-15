@@ -16,8 +16,6 @@
 	Unit Panel
 	Check if Hatch was actually injected
 	test bank read - eg supply
-	change cast chrono - so that it only boost gateways which r making things
-
 */
 
 
@@ -81,7 +79,9 @@ url.HelpFile := "http://www.users.on.net/~jb10/Macro Trainer Help File.htm"
 url.Homepage := "http://www.users.on.net/~jb10/"
 url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 
-version := 2.967
+program := []
+program["info"] := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
+version := 2.968
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -1765,7 +1765,7 @@ g_unitPanelOverlay_timer:
 	If (DrawUnitOverlay && (WinActive(GameIdentifier) || Dragoverlay))
 	{
 		getEnemyUnitCount(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID)
-		FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, a_UnitID, a_Player)
+		FilterUnits(aEnemyUnits, aEnemyBuildingConstruction, aUnitPanelUnits, a_UnitID, a_Player)
 		if DrawUnitOverlay
 			DrawUnitOverlay(RedrawUnit, UnitOverlayScale, OverlayIdent, Dragoverlay)
 	}
@@ -2303,8 +2303,8 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 
 	;[Alert Location]
 	IniRead, Playback_Alert_Key, %config_file%, Alert Location, Playback_Alert_Key, <#F7
-	
-	Gosub, iniread_alert_list
+
+	alert_array := [],	alert_array := createAlertArray()
 	
 	;[Overlays]
 	section := "Overlays"
@@ -2346,7 +2346,22 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, OverlayRefresh, %config_file%, %section%, OverlayRefresh, 1000
 	IniRead, UnitOverlayRefresh, %config_file%, %section%, UnitOverlayRefresh, 4500
 
-	
+
+	; [UnitPanelFilter]
+	section := "UnitPanelFilter"
+	aUnitPanelUnits := []	;;array just used to store the smaller lists for each race
+	loop, parse, l_Races, `,
+	{
+		race := A_LoopField,
+		IniRead, list, %config_file%, %section%, %race%FilteredCompleted, %A_Space% ;Format FleetBeacon|TwilightCouncil|PhotonCannon	
+		aUnitPanelUnits[race, "FilteredCompleted"] := [] ; make it an object
+		ConvertListToObject(aUnitPanelUnits[race, "FilteredCompleted"], list)
+		IniRead, list, %config_file%, %section%, %race%FilteredUnderConstruction, %A_Space% ;Format FleetBeacon|TwilightCouncil|PhotonCannon	
+		aUnitPanelUnits[race, "FilteredUnderConstruction"] := [] ; make it an object
+		ConvertListToObject(aUnitPanelUnits[race, "FilteredUnderConstruction"], list)
+		list := ""
+	}
+
 	;[MiniMap]
 	section := "MiniMap" 	
 	IniRead, UnitHighlightList1, %config_file%, %section%, UnitHighlightList1, SporeCrawler, SporeCrawlerUprooted, MissileTurret, PhotonCannon, Observer	;the list
@@ -2371,6 +2386,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 		
 	if ( version > read_version ) ; its an update and the file exists - better backup the users settings
 	{
+		program.Info.IsUpdating := 1
 		FileCreateDir, %old_backup_DIR%
 		FileCopy, %config_file%, %old_backup_DIR%\v%read_version%_%config_file%, 1 ;ie 1 = overwrite
 		Filemove, Macro Trainer V%read_version%.exe, %old_backup_DIR%\Macro Trainer V%read_version%.exe, 1 ;ie 1 = overwrite		
@@ -2382,7 +2398,8 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 		Pressed := CMsgbox( "Macro Trainer Vr" version , "It seems that this is the first time that you have ran this version.`n`nYour old " config_file " and Macro Trainer have been backed up to '\" old_backup_DIR "'.`nA new config file has been installed which contains your previous personalised settings`n`nPress Launch to run SC2 and pwn noobs.`n`nOtherwise press Options to open the options menu.", "*Launch|&Options", 560, 160, 45, A_ScriptName, 110, 0, 12)
 		If ( Pressed = "Options")
 			gosub options_menu
-	}		
+	}
+	else program.Info.IsUpdating := 0		
 }
 Else If A_IsCompiled  ; config file doesn't exist
 {
@@ -2779,14 +2796,29 @@ ini_settings_write:
 	IniWrite, %DrawAlerts%, %config_file%, %section%, DrawAlerts
 
 	;this writes back the unit detection lists and settings
-	if (read_version >= 2.943)		;This is due to wol 2.04 changing ID codes - Easier just to start fresh
+	
+	loop, parse, l_GameType, `,
 	{
-		loop, parse, l_GameType, `,
+		alert_array[A_LoopField, "Enabled"] := BAS_on_%A_LoopField%
+		alert_array[A_LoopField, "Clipboard"] := BAS_copy2clipboard_%A_LoopField%
+	}
+
+	if (program.Info.IsUpdating && A_IsCompiled)	;as both of these have there own write routines which activate on clicking 'save' in their on guis
+	{
+		saveAlertArray(alert_array)
+		;;;	Gosub, g_SaveCustomUnitPanelFilter      **** Can't use this, as there has been no created List View gui variables so the list view class wont work!!!!!!
+		; solution 
+		;[UnitPanelFilter]
+		section := "UnitPanelFilter" 
+		loop, parse, l_Races, `,
 		{
-			alert_array[A_LoopField, "Enabled"] := BAS_on_%A_LoopField%
-			alert_array[A_LoopField, "Clipboard"] := BAS_copy2clipboard_%A_LoopField%
+			race := A_LoopField
+			list := convertObjectToList(aUnitPanelUnits[race, "FilteredCompleted"], "|")
+			IniWrite, %List%, %config_file%, %section%, % race "FilteredCompleted"
+			list := convertObjectToList(aUnitPanelUnits[race, "FilteredUnderConstruction"], "|")
+			IniWrite, %List%, %config_file%, %section%, % race "FilteredUnderConstruction"
+			list := ""
 		}
-		Gosub, Alert_Array_General_Write
 	}
 
 	IF (Tmp_GuiControl = "save" or Tmp_GuiControl = "Apply")
@@ -2801,6 +2833,31 @@ ini_settings_write:
 Return
 
 
+g_CreateUnitListsAndObjects:
+
+l_UnitNames := "Colossus|TechLab|Reactor|InfestorTerran|BanelingCocoon|Baneling|Mothership|PointDefenseDrone|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|PlanetaryFortress|UltraliskBurrowed|OrbitalCommand|WarpGate|OrbitalCommandFlying|ForceField|WarpPrismPhasing|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|Archon|NydusCanal|BroodlingEscort|Mule|Larva|HellBat|MothershipCore|Locust|SwarmHostBurrowed|SwarmHost|Oracle|Tempest|WidowMine|Viper|WidowMineBurrowed"
+l_UnitNamesTerran := "TechLab|Reactor|PointDefenseDrone|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|PlanetaryFortress|OrbitalCommand|OrbitalCommandFlying|MULE|HellBat|WidowMine|WidowMineBurrowed"
+l_UnitNamesProtoss := "Colossus|Mothership|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|WarpGate|WarpPrismPhasing|Archon|MothershipCore|Oracle|Tempest"
+l_UnitNamesZerg := "InfestorTerran|BanelingCocoon|Baneling|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|UltraliskBurrowed|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|NydusCanal|BroodlingEscort|Larva|Locust|SwarmHostBurrowed|SwarmHost|Viper"
+
+l_UnitPanelTerran := "TechLab|Reactor|PointDefenseDrone|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTank|VikingFighter|SCV|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|PlanetaryFortress|OrbitalCommand|MULE|HellBat|WidowMine"
+l_UnitPanelZerg := "BanelingCocoon|Baneling|Changeling|InfestedTerran|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|Queen|OverlordCocoon|Overseer|NydusCanal|Larva|SwarmHost|Viper"
+l_UnitPanelProtoss := "Colossus|Mothership|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|WarpGate|WarpPrismPhasing|Archon|MothershipCore|Oracle|Tempest"
+
+aUnitLists := [], aUnitLists["All"] := []
+
+ConvertListToObject(aUnitLists["All"], l_UnitNames)
+loop, parse, l_Races, `,
+{
+	race := A_LoopField, list := "l_UnitNames" race, list := %list%
+	aUnitLists[race] := []
+	ConvertListToObject(aUnitLists[race], list)
+	list := "l_UnitPanel" race, list := %list%
+	aUnitLists["UnitPanel", race] := []
+	ConvertListToObject(aUnitLists["UnitPanel", race], list)
+}
+return
+
 
 options_menu:
 IfWinExist, Macro Trainer V%version% Settings
@@ -2812,14 +2869,7 @@ Gui, Options:New
 gui, font, norm s9	;here so if windows user has +/- font size this standardises it. But need to do other menus one day
 ;Gui, +ToolWindow  +E0x40000 ; E0x40000 gives it a icon on taskbar
 options_menu := "home32.png|radarB32.png|map32.png|Inject32.png|Group32.png|reticule32.png|Robot32.png|key.png|warning32.ico|miscB32.png|speakerB32.png|bug32.png|settings.ico"
-l_UnitNames := "Colossus|TechLab|Reactor|InfestorTerran|BanelingCocoon|Baneling|Mothership|PointDefenseDrone|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|PlanetaryFortress|UltraliskBurrowed|OrbitalCommand|WarpGate|OrbitalCommandFlying|ForceField|WarpPrismPhasing|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|Archon|NydusCanal|BroodlingEscort|Mule|Larva|HellBat|MothershipCore|Locust|SwarmHostBurrowed|SwarmHost|Oracle|Tempest|WidowMine|Viper|WidowMineBurrowed"
-l_UnitNamesTerran := "TechLab|Reactor|PointDefenseDrone|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTankSieged|SiegeTank|VikingAssault|VikingFighter|CommandCenterFlying|BarracksTechLab|BarracksReactor|FactoryTechLab|FactoryReactor|StarportTechLab|StarportReactor|FactoryFlying|StarportFlying|SCV|BarracksFlying|SupplyDepotLowered|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|PlanetaryFortress|OrbitalCommand|OrbitalCommandFlying|MULE|HellBat|WidowMine|WidowMineBurrowed"
-l_UnitNamesProtoss := "Colossus|Mothership|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|Interceptor|WarpGate|WarpPrismPhasing|Archon|MothershipCore|Oracle|Tempest"
-l_UnitNamesZerg := "InfestorTerran|BanelingCocoon|Baneling|Changeling|ChangelingZealot|ChangelingMarineShield|ChangelingMarine|ChangelingZerglingWings|ChangelingZergling|InfestedTerran|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|BanelingBurrowed|DroneBurrowed|HydraliskBurrowed|RoachBurrowed|ZerglingBurrowed|InfestorTerranBurrowed|QueenBurrowed|Queen|InfestorBurrowed|OverlordCocoon|Overseer|UltraliskBurrowed|CreepTumorBurrowed|SpineCrawlerUprooted|SporeCrawlerUprooted|NydusCanal|BroodlingEscort|Larva|Locust|SwarmHostBurrowed|SwarmHost|Viper"
-l_UnitPanelZerg := "BanelingCocoon|Baneling|Changeling|InfestedTerran|Hatchery|CreepTumor|Extractor|SpawningPool|EvolutionChamber|HydraliskDen|Spire|UltraliskCavern|InfestationPit|NydusNetwork|BanelingNest|RoachWarren|SpineCrawler|SporeCrawler|Lair|Hive|GreaterSpire|Egg|Drone|Zergling|Overlord|Hydralisk|Mutalisk|Ultralisk|Roach|Infestor|Corruptor|BroodLordCocoon|BroodLord|Queen|OverlordCocoon|Overseer|NydusCanal|Larva|SwarmHost|Viper"
-l_UnitPanelTerran := "TechLab|Reactor|PointDefenseDrone|CommandCenter|SupplyDepot|Refinery|Barracks|EngineeringBay|MissileTurret|Bunker|SensorTower|GhostAcademy|Factory|Starport|Armory|FusionCore|AutoTurret|SiegeTank|VikingFighter|SCV|Marine|Reaper|Ghost|Marauder|Thor|Hellion|Medivac|Banshee|Raven|Battlecruiser|Nuke|PlanetaryFortress|OrbitalCommand|MULE|HellBat|WidowMine"
-l_UnitPanelProtoss := := "Colossus|Mothership|Nexus|Pylon|Assimilator|Gateway|Forge|FleetBeacon|TwilightCouncil|PhotonCannon|Stargate|TemplarArchive|DarkShrine|RoboticsBay|RoboticsFacility|CyberneticsCore|Zealot|Stalker|HighTemplar|DarkTemplar|Sentry|Phoenix|Carrier|VoidRay|WarpPrism|Observer|Immortal|Probe|WarpGate|WarpPrismPhasing|Archon|MothershipCore|Oracle|Tempest"
-
+Gosub, g_CreateUnitListsAndObjects ; used for some menu items, and for the custom unit filter gui
 
 ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity for 10 icons, grows it by 5 if need be, and 1=large icons
  
@@ -3657,10 +3707,10 @@ Gui, Tab, Overlays
 		Gui, Add, Checkbox, xp y+15 vDrawIdleWorkersOverlay Checked%DrawIdleWorkersOverlay%, Idle Worker Count
 		Gui, Add, Checkbox, xp y+15 vDrawUnitOverlay Checked%DrawUnitOverlay%, Unit Panel
 		
-		Gui, Add, Text, xp-10 y+40, Custom Unit Filter:
-		Gui, Add, Radio, xp+10 y+25 vUnitPanelFilterDisplayrace Checked, Terran
-		Gui, Add, Radio, , Protoss
-		Gui, Add, Radio, , Zerg
+;		Gui, Add, Text, xp-10 y+40, Custom Unit Filter:
+		;Gui, Font, s10
+		Gui, Add, Button, center xp-10 y+40 w120 h40 Gg_GUICustomUnitPanel, UnitPanel Filter
+		;Gui, Font,
 
 
 		Gui, Add, GroupBox, ys XS+205 w170 h200, Overlays Misc:
@@ -3897,12 +3947,6 @@ GuiControl, %command%, TT_EventKeyDelayText
 GuiControl, %command%, TT_EventKeyDelay
 GuiControl, %command%, EventKeyDelay
 return 
-
-
-
-
-
-
 
 
 g_GuiSetupDrawMiniMapDisable:
@@ -4173,10 +4217,10 @@ return
 
 Alert_List_Editor:
 Gui, New 
-alert_array := [] ; [1v1, unit#, parameter] - [A_LoopField, "list", "size"] alert_array[A_LoopField, "list", "size"] := temp_count
-alert_list_fields :=  "Name,DWB,DWA,Repeat,Code"
+alert_list_fields :=  "Name,DWB,DWA,Repeat,IDName"
 SetupUnitIDArray(A_unitID, A_UnitName)
-gosub iniread_alert_list
+Editalert_array := [],	Editalert_array := createAlertArray()
+
 Gui -MaximizeBox
 Gui, Add, GroupBox,  w220 h370 section, Current Detection List
 Gui, Add, TreeView, xp+20 yp+20 gMyTree r20 w180
@@ -4185,10 +4229,10 @@ loop, parse, l_GameType, `,
 {
 	p%A_Index% := TV_Add(A_LoopField)	;p1 = 1v1, p2 =2v2 etc	
 	P# := A_Index 						;set var p# for inner loop	
-	loop, % alert_array[A_LoopField, "list", "size"]				;loop their names
+	loop, % Editalert_array[A_LoopField, "list", "size"]				;loop their names
 	{
 		p_LvL_2 = p%P#%c%A_Index%							;child number
-		%p_LvL_2% := TV_Add(alert_array[A_LoopField, A_Index, "Name"], p%P#%)	;building name
+		%p_LvL_2% := TV_Add(Editalert_array[A_LoopField, A_Index, "Name"], p%P#%)	;building name
 	}			
 }
 
@@ -4250,25 +4294,23 @@ Drop_ID:
 return
 
 Delete_Alert:
+	Gui, Submit, NoHide
 	TV_item := TV_CountP()
 	TV_GetText(GameTypeTV,TV_GetParent(TV_GetSelection()))
-	del_correction := alert_array[GameTypeTV, "list", "size"] - TV_item
+	del_correction := Editalert_array[GameTypeTV, "list", "size"] - TV_item
+	alert_list_fields :=  "Name,DWB,DWA,Repeat,IDName"
 	loop, parse, alert_list_fields, `, ;comma is the separator
 	{
 		loop, % del_correction
 		{
 			TV_item_next := TV_item + A_Index
-			TV_item_previous := TV_item_next - 1
-			
-			alert_array[GameTypeTV, TV_item_previous, A_LoopField] :=  alert_array[GameTypeTV, TV_item_next, A_LoopField]	;copy data back 1 space
-			if ( (A_Index + TV_item) = alert_array[GameTypeTV, "list", "size"])
-			{
-				alert_array[GameTypeTV, alert_array[GameTypeTV, "list", "size"], A_LoopField] := ""
-				Break
-			}
+			TV_item_previous := TV_item_next - 1	
+			Editalert_array[GameTypeTV, TV_item_previous, A_LoopField] :=  Editalert_array[GameTypeTV, TV_item_next, A_LoopField]	;copy data back 1 space
 		}
 	}
-	alert_array[GameTypeTV, "list", "size"] -= 1	;decrease list size by 1
+	Editalert_array[GameTypeTV].remove(Editalert_array[GameTypeTV, "list", "size"])
+
+	Editalert_array[GameTypeTV, "list", "size"] -= 1	;decrease list size by 1
 	TV_Delete(TV_GetSelection())
 	GUIControl,, B_Delete_Alert, Delete Alert - %GameTypeTV% %ItemTxt% ;update tne name on button
 	GUIControl,, B_Modify_Alert, Modify Alert - %GameTypeTV% %ItemTxt%
@@ -4285,13 +4327,13 @@ B_Modify_Alert:
 		TV_item := TV_CountP()
 		TV_GetText(GameTypeTV,TV_GetParent(TV_GetSelection()))
 		TV_Modify(TV_GetSelection(), %Space%, Edit_Name) ; update name in tree view - %Space% workaround for blank option bug
-		alert_array[GameTypeTV, TV_item, "Name"] := Edit_Name
-		alert_array[GameTypeTV, TV_item, "DWB"] := Edit_DWB
-		alert_array[GameTypeTV, TV_item, "DWA"] := Edit_DWA
+		Editalert_array[GameTypeTV, TV_item, "Name"] := Edit_Name
+		Editalert_array[GameTypeTV, TV_item, "DWB"] := Edit_DWB
+		Editalert_array[GameTypeTV, TV_item, "DWA"] := Edit_DWA
 		if (Edit_RON = "Yes")
-			alert_array[GameTypeTV, TV_item, "Repeat"] := 1
-		Else alert_array[GameTypeTV, TV_item, "Repeat"] := 0
-		alert_array[GameTypeTV, TV_item, "IDName"] := drop_ID	
+			Editalert_array[GameTypeTV, TV_item, "Repeat"] := 1
+		Else Editalert_array[GameTypeTV, TV_item, "Repeat"] := 0
+		Editalert_array[GameTypeTV, TV_item, "IDName"] := drop_ID	
 	}
 	Return
   
@@ -4312,14 +4354,14 @@ B_Add_New_Alert:
 
 		For index, game_mode in Add_to_GameType
 		{	
-			New_Item_Pos := alert_array[game_mode, "list", "size"] += 1
-			alert_array[game_mode, New_Item_Pos, "Name"] := Edit_Name
-			alert_array[game_mode, New_Item_Pos, "DWB"] := Edit_DWB
-			alert_array[game_mode, New_Item_Pos, "DWA"] := Edit_DWA
+			New_Item_Pos := Editalert_array[game_mode, "list", "size"] += 1
+			Editalert_array[game_mode, New_Item_Pos, "Name"] := Edit_Name
+			Editalert_array[game_mode, New_Item_Pos, "DWB"] := Edit_DWB
+			Editalert_array[game_mode, New_Item_Pos, "DWA"] := Edit_DWA
 			if (Edit_RON = "Yes")
-				alert_array[game_mode, New_Item_Pos, "Repeat"] := 1
-			Else alert_array[game_mode, New_Item_Pos, "Repeat"] := 0
-			alert_array[game_mode, New_Item_Pos, "IDName"] := drop_ID	
+				Editalert_array[game_mode, New_Item_Pos, "Repeat"] := 1
+			Else Editalert_array[game_mode, New_Item_Pos, "Repeat"] := 0
+			Editalert_array[game_mode, New_Item_Pos, "IDName"] := drop_ID	
 		
 			loop, parse, l_GameType, `, ; 1s,2s,3s,4s
 			{		
@@ -4329,7 +4371,6 @@ B_Add_New_Alert:
 		}
 	}
 	Return
-
 
 MyTree:
 	TV_GetText(GameTypeTV,TV_GetParent(TV_GetSelection()))
@@ -4348,15 +4389,15 @@ MyTree:
 			ItemID := TV_GetNext(ItemID)
 			Count_TVItem ++
 		}
-		GUIControl,, Edit_Name,% alert_array[GameTypeTV, Count_TVItem, "Name"]
+		GUIControl,, Edit_Name,% Editalert_array[GameTypeTV, Count_TVItem, "Name"]
 
-		GUIControl,, Edit_DWB,% alert_array[GameTypeTV, Count_TVItem, "DWB"]
-		GUIControl,, Edit_DWA,% alert_array[GameTypeTV, Count_TVItem, "DWA"]
-		if (alert_array[GameTypeTV, Count_TVItem, "Repeat"])
+		GUIControl,, Edit_DWB,% Editalert_array[GameTypeTV, Count_TVItem, "DWB"]
+		GUIControl,, Edit_DWA,% Editalert_array[GameTypeTV, Count_TVItem, "DWA"]
+		if (Editalert_array[GameTypeTV, Count_TVItem, "Repeat"])
 			GUIControl, ChooseString, Edit_RON, Yes
 		Else GUIControl, ChooseString, Edit_RON, No
-		GUIControl,, Edit_ID,% alert_array[GameTypeTV, Count_TVItem, "IDName"]
-		GUIControl,ChooseString, drop_ID, % alert_array[GameTypeTV, Count_TVItem, "IDName"]
+		GUIControl,, Edit_ID,% Editalert_array[GameTypeTV, Count_TVItem, "IDName"]
+		GUIControl,ChooseString, drop_ID, % Editalert_array[GameTypeTV, Count_TVItem, "IDName"]
 		GUIControl,, B_Delete_Alert, Delete Alert - %GameTypeTV% %ItemTxt%
 		GUIControl,, B_Modify_Alert, Modify Alert - %GameTypeTV% %ItemTxt%
 
@@ -4370,8 +4411,18 @@ MyTree:
 		
 	}
 	return
-Alert_Array_General_Write: ; I.e. coming from general ini write not alert list editor
+
 B_ALert_Save:
+	alert_array := Editalert_array
+	saveAlertArray(Editalert_array)
+	If (A_ThisLabel <> "Alert_Array_General_Write")
+		Gui, Destroy
+Return
+
+
+
+saveAlertArray(alert_array)
+{	GLOBAL
 	loop, parse, l_GameType, `, 
 	{
 		IniDelete, %config_file%, Building & Unit Alert %A_LoopField% ;clear the list - prevent problems if now have less keys than b4
@@ -4386,12 +4437,12 @@ B_ALert_Save:
 			IniWrite, % alert_array[A_LoopField, A_Index, "IDName"], %config_file%, Building & Unit Alert %A_LoopField%, %A_Index%_IDName
 		}
 	}
-	If (A_ThisLabel <> "Alert_Array_General_Write")
-		Gui, Destroy
-Return
+	return
+}
 
-iniread_alert_list:
-	alert_array := [] ; [1v1, unit#, parameter] - [A_LoopField, "list", "size"] alert_array[A_LoopField, "list", "size"]
+createAlertArray()
+{	
+	local alert_array := [] ; [1v1, unit#, parameter] - [A_LoopField, "list", "size"] alert_array[A_LoopField, "list", "size"]
 	loop, parse, l_GameType, `, ;comma is the separator
 	{
 		IniRead, BAS_on_%A_LoopField%, %config_file%, Building & Unit Alert %A_LoopField%, enable, 1	;alert system on/off
@@ -4417,7 +4468,8 @@ iniread_alert_list:
 			alert_array[A_LoopField, A_Index, "IDName"] := Temp_IDName
 		}
 	}
-	Return
+	Return alert_array
+}
 
 TV_CountP()
 {
@@ -4459,6 +4511,411 @@ WM_MOUSEMOVE()
     ToolTip
     return
 }
+
+
+g_GUICustomUnitPanel:
+IfWinExist, MT Custom Unit Filter - Unit Panel
+{
+	WinActivate
+	Return 									; prevent error due to reloading gui 
+}
+if LV_UnitPanelFilter 
+	LV_UnitPanelFilter := ""  ; destroy the object so isobject() will force a reload of units (prevents problem when closing and the items remaining in the object when it gets reopened next)
+Gui, CustomUnitPanel:New
+Gui, Add, Text, x50 y+20 w60, Race: 
+Gui, Add, DropDownList, x+15 vGUI_UnitPanelRace gg_UnitPanelGUI, Terran||Protoss|Zerg
+Gui, Add, Text, x50 y+15 w60, Unit Filter: 
+Gui, Add, DropDownList, x+15 vGUI_UnitPanelListType gg_UnitPanelGUI, Completed||Under construction
+Gui, Add, Button, x+20 y20 w50   gg_SaveCustomUnitPanelFilter,  Save 
+Gui, Add, Button, xp y+13 w50  gGuiClose,  Cancel 
+
+Gui, Add, ListView, x30 y90 r15 w160 Sort vUnitPanelFilteredUnitsCurrentRace gg_UnitPanelRemoveUnit, Currently Filtered ; This stores the currently displayed race which is  being displayed in the filtered LV as gui submit doesnt affect listview variable
+
+Gui, Add, ListView, x+20  r15 w160 Sort vUnitPanelAvailableUnits gg_UnitPanelAddUnit, Units
+GUI_UnitPanelMenu := []	;stores information used to manipualte the menus
+GUI_UnitPanelMenu.race  := UnitPanelAvailableUnits := "Terran"
+Gosub, g_UnitPanelGUI ; This sets the display race to terran
+
+Gui, Add, Button, x30 y+5 w160 h40  gg_UnitPanelRemoveUnit,  Remove 
+Gui, Add, Button, x+20 w160 h40  gg_UnitPanelAddUnit,  Add 
+
+GuI, CustomUnitPanel:Show, w400 h430, MT Custom Unit Filter - Unit Panel
+return
+
+
+g_UnitPanelRemoveUnit:
+if (A_GuiEvent = "DoubleClick" || A_GuiEvent = "Normal") 
+	LV_UnitPanelFilter[GUI_UnitPanelMenu.ListType, GUI_UnitPanelMenu.race ].MoveSelectedCurrentToAvailable()
+return
+
+g_UnitPanelAddUnit:
+if (A_GuiEvent = "DoubleClick" || A_GuiEvent = "Normal") ;this only allows the add button and double LEFT clicks to add units
+	LV_UnitPanelFilter[GUI_UnitPanelMenu.ListType, GUI_UnitPanelMenu.race ].MoveSelectedAvailableToCurrent()
+return
+
+
+
+g_SaveCustomUnitPanelFilter:
+gosub, g_CheckLV_UnitPanelObject	;this ensure that LV_UnitPanelFilter exists and is filled with the current lists
+section := "UnitPanelFilter"
+if !RaceObject
+	RaceObject := new cSC2Functions()
+for index, ListType in RaceObject.ForList("FilteredCompleted", "FilteredUnderConstruction")
+	for index, LoopRace in RaceObject.races 
+	{
+		List := convertObjectToList(LV_UnitPanelFilter[ListType, LoopRace, "CurrentItems"], "|")
+		IniWrite, %List%, %config_file%, %section%, % LoopRace ListType
+		if !IsObject(aUnitPanelUnits[LoopRace, ListType])
+			aUnitPanelUnits[LoopRace, ListType] := []
+		aUnitPanelUnits[LoopRace, ListType]	:= 	LV_UnitPanelFilter[ListType, LoopRace, "CurrentItems"] ;note the race and list type have been reversed here
+	}
+Gui, CustomUnitPanel:Destroy  ;as there is a gosub here during an update/ini-transfer - dont want to detroy the wrong gui.
+return
+
+
+;	This menu can be arrived at by three methods
+;		1. From a gosub which is used when the GUI is first created - "A_GuiControl" Will be blank 
+;		2. From clicking the T, P, Or Z buttons - A_GuiControl will contain the name of the race button e.g "Terran"
+;		3. From using the dropdown list (filer list type) A_GuiControl - will contain "GUI_UnitPanelListType"
+;
+;	This label helps create an object of the TwoPanelSelection_LV class; these are used to keep track of the 
+;	filtered units for the Unit panel (both the 'completed filtered' and 'under construction filtered' lists)
+
+g_UnitPanelGUI:
+;GUIcontrol := A_GuiControl
+
+GuiControlGet, GUIcontrol,, GUI_UnitPanelRace 
+IfInString, GUIcontrol, Protoss
+	GUI_UnitPanelMenu.race := "Protoss"
+else IfInString, GUIcontrol, Zerg
+	GUI_UnitPanelMenu.race  := "Zerg"
+else IfInString, GUIcontrol, Terran
+	GUI_UnitPanelMenu.race  := "Terran"
+
+GuiControlGet, CurrentList,, GUI_UnitPanelListType 
+if (CurrentList = "Completed")
+	GUI_UnitPanelMenu.ListType := CurrentList := "FilteredCompleted"
+else if (CurrentList = "Under Construction")
+	GUI_UnitPanelMenu.ListType := CurrentList := "FilteredUnderConstruction"
+
+if (GUIcontrol = "") ; blank for the first gosub
+	GUI_UnitPanelMenu.PreviousListType := GUI_UnitPanelMenu.ListType := CurrentList		
+
+
+if (!GUI_UnitPanelMenu.PreviousRace)	;these vars store the previous race - save as gui submit doesnt affect them
+	GUI_UnitPanelMenu.PreviousRace := GUI_UnitPanelMenu.race 
+Else
+{
+	LV_UnitPanelFilter[GUI_UnitPanelMenu.PreviousListType, GUI_UnitPanelMenu.PreviousRace].storeItems()
+	GUI_UnitPanelMenu.PreviousRace := GUI_UnitPanelMenu.race
+	GUI_UnitPanelMenu.PreviousListType := GUI_UnitPanelMenu.ListType
+}
+gosub, g_CheckLV_UnitPanelObject
+
+LV_UnitPanelFilter[GUI_UnitPanelMenu.ListType, GUI_UnitPanelMenu.race ].restoreItems()
+return
+
+;this is used by the above routine, It cannot be used during an update!!!!, as there was no listview gui & variables and its class wont work
+g_CheckLV_UnitPanelObject:
+if !aUnitLists
+	Gosub, g_CreateUnitListsAndObjects ; used for some menu items, and for the custom unit filter gui remnant from unsuccessfull method of transferring ini settings during update - but no harm leaving it in.
+if !RaceObject
+	RaceObject := new cSC2Functions()
+if !IsObject(LV_UnitPanelFilter)
+{
+	LV_UnitPanelFilter := []
+	for index, ListType in RaceObject.ForList("FilteredCompleted", "FilteredUnderConstruction")
+		for index, LoopRace in RaceObject.races 	;so this object will be full of the info ready for saving - no checks needed!
+		{
+			LV_UnitPanelFilter[ListType, LoopRace] := new TwoPanelSelection_LV("UnitPanelAvailableUnits", "UnitPanelFilteredUnitsCurrentRace")
+			LV_UnitPanelFilter[ListType, LoopRace].removeAllitems() ; so ready for new units
+			if aUnitPanelUnits[LoopRace,  ListType].maxindex()	;this prevents adding 1 'blank' spot/unit to the list when its empty
+				LV_UnitPanelFilter[ListType, LoopRace].AddItemsToCurrentPanel(aUnitPanelUnits[LoopRace,  ListType], 1)
+			if aUnitLists["UnitPanel", LoopRace].maxindex() ;this isnt really needed, as these lists always have units
+				LV_UnitPanelFilter[ListType, LoopRace].AddItemsToAvailablePanel(aUnitLists["UnitPanel", LoopRace], 1)
+			LV_UnitPanelFilter[ListType, LoopRace].storeItems()
+		}
+}
+return
+
+class cSC2Functions
+{
+	__New()
+	{
+		this.races := []
+		this.races := ["Terran", "Protoss", "Zerg"]
+	}
+	RacesNot(Race)
+	{
+		a := []
+		for index, listedrace in this.races
+			if (listedrace != Race)
+				a.insert(listedrace)
+		return a
+	}
+	ForList(Items*)	;used to create for loops within an expression
+	{
+		a := []
+		for index, item in items
+			a.insert(item)
+		return a
+	}
+}
+
+
+class TwoPanelSelection_LV
+{
+	__New(AvailablePanel, CurrentListPanel) 
+	{
+		this.Available 	:= AvailablePanel	; eg associated var
+		this.Current 	:= CurrentListPanel	; eg associated var
+		this.CurrentItems := []
+		this.AvailableItems := []
+	}
+
+	ModifyCol(panel = "")
+	{
+		if panel
+			ModifyColListView(panel, "AutoHdr") 
+		else 
+		{
+			ModifyColListView(this.Available, "AutoHdr")		;auto resizes columns
+			ModifyColListView(this.Current, "AutoHdr")
+		}		
+	}
+	removeAllitems(panel = "")
+	{
+		if panel
+			removeAllItemsFromListView(panel)
+		else ;remove all
+		{
+			removeAllItemsFromListView(this.Available)		;clears the fields
+			removeAllItemsFromListView(this.Current)
+		}
+		this.ModifyCol()
+	}
+	restoreItems()
+	{
+			this.removeAllitems()
+			this.AddItemsToCurrentPanel(this.CurrentItems, 1)
+			this.AddItemsToAvailablePanel(this.AvailableItems, 1)
+			this.ModifyCol()
+	}
+	storeItems()
+	{
+		this.storeCurrentItems()
+		this.storeAvailabletItems()
+	}
+	storeAvailabletItems()
+	{
+		this.AvailableItems := retrieveItemsFromListView(this.Available)
+	}	
+	storeCurrentItems()
+	{
+		this.CurrentItems := retrieveItemsFromListView(this.Current)
+	}
+	otherPanel(Panel)
+	{
+		if (panel = this.Available)
+			return this.Current 
+		else if (panel = this.Current)
+			return this.Available 
+		else return 0
+	}
+	AddItemsToAvailablePanel(Items, CheckOtherPanel = "")
+	{
+		this.AddItemsToPanel(Items, this.Available, CheckOtherPanel)
+		this.ModifyCol()
+		return
+	}
+	AddItemsToCurrentPanel(Items, CheckOtherPanel = "")
+	{
+		this.AddItemsToPanel(Items, this.current, CheckOtherPanel)
+		this.ModifyCol()
+		return
+	}
+
+	AddItemsToPanel(Items, Panel, checkPanel = "")
+	{
+		if checkPanel 	;this is used to prevent an item from showing up in both panels when first adding them
+			checkPanel := this.otherPanel(Panel)
+		if isobject(Items)
+		{
+			for index, item in items
+				if (!isItemInListView(Item, Panel) && ( (checkPanel && !isItemInListView(Item, checkPanel)) || !checkPanel) )
+					addItemsToListview(item, Panel)
+		}
+		Else
+			if (!isItemInListView(Items, Panel) && ( (checkPanel && !isItemInListView(Item, checkPanel)) || !checkPanel) )
+				addItemsToListview(Items, Panel)
+		this.ModifyCol()
+		return
+	}
+
+	MoveSelectedAvailableToCurrent()
+	{
+		aSelected := retrieveSelectedItemsFromListView(this.Available)
+		for index, item in aSelected
+			this.TransferItemsBetweenPanels(this.Available, this.current, item)
+		this.ModifyCol()
+		this.storeItems()
+		return
+
+	}
+	MoveSelectedCurrentToAvailable()
+	{
+		aSelected := retrieveSelectedItemsFromListView(this.current)
+		for index, item in aSelected
+			this.TransferItemsBetweenPanels(this.current, this.Available, item)
+		this.ModifyCol()
+		this.storeItems()
+		return
+
+	}
+
+	TransferItemsBetweenPanels(Origin, Deistination, Items, RemoveOriginals = True)
+	{
+		if isobject(Items)
+		{
+			for index, item in items
+			{
+				if !isItemInListView(Item, Deistination)
+					addItemsToListview(item, Deistination)
+				if RemoveOriginals
+					removeItemFromListView(Item, Origin)
+			}
+		}
+		Else
+		{
+			if !isItemInListView(Items, Deistination)
+					addItemsToListview(Items, Deistination)	
+			if RemoveOriginals
+					removeItemFromListView(Items, Origin)
+		}
+		this.ModifyCol()
+		this.storeItems()
+		return
+	}
+}
+		
+	ModifyColListView(ListView = "", options = "")
+	{
+		if ListView
+			Gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
+		if options
+		{
+			Columns := LV_GetCount("Column") 	;needed, as you must do each column individually if specifying options
+			while (A_Index <= Columns)
+				LV_ModifyCol(A_Index, options)	
+		}
+		else LV_ModifyCol()	
+		return
+	}
+	isItemInListView(Item, ListView="")
+	{
+		if ListView
+			Gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
+		a := []
+		while (a_index <= LV_GetCount())
+		{
+			LV_GetText(OutputVar, a_index)
+			if (OutputVar = Item)
+				return 1
+		}
+		return 0
+	}
+	retrieveSelectedItemsFromListView(ListView="", byref count = "")
+	{ 
+
+		if ListView
+			Gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
+		a := []
+		while (nextItem := LV_GetNext(nextItem)) ;return next item number for selected items - then returns 0 when done
+		{
+			LV_GetText(OutputVar, nextItem)
+			a.insert(OutputVar)
+			count++
+		}
+
+		return a
+	}
+
+
+
+	addItemsToListview(item, ListView="")
+	{
+		if ListView
+			Gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
+		LV_Add("", item, "")
+		return
+	}
+
+	removeItemFromListView(Item, ListView="")
+	{
+		if ListView
+			Gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
+		a := []
+		while (a_index <= LV_GetCount())
+		{
+			LV_GetText(OutputVar, a_index)
+			if (OutputVar = Item)
+				LV_Delete(a_index) 
+		}
+		return
+	}
+	retrieveItemsFromListView(ListView="")
+	{
+		
+		if ListView
+			Gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
+		a := []
+		while (a_index <= LV_GetCount())
+		{
+			LV_GetText(OutputVar, a_index)
+			a.insert(OutputVar)
+		}
+		return a
+	}
+	removeAllItemsFromListView(ListView="")
+	{	
+		if ListView
+			gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
+		return LV_Delete() ; 1 on success 
+	}
+	GetItemCountFromListView(ListView="")
+	{	
+		if ListView
+			gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
+		return LV_GetCount() ;
+	}
+
+
+
+convertObjectToList(Object, Delimiter="|")
+{
+	for index, item in Object
+		if (A_index = 1)
+			List .= item
+		else
+			List .= "|" item
+	return List
+}
+
+;note if the object is part of a multidimensional array it still must first be initialised
+;eg
+;	obj := []
+;	obj["Terran", "Units"] := []
+;	ConvertListToObject(obj["Terran", "Units"], l_UnitNamesTerran)
+ConvertListToObject(byref Object, List, Delimiter="|", ClearObject = 0)
+{
+	if (!IsObject(object) || ClearObject)
+		object := []
+	loop, parse, List, %delimiter%
+		object.insert(A_LoopField)
+	return
+}
+
+
 
 
 local_minerals(ByRef Return_Base_index, SortBy="Index") ;Returns a list of [Uints] index position for minerals And optionaly the [unit] index for the local base
@@ -7268,7 +7725,7 @@ getEnemyUnitCount(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUn
 }
 
 
-FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
+FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPanelUnits, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
 {	global aUnitInfo
 	;	aEnemyUnits[Owner, Type]
 	STATIC aRemovedUnits := {"Terran": ["BarracksTechLab","BarracksReactor","FactoryTechLab","FactoryReactor","StarportTechLab","StarportReactor"]
@@ -7286,7 +7743,11 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 							, "Protoss": ["Probe", "Nexus"]
 							, "Zerg": ["Drone","Hive","Lair", "Hatchery"]}
 
-
+	; aUnitPanelUnits is an object which contains the custom filtered (removed) user selected units
+	;	aUnitPanelUnits ----Race
+	;						|------- FilteredCompleted
+	;						|------- FilteredUnderConstruction
+	;
 		/*
 		units.insert({"Unit": unitID, Priority: UnitPriority, built: count, constructing: conCount})
 		this will look like
@@ -7322,6 +7783,13 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 			priorityObject[aUnitInfo[aUnitID["Drone"], "Priority"], aUnitID["Drone"]] -= aEnemyBuildingConstruction[Owner, "TotalCount"] ; as drones morphing are still counted as 'alive' so have to remove them		
 		
 		for index, removeUnit in aRemovedUnits[race]
+		{
+			removeUnit := aUnitID[removeUnit]
+			priority := aUnitInfo[removeUnit, "Priority"]
+			priorityObject[priority].remove(removeUnit, "")
+		}
+
+		for index, removeUnit in aUnitPanelUnits[race, "FilteredCompleted"]
 		{
 			removeUnit := aUnitID[removeUnit]
 			priority := aUnitInfo[removeUnit, "Priority"]
@@ -7371,6 +7839,15 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 	for owner, priorityObject in aEnemyBuildingConstruction
 	{
 		race := a_Player[owner, "Race"]	
+		
+		for index, removeUnit in aUnitPanelUnits[race, "FilteredUnderConstruction"]
+		{
+			removeUnit := aUnitID[removeUnit]
+			priority := aUnitInfo[removeUnit, "Priority"]
+			priorityObject[priority].remove(removeUnit, "")
+		}
+
+
 		for index, unit in aUnitOrder[race]		;this will ensure the change in priority matches the changes made above to make the order correct, so they can be added together.
 			if (count := priorityObject[aUnitInfo[aUnitID[unit], "Priority"], aUnitID[unit]])
 			{
@@ -7400,7 +7877,6 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID, 
 	}
 	return
 }
-
 
 getLongestEnemyPlayerName(a_Player)
 {

@@ -2,6 +2,12 @@ V2.968		8/05/13
 Fixes:
 	• A bug which resulted in already warned buildings being rewarned when the program was restarted during a match
 		-This bug was introduced a couple of versions ago and I never noticed.
+	• A couple of errors in the default detection lists
+	• A bug in the unit detection GUI which could result in the unit lists being completely wrong when deleting certain warnings.
+		- This bug has been around for a long time 
+		- I recommend anyone who uses this function should ensure that their warnings match the associated unitName or simply delete their config file and load the default ones which can then be altered.
+		- If you find a bug with this GUI please report it.
+
 Changes:
 	• Double tapping the Select Army Button will result in the camera moving to the army location.
 	• ChronoBoost Warpgates/Gateways
@@ -9,6 +15,8 @@ Changes:
 		- In addition to this, gateways will only be chronoed if they have a unit in production or are morphing into a warpgate.
 	• Big speed increases for memory reads and their dependent functions - around 35% for a basic read and up to 1,900% for large iterations
 		- Although you will probably not notice this
+
+	• Event Key delay
 
 	Note: I have changed a lot of things, so if anyone finds a new bug please report it!
 
