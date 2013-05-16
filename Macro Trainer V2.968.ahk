@@ -12,10 +12,8 @@
 
 
 /*	Things to do
-	Team send warn message after clicking building
-	Unit Panel
+	Team send warn message after clicking building..maybe
 	Check if Hatch was actually injected
-	test bank read - eg supply
 */
 
 
@@ -4271,7 +4269,8 @@ Gui, Add, GroupBox, y+5 xs-5 w235 h55 section, New Alert
 Gui, Add, Button, xp-100 y+30 vB_ALert_Cancel gGuiClose w100 h50, Cancel
 Gui, Add, Button, xp-200 yp vB_ALert_Save gB_ALert_Save w100 h50, Save Changes
 	
-Gui, Show, w490 h455  ; Show the window and its TreeView.
+Gui, Show, w490 h455, Alert List Editor  ; Show the window and its TreeView.
+
 OnMessage(0x200, "WM_MOUSEMOVE")
 
 	Edit_Name_TT := "This text is read aload during the warning"
@@ -4370,6 +4369,7 @@ B_Add_New_Alert:
 			}	
 		}
 	}
+	WinSet, Redraw,, Alert List Editor, Current Detection List ;forces a redraw as the '+' expander doesnt show (until a mouseover) if the parent had no items when the gui was initially drawn
 	Return
 
 MyTree:
@@ -7076,7 +7076,7 @@ LoadMemoryAddresses(SC2EXE)
 		O_uZ := 0x50
 		O_P_uCmdQueuePointer := 0xD0
 		O_P_uAbilityPointer := 0xD8
-		O_uChronoState := 0xE2
+		O_uChronoAndInjectState := 0xE2
 		O_uEnergy := 0x118
 		O_uTimer := 0x168
 		O_XelNagaActive := 0x34
@@ -7588,11 +7588,19 @@ getUnitAbilityPointer(unit)
 
 isUnitChronoed(unit)
 {	global	; 1 byte = 18h chrono for protoss structures 10h normal state
-	if (24 = ReadMemory(B_uStructure + unit * S_uStructure + O_uChronoState, GameIdentifier, 1))	
+	if (24 = ReadMemory(B_uStructure + unit * S_uStructure + O_uChronoAndInjectState, GameIdentifier, 1))	
 		return 1
 	else return 0
 }
-
+; 16 dec / 0x10 when not injected
+; 48 dec / 0x30 when injected
+; hatch/lair/hive unit structure + 0xE2 = inject state 
+isHatchInjected(Hatch)
+{	global	; 1 byte = 18h chrono for protoss structures, 48h when injected for zerg -  10h normal state
+	if (48 = ReadMemory(B_uStructure + unit * S_uStructure + O_uChronoAndInjectState, GameIdentifier, 1))	
+		return 1
+	else return 0
+}
 isWorkerInProduction(unit) ; units can only be t or P, no Z
 {										;state = 1 in prod, 0 not, -1 if doing something else eg flying
 	local state
