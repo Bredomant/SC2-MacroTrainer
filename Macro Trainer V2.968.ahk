@@ -10,10 +10,13 @@
 ;	git push
 ;-----------------------
 
+; compiled using AHK 1.1.09.03 - the later version have changed how soundset works. Cant be bothered working it out and nothing beneficial in the updates 
 
 /*	Things to do
 	Team send warn message after clicking building..maybe
-	Check if Hatch was actually injected
+	remove 			dspeak("Correct Injection")
+	disable backspace adv
+	post russian character test
 */
 
 
@@ -160,6 +163,15 @@ If (A_GuiControl = "Disable_Auto_Update" OR A_GuiControl = "Cancel_Auto_Update")
 If launch_settings
 	gosub options_menu
 CreateHotkeys()			;create them before launching the game incase users want to edit them
+Try hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and give it the highest possible priority
+	Catch, Error  ;error is an object
+	{
+	  clipboard := "Error: " error.message "`nLine: " error.line "`nExtra: "error.Extra
+	  msgbox % "There was an error while creating this hotkey.`n`nIf you are using a non-English language/character-set, I recommend you try changing your keyboard layout/language to English."
+	      . "`n`nThe error has been copied to your clipboard if you wish to report it.`n`nError: " error.message "`nLine: " error.line "`nSpecifically: " error.Extra
+	}
+	; it seems that some russian language keyboard layouts cause a prblem with <#q hotkey - think it might be the <#? pheraps its the q
+
 process, exist, %GameExe%
 If !errorlevel
 {
@@ -172,12 +184,15 @@ while (!(B_SC2Process := getProcessBaseAddress(GameIdentifier)) || B_SC2Process 
 LoadMemoryAddresses(B_SC2Process)	
 settimer, clock, 200
 settimer, timer_exit, 5000
-SetTimer, OverlayKeepOnTop, 1000, -10	;better here, as since WOL 2.0.4 having it in the "clock" section isn't reliable 
+SetTimer, OverlayKeepOnTop, 1000, -10	;better here, as since WOL 2.0.4 having it in the "clock" section isn't reliable 	
+
 return
+
 ;-----------------------
 ; End of execution
 ;-----------------------
-LWin & Space::	
+;2147483647  - highest priority so if i ever give something else a high priority, this key combo will still interupt (if thread isnt critical)
+g_EmergencyRestart:	
 		SetMouseDelay, 10	; to ensure release modifiers works
 		SetKeyDelay, 10			
 		releaseAllModifiers() 					;This will be active irrespective of the window
@@ -287,7 +302,7 @@ return
 
 ReleaseModifiersOld(Beep = 1, CheckIfCasting = 0)
 {
-	while (iscasting := CheckIfCasting && isUserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
+	while (iscasting := CheckIfCasting && isZerguserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
 	{
 		count++
@@ -304,7 +319,7 @@ ReleaseModifiers(Beep = 1, CheckIfCasting = 0)
 	startReleaseModifiers:
 	count := 0
 	firstRun++
-	while (iscasting := CheckIfCasting && isUserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
+	while (iscasting := CheckIfCasting && isZerguserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
 	{
 		count++
@@ -575,7 +590,7 @@ clock:
 			WinNotActiveAtStart := 1
 		}
 		Gosub, player_team_sorter
-		if ResumeWarnings  
+		if (ResumeWarnings || UserSavedAppliedSettings && alert_array[GameType, "Enabled"])  
 			doUnitDetection(unit, type, owner, "Resume")	;these first 3 vars are nothing - they wont get Read
 		Else
 			doUnitDetection(unit, type, owner, "Reset") ; clear the variables within the function
@@ -625,7 +640,7 @@ return
 
 setupMiniMapUnitLists()
 {	local list, unitlist, ListType
-	list := "UnitHighlightList1,UnitHighlightList2,UnitHighlightList3,UnitHighlightExcludeList"
+	list := "UnitHighlightList1,UnitHighlightList2,UnitHighlightList3,UnitHighlightList4,UnitHighlightList5,UnitHighlightExcludeList"
 	Loop, Parse, list, `,
 	{	
 		ListType := A_LoopField
@@ -896,7 +911,17 @@ BlockInput(Mode="Disable", byref L_Keys="", Delimiter="|") ; eg 	;	BlockInput("A
 	}
 Return
 }
-	
+
+f2::
+Thread, NoTimers, true
+soundplay *-1
+sleep 4000
+soundplay *-1
+return
+
+
+
+;this function has a problem with burrowing queens if user is spamming the r button. I think its might be on sc2s side, as the blocking seems to work!
 
 cast_ForceInject:
 cast_inject:
@@ -948,8 +973,8 @@ cast_inject:
 	
 	If ChatStatus
 		send {Enter}
-
 	BufferInput(aButtons.List, "Send")
+
 	if (Inject.LMouseState AND !GetKeyState("LButton", "P")) ;mouse button up
 		send {click Left up}
 
@@ -965,12 +990,71 @@ cast_inject:
 		If F_Alert_Enable
 			settimer, Force_Inject_Alert, 250	
 	}
+	If (A_ThisLabel = "cast_ForceInject" && !AttemptCorrectInjection)
+		settimer, g_ForceInjectSuccessCheck, -3000	
 	If (A_ThisLabel = "cast_inject")
 	{
 		ForceCount := 0
 		KeyWait, %cast_inject_key%, T4	
 	}
 Return
+
+g_ForceInjectSuccessCheck:
+	For Index, CurrentHatch in oHatcheries
+		if (CurrentHatch.NearbyQueen && !isHatchInjected(CurrentHatch.Unit)) ;probably should check if hatch is alive and still a hatch...
+		{
+			
+			AttemptCorrectInjection := 1
+			Gosub, cast_ForceInject
+			AttemptCorrectInjection := 0
+			dspeak("Correct Injection")
+
+			return
+		}
+return
+
+
+
+getCurrentlyHighlightedUnitType()
+{
+	PreviousCritical := A_IsCritical
+	critical, on ;otherwise takes too long! still takes a long time for lots of selected units! 733ms for 118 selected units when sorting them
+
+	if (getSelectionHighlightedGroup() = 0 && getSelectionCount()) ; this is a trick to speed it up so if heaps of units are selected but only first highlighted, it wont sort them
+		return getUnitType( getSelectedUnitIndex(0) )
+
+	CurrentGroup := -1 ; so 1st timein for loop != ++ will be 0
+	if numGetUnitSelectionObject(oSelection, "Sort") ; returns selection count
+		for index, Unit in oSelection.Units
+		{
+			if (unit.type != previousType)
+			{
+				CurrentGroup++	
+				previousType := unit.type
+				if (CurrentGroup = oSelection.HighlightedGroup)
+				{
+					Critical %PreviousCritical%
+					return Unit.Type
+				}
+			}
+		}
+	Critical %PreviousCritical%
+	Return 0 ;either error or no units selected
+}
+
+isZerguserCastingOrBuilding()
+{	
+	Local type := getCurrentlyHighlightedUnitType()
+	if (type = A_UnitID["Drone"] || type = A_UnitID["Queen"] || type = A_UnitID["Infestor"] || type = A_UnitID["Viper"]  || type = A_UnitID["Overseer"]                   )
+		return pointer(GameIdentifier, P_IsUserCasting, O1_IsUserCasting, O2_IsUserCasting, O3_IsUserCasting, O4_IsUserCasting) ; returns 1 for burrowed units  or buildings being built or working
+	else if (type = A_UnitID["InfestorBurrowed"])
+	{
+		local Pointer := pointer(GameIdentifier, P_IsCursorReticle, O1_IsCursorReticle)
+		return ReadMemory(Pointer + O2_IsCursorReticle, GameIdentifier, 1)
+	}
+	else return 0
+}
+
 	
 
 ;----------------------
@@ -1947,12 +2031,14 @@ GuiReturn:
 
 OptionsGuiClose:
 OptionsGuiEscape:
+Gui, Options:-Disabled  
 Gui Destroy
 Gosub pre_startup	;so the correct values get read back for time *1000 conversion from ms/s vice versa
 Return				
 
 GuiClose:
 GuiEscape:
+	Gui, Options:-Disabled ; as the colour selector comes here, no need to reenable the options
 	Gui Destroy
 Return	
 
@@ -2117,6 +2203,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	
 	;[Advanced Auto Inject Settings]
 	IniRead, auto_inject_sleep, %config_file%, Advanced Auto Inject Settings, auto_inject_sleep, 50
+	IniRead, CanQueenMultiInject, %config_file%, Advanced Auto Inject Settings, CanQueenMultiInject, 1
 	IniRead, drag_origin, %config_file%, Advanced Auto Inject Settings, drag_origin, Left
 
 	;[Read Opponents Spawn-Races]
@@ -2365,9 +2452,16 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, UnitHighlightList1, %config_file%, %section%, UnitHighlightList1, SporeCrawler, SporeCrawlerUprooted, MissileTurret, PhotonCannon, Observer	;the list
 	IniRead, UnitHighlightList2, %config_file%, %section%, UnitHighlightList2, DarkTemplar, Changeling, ChangelingZealot, ChangelingMarineShield, ChangelingMarine, ChangelingZerglingWings, ChangelingZergling
 	IniRead, UnitHighlightList3, %config_file%, %section%, UnitHighlightList3, %A_Space%
+	IniRead, UnitHighlightList4, %config_file%, %section%, UnitHighlightList4, %A_Space%
+	IniRead, UnitHighlightList5, %config_file%, %section%, UnitHighlightList5, %A_Space%
+
 	IniRead, UnitHighlightList1Colour, %config_file%, %section%, UnitHighlightList1Colour, 0xFFFFFFFF  ;the colour
 	IniRead, UnitHighlightList2Colour, %config_file%, %section%, UnitHighlightList2Colour, 0xFFFF00FF 
 	IniRead, UnitHighlightList3Colour, %config_file%, %section%, UnitHighlightList3Colour, 0xFF09C7CA 
+	IniRead, UnitHighlightList4Colour, %config_file%, %section%, UnitHighlightList4Colour, 0xFFFFFF00
+	IniRead, UnitHighlightList5Colour, %config_file%, %section%, UnitHighlightList5Colour, 0xFF00FFFF
+
+
 	IniRead, UnitHighlightExcludeList, %config_file%, %section%, UnitHighlightExcludeList, CreepTumor, CreepTumorBurrowed
 	IniRead, DrawMiniMap, %config_file%, %section%, DrawMiniMap, 1
 	IniRead, TempHideMiniMapKey, %config_file%, %section%, TempHideMiniMapKey, !Space
@@ -2593,6 +2687,7 @@ ini_settings_write:
 
 	;[Advanced Auto Inject Settings]
 	IniWrite, %auto_inject_sleep%, %config_file%, Advanced Auto Inject Settings, auto_inject_sleep
+	IniWrite, %CanQueenMultiInject%, %config_file%, Advanced Auto Inject Settings, CanQueenMultiInject
 	IniWrite, %drag_origin%, %config_file%, Advanced Auto Inject Settings, drag_origin
 
 	;[Read Opponents Spawn-Races]
@@ -2784,9 +2879,15 @@ ini_settings_write:
 	IniWrite, %UnitHighlightList1%, %config_file%, %section%, UnitHighlightList1	;the list
 	IniWrite, %UnitHighlightList2%, %config_file%, %section%, UnitHighlightList2
 	IniWrite, %UnitHighlightList3%, %config_file%, %section%, UnitHighlightList3
+	IniWrite, %UnitHighlightList4%, %config_file%, %section%, UnitHighlightList4
+	IniWrite, %UnitHighlightList5%, %config_file%, %section%, UnitHighlightList5
+
 	IniWrite, %UnitHighlightList1Colour%, %config_file%, %section%, UnitHighlightList1Colour ;the colour
 	IniWrite, %UnitHighlightList2Colour%, %config_file%, %section%, UnitHighlightList2Colour
 	IniWrite, %UnitHighlightList3Colour%, %config_file%, %section%, UnitHighlightList3Colour
+	IniWrite, %UnitHighlightList4Colour%, %config_file%, %section%, UnitHighlightList4Colour
+	IniWrite, %UnitHighlightList5Colour%, %config_file%, %section%, UnitHighlightList5Colour
+
 	IniWrite, %UnitHighlightExcludeList%, %config_file%, %section%, UnitHighlightExcludeList
 	IniWrite, %DrawMiniMap%, %config_file%, %section%, DrawMiniMap
 	IniWrite, %TempHideMiniMapKey%, %config_file%, %section%, TempHideMiniMapKey
@@ -2818,9 +2919,10 @@ ini_settings_write:
 			list := ""
 		}
 	}
-
 	IF (Tmp_GuiControl = "save" or Tmp_GuiControl = "Apply")
 	{
+		if (time && alert_array[GameType, "Enabled"])
+			 doUnitDetection(unit, type, owner, "Save")
 		Tmp_GuiControl := ""
 		CreateHotkeys()	; to reactivate the hotkeys
 		UserSavedAppliedSettings := 1
@@ -2928,7 +3030,8 @@ Gui, Tab,  Auto
 				Gui, Add, Edit, Number Right xs+125 yp-2 w45 vEdit_pos_var 
 					Gui, Add, UpDown,  Range1-100000 vAuto_inject_sleep, %auto_inject_sleep%
 					GuiControlGet, settingsR, Pos, Edit_pos_var ;XTabX = x loc
-			
+				Gui, Add, Checkbox, x%XTab2X% y+25 vCanQueenMultiInject checked%CanQueenMultiInject%,
+				Gui, Add, Text, x+0 yp-5, Queen Can Inject`nMultiple Hatcheries ; done as checkbox with 2 lines text is too close to checkbox
 	
 Gui, Add, GroupBox, w200 h240 ys xs+210 section, Backspace && Forced Setup
 		Gui, Add, Text, xs+10 yp+25, Drag Origin:
@@ -3652,45 +3755,59 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||Overla
 
 Gui, Tab, MiniMap
 	
-	Gui, Add, Checkbox, X%XTabX% Y+20 vDrawMiniMap Checked%DrawMiniMap% gG_GuiSetupDrawMiniMapDisable, Enable MiniMap
-	Gui, Add, Checkbox, xp+20 Y+10 vDrawSpawningRaces Checked%DrawSpawningRaces%, Display Spawning Races
+	CurrentGuiTabX := XTabX -5
+	Gui, Add, Checkbox, X%CurrentGuiTabX% Y+15 vDrawMiniMap Checked%DrawMiniMap% gG_GuiSetupDrawMiniMapDisable, Enable MiniMap
+	Gui, Add, Checkbox, xp+20 Y+5 vDrawSpawningRaces Checked%DrawSpawningRaces%, Display Spawning Races
 	Gui, Add, Checkbox, vDrawAlerts Checked%DrawAlerts%, Display Alerts
-		
-	Gui, add, text, yp+30 X%XTabX%, Exclude Units:
 
-		Gui, add, text, y+15 X%XTabX%, Units:
+
+		Gui, add, text, y+20 X%CurrentGuiTabX% w45, Exclude:
 		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightExcludeList, %UnitHighlightExcludeList%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightExcludeList,  Edit 
 	
-	Gui, add, text, y+20 X%XTabX%, Highlight Units:
-		Gui, add, text, y+15 X%XTabX%, Units:
+		Gui, add, text, y+25 X%CurrentGuiTabX%, Highlight:
 		Gui, Add, Edit, yp-2 x+10 w300 section  center r1 vUnitHighlightList1, %UnitHighlightList1%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList1,  Edit
-		Gui, add, text, y+9 X%XTabX%, Colour:
+		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
 		Gui, Add, Picture, xs yp-4 w300 h22 0xE HWND_UnitHighlightList1Colour v#UnitHighlightList1Colour gColourSelector ;0xE required for GDI
 		paintPictureControl(_UnitHighlightList1Colour, UnitHighlightList1Colour)	
 
-		Gui, add, text, y+25 X%XTabX%, Units:
+		Gui, add, text, y+12 X%CurrentGuiTabX%, Highlight:
 		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightList2, %UnitHighlightList2%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList2,  Edit
-		Gui, add, text, y+9 X%XTabX%, Colour:
+		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
 		Gui, Add, Picture, xs yp-4 w300 h22 0xE HWND_UnitHighlightList2Colour v#UnitHighlightList2Colour gColourSelector ;0xE required for GDI
 		paintPictureControl(_UnitHighlightList2Colour, UnitHighlightList2Colour)		
-		Gui, add, text, y+25 X%XTabX%, Units:
+		Gui, add, text, y+12 X%CurrentGuiTabX%, Highlight:
 		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightList3, %UnitHighlightList3%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList3,  Edit
-		Gui, add, text, y+9 X%XTabX%, Colour:
+		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
 		Gui, Add, Picture, xs yp-4 w300 h22 0xE HWND_UnitHighlightList3Colour v#UnitHighlightList3Colour gColourSelector ;0xE required for GDI
 		paintPictureControl(_UnitHighlightList3Colour, UnitHighlightList3Colour)
+		
+		Gui, add, text, y+12 X%CurrentGuiTabX%, Highlight:
+		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightList4, %UnitHighlightList4%
+		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList4,  Edit
+		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
+		Gui, Add, Picture, xs yp-4 w300 h22 0xE HWND_UnitHighlightList4Colour v#UnitHighlightList4Colour gColourSelector ;0xE required for GDI
+		paintPictureControl(_UnitHighlightList4Colour, UnitHighlightList4Colour)	
+
+		Gui, add, text, y+12 X%CurrentGuiTabX%, Highlight:
+		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightList5, %UnitHighlightList5%
+		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList5,  Edit
+		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
+		Gui, Add, Picture, xs yp-4 w300 h22 0xE HWND_UnitHighlightList5Colour v#UnitHighlightList5Colour gColourSelector ;0xE required for GDI
+		paintPictureControl(_UnitHighlightList5Colour, UnitHighlightList5Colour)	
+
 		Gui, Font, s8 
-		Gui, add, text, x+5 yp+5, <--- Click Me
+		Gui, add, text, x+3 yp+5, <--- Click Me
 		Gui, Font, norm 
 	
 	
-	Gui, Add, Text, Y70 x370, Refresh Rate (ms):
+	Gui, Add, Text, Y50 x367, Refresh Rate (ms):
 		Gui, Add, Edit, Number Right x+20 yp-2 w55 vTT_MiniMapRefresh
 			Gui, Add, UpDown,  Range1-1500 vMiniMapRefresh, %MiniMapRefresh%	
-	Gui, Add, Text, x370 yp+30, Hide MiniMap:
+	Gui, Add, Text, x367 yp+30, Hide MiniMap:
 	Gui, Add, Edit, Readonly yp-2 xp+80 center w90 vTempHideMiniMapKey gedit_hotkey, %TempHideMiniMapKey%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#TempHideMiniMapKey,  Edit 		
 		
@@ -3819,6 +3936,7 @@ auto_inject_alert_TT := "This alert will sound X seconds after your last auto in
 auto_inject_time_TT := "This is in 'SC2' Seconds."
 #cast_inject_key_TT := cast_inject_key_TT := "This Hotkey is ONLY active while playing as zerg!"
 Auto_inject_sleep_TT := "Lower this to make the inject round faster, BUT this will make it more obvious that it is being automated!"
+CanQueenMultiInject_TT := "During minimap injects (and Forced-Injects) a queen may attempt to inject multiple hatcheries providing:`nShe is the only nearby queen and she has enough energy.`n`nThis may increase the chance of having queens go walkabouts (especially during a forced inject) - but so far I have not observed this during testing. "
 Simulation_speed_TT := "How fast the mouse moves during inject rounds. 0 = Fastest - try 1,2 or 3 if you're having problems."
 Drag_origin_TT := "This sets the origin of the box drag to the top left or right corners. Hence making it compatible with observer panel hacks."
 manual_inject_time_TT := "The time between alerts."
@@ -3951,23 +4069,33 @@ g_GuiSetupDrawMiniMapDisable:
 	GuiControlGet, Checked, ,DrawMiniMap 
 	if !Checked
 	{	GUIControl, Disable, DrawSpawningRaces
-		GUIControl, Disable, DrawAlerts		
+		GUIControl, Disable, DrawAlerts
+	
 		GUIControl, Disable, UnitHighlightExcludeList
 		GUIControl, Disable, #UnitHighlightExcludeList
-		GUIControl, Disable, UnitHighlightList1
-		GUIControl, Disable, #UnitHighlightList1
-		GUIControl, Disable, UnitHighlightList2
-		GUIControl, Disable, #UnitHighlightList2
+
+
+		list := "UnitHighlightList|#UnitHighlightList"
+		loop, parse, list, |
+			loop, 5 ; as 5 colour indexes
+			{
+				variable := A_LoopField A_Index
+				GUIControl, Disable, %variable%
+			}
+
 	}
 	Else
 	{	GUIControl, Enable, DrawSpawningRaces
 		GUIControl, Enable, DrawAlerts
 		GUIControl, Enable, UnitHighlightExcludeList
 		GUIControl, Enable, #UnitHighlightExcludeList
-		GUIControl, Enable, UnitHighlightList1
-		GUIControl, Enable, #UnitHighlightList1
-		GUIControl, Enable, UnitHighlightList2
-		GUIControl, Enable, #UnitHighlightList2
+		list := "UnitHighlightList|#UnitHighlightList"
+		loop, parse, list, |
+			loop, 5 ; as 5 colour indexes
+			{
+				variable := A_LoopField A_Index
+				GUIControl, Enable, %variable%
+			}
 	}
 Return	
 g_GuiSetupResetPixelColour:
@@ -4503,7 +4631,7 @@ WM_MOUSEMOVE()
 
     SetTimer, DisplayToolTip, Off
 	Try	ToolTip % %CurrControl%_TT  ; try guards against illegal character error
-    SetTimer, RemoveToolTip, 6000
+    SetTimer, RemoveToolTip, 10000
     return
 
     RemoveToolTip:
@@ -4511,6 +4639,34 @@ WM_MOUSEMOVE()
     ToolTip
     return
 }
+
+g_UnitFilterInfo:
+IfWinExist, MT Unit Filter Info
+{
+	WinActivate
+	Return 									; prevent error due to reloading gui 
+}
+Gui, UnitFilterInfo:New
+Text := "
+	( LTrim
+		These filters will remove the selected units from the unit panel.
+
+		The unit panel displays two types of units, those which exist on the map (or are completed) and those which are being built (mainly buildings).
+
+		For each race there are two filters which are always active.
+		Filter 1: 'Completed' - This will remove completed (or fully built) units of the selected types.
+
+		Filter 2: 'Under Construction' - This will remove units which are under construction/being built.
+
+		Please Note: 
+
+		Not all of the listed units will appear in the unit panel. For example, having a 'marine' in the under construction panel will do nothing.
+		Hence it is best to actually use the unit panel first and then decide on which units you wish to filter.
+	)"
+
+Gui, Add, Edit, x12 y+10 w350 h450 readonly -E0x200, % Text
+Gui, UnitFilterInfo:Show,, MT Unit Filter Info
+return
 
 
 g_GUICustomUnitPanel:
@@ -4526,8 +4682,9 @@ Gui, Add, Text, x50 y+20 w60, Race:
 Gui, Add, DropDownList, x+15 vGUI_UnitPanelRace gg_UnitPanelGUI, Terran||Protoss|Zerg
 Gui, Add, Text, x50 y+15 w60, Unit Filter: 
 Gui, Add, DropDownList, x+15 vGUI_UnitPanelListType gg_UnitPanelGUI, Completed||Under construction
-Gui, Add, Button, x+20 y20 w50   gg_SaveCustomUnitPanelFilter,  Save 
+Gui, Add, Button, x+15 y20 w50   gg_SaveCustomUnitPanelFilter,  Save 
 Gui, Add, Button, xp y+13 w50  gGuiClose,  Cancel 
+Gui, Add, Button, x+10 yp w50  gg_UnitFilterInfo,  Info 
 
 Gui, Add, ListView, x30 y90 r15 w160 Sort vUnitPanelFilteredUnitsCurrentRace gg_UnitPanelRemoveUnit, Currently Filtered ; This stores the currently displayed race which is  being displayed in the filtered LV as gui submit doesnt affect listview variable
 
@@ -5438,7 +5595,7 @@ getTime()
 }
 
 
-numGetUnitSelectionObject(ByRef aSelection, GetPosition = 0)
+numGetUnitSelectionObject(ByRef aSelection, Sort = 0)
 {	GLOBAL O_scTypeCount, O_scTypeHighlighted, S_scStructure, O_scUnitIndex, GameIdentifier, B_SelectionStructure
 	aSelection := []
 	selectionCount := getSelectionCount()
@@ -5449,12 +5606,14 @@ numGetUnitSelectionObject(ByRef aSelection, GetPosition = 0)
 	aSelection["HighlightedGroup"]	:= numget(MemDump, O_scTypeHighlighted, "Short")
 
 	aSelection.units := []
-	if GetPosition 		
+	if Sort 		
 	{
 		loop % aSelection["Count"]
 		{
 			unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
-			aSelection.units.insert({"Type": getUnitType(unit), "X": getUnitPositionX(unit), "Y": getUnitPositionY(unit)})	;NOTE this object will be accessed differently than the one below
+			aSelection.units.insert({"Type": getUnitType(unit), "Index": unit, "Priority": getSubGroupPriority(unit)})	;NOTE this object will be accessed differently than the one below
+			Sort2DArray(aSelection.units, "Index") ; sort in ascending order
+			Sort2DArray(aSelection.units, "Priority", 0)	; sort in descending order
 		}
 	}
 	else
@@ -5963,7 +6122,11 @@ getEnemyUnitsMiniMap(byref A_MiniMapUnits)
            Else If type in %ActiveUnitHighlightList2%
               Colour := UnitHighlightList2Colour                 
            Else If type in %ActiveUnitHighlightList3%
-              Colour := UnitHighlightList3Colour           
+              Colour := UnitHighlightList3Colour                    
+           Else If type in %ActiveUnitHighlightList4%
+              Colour := UnitHighlightList4Colour                    
+           Else If type in %ActiveUnitHighlightList5%
+              Colour := UnitHighlightList5Colour    
            Else if PlayerColours
               Colour := 0xcFF HexColour[a_Player[Owner, "Colour"]]   ;FF=Transparency
            Else Colour := 0xcFF HexColour["Red"]  
@@ -6676,7 +6839,8 @@ CreateHotkeys()
 		hotkey, %inject_reset_key%, inject_reset, on
 	}	
 	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
-		hotkey, %castSelectArmy_key%, g_SelectArmy, on
+		hotkey, %castSelectArmy_key%, g_SelectArmy, on  ; buffer to make double tap better remove 50ms delay
+	;	hotkey, %castSelectArmy_key%, g_SelectArmy, on, B ; buffer to make double tap better remove 50ms delay
 	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
 		hotkey, %castSplitUnit_key%, g_SplitUnits, on	
 	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable
@@ -6795,35 +6959,32 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		if ForceInject
 			send % BI_create_camera_pos_x 	;just incase it stuffs up and moves the camera
 		send % MI_Queen_Group
-		SkipUsedQueen := [] ; blank the queen list
-		HatchIndex := getBuildingList(A_unitID["Hatchery"], A_unitID["Lair"], A_unitID["Hive"]) 
-		if ((QueenIndex := filterSlectionTypeByEnergy(25, A_unitID["Queen"]))) ; 25=Energy Filter
+		
+		 oHatcheries := [] ; Global used to check if successfuly without having to iterate again
+		local BaseCount := zergGetHatcheriesToInject(oHatcheries)
+		Local oSelection := []
+		Local SkipUsedQueen := []
+		local MissedHatcheries := []
+	    randomcount := 0
+		If(Local QueenCount := getSelectedQueensWhichCanInject(oSelection))
 		{
-			loop, parse, HatchIndex, | 
-			{	
-				CurrentHatch := A_LoopField
-				loop, parse, QueenIndex, | 
+			For Index, CurrentHatch in oHatcheries
+			{
+				Local := FoundQueen := 0
+				For Index, Queen in oSelection.Queens
 				{
-					IF SkipUsedQueen[A_LoopField] ;This queen has already Injected
-						Continue
-					Else If areUnitsNearEachOther(A_LoopField, CurrentHatch, MI_QueenDistance, MI_QueenDistance) && isInControlGroup(MI_Queen_Group, A_LoopField) 		
+					if SkipUsedQueen[Queen.unit]
+						continue
+					if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && isInControlGroup(MI_Queen_Group, Queen.unit) && Queen.Energy >= 25)
 					{
-						SkipUsedQueen[A_LoopField] := 1
-						Queenused := SkipUsedQueen[A_LoopField]
-						getMiniMapMousePos(CurrentHatch, click_x, click_y)	
-						Random, Random , -1, 1
-						random := 0
-					;	Send, %Inject_spawn_larva%
+						FoundQueen := CurrentHatch.NearbyQueen := SkipUsedQueen[Queen.unit] := 1
 						send % Inject_spawn_larva
-						
-						click_x := click_x + Random , click_y := click_y + Random 	
+						click_x := CurrentHatch.MiniMapX, click_y := CurrentHatch.MiniMapY
 						If HumanMouse
 							MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 						send {click Left %click_x%, %click_y%}
-						; send {click  %start_x%, %start_y%, 0}
-
 						Sleep, %sleepTime% 
-
+						Queen.Energy -= 25	
 						If ForceInject 		; this will update cursos position if user moves it during a force inject
 						{
 							MouseGetPos, xNew, yNew
@@ -6831,11 +6992,59 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 						}
 						Break
 					}
-				}	
-			}	
+					else CurrentHatch.NearbyQueen := 0
+				}
+				if !FoundQueen
+					MissedHatcheries.insert(CurrentHatch)
+			}
+		;	/* ; THIS Is trying to do multi injects
+			if (MissedHatcheries.maxindex() && CanQueenMultiInject)
+			{
+			local	QueenMultiInjects := []
+				For Index, Queen in oSelection.Queens
+				{
+					local MaxInjects := Floor(Queen.Energery / 25)
+					local CurrentQueenInjectCount := 0
+					For Index, CurrentHatch in MissedHatcheries 
+					{
+						if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && isInControlGroup(MI_Queen_Group, Queen.unit) && Queen.Energy >= 25)
+						{
+							if !isobject(QueenMultiInjects[Queen.unit])
+								QueenMultiInjects[Queen.unit] := []
+							QueenMultiInjects[Queen.unit].insert(CurrentHatch)
+							Queen.Energy -= 25
+							CurrentQueenInjectCount ++
+							if (CurrentQueenInjectCount = MaxInjects)
+								break
+						}
+
+					}
+				}
+				For QueenIndex, QueenObject in QueenMultiInjects
+					for index, CurrentHatch in QueenObject
+					{
+						if (A_index = 1)
+							ClickSelectUnitsPortriat(QueenIndex, 10) 
+						send % Inject_spawn_larva ;always need to send this, otherwise might left click minimap for somereason
+						click_x := CurrentHatch.MiniMapX, click_y := CurrentHatch.MiniMapY
+						If HumanMouse
+							MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
+						send +{click Left %click_x%, %click_y%}	
+						Sleep, %sleepTime% 
+						if (A_Index = QueenUnit.maxIndex())
+							send % MI_Queen_Group
+						If ForceInject 		; this will update cursos position if user moves it during a force inject
+						{
+							MouseGetPos, xNew, yNew
+							start_x += xNew - click_x , start_y += yNew - click_y
+						}
+					}					
+	
+			}
+			if ForceInject
+				send % BI_camera_pos_x
+
 		}
-		if ForceInject
-			send % BI_camera_pos_x
 	}	
 	else if (Method="Backspace Adv") || (Method = "Backspace CtrlGroup") ;cos i changed the name in an update
 	{		
@@ -6926,6 +7135,101 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		while (A_Index <= HighlightedGroup)
 			send {Tab}
 }
+
+
+
+
+ zergGetHatcheriesToInject(byref Object)
+ { 	global A_unitID
+ 	Object := []
+ 	aZergMains := [A_unitID["Hatchery"], A_unitID["Lair"], A_unitID["Hive"]]
+ 	Unitcount := DumpUnitMemory(MemDump)
+ 	while (A_Index <= Unitcount)
+ 	{
+ 		unit := A_Index - 1
+ 		if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(owner := numgetUnitOwner(MemDump, Unit))
+	       Continue
+	    pUnitModel := numgetUnitModelPointer(MemDump, Unit)
+	    Type := numgetUnitModelType(pUnitModel)
+	    For index, buildingType in aZergMains
+		{	
+			IF (type = buildingType && !isTargetUnderConstruction(TargetFilter))
+			{
+				MiniMapX := x := numGetUnitPositionXFromMemDump(MemDump, Unit)
+				MiniMapY := y := numGetUnitPositionYFromMemDump(MemDump, Unit)
+				z :=  numGetUnitPositionZFromMemDump(MemDump, Unit)
+				convertCoOrdindatesToMiniMapPos(MiniMapX, MiniMapY)
+				isInjected := numGetIsHatchInjectedFromMemDump(MemDump, Unit)
+				Object.insert( {  "Unit": unit 
+								, "x": x
+								, "y": y
+								, "z": z
+								, "MiniMapX": MiniMapX
+								, "MiniMapY": MiniMapY 
+								, "isInjected": isInjected } )
+
+			}	
+		}
+ 	}
+ 	return Object.maxindex()
+ }
+
+
+ getSelectedQueensWhichCanInject(ByRef aSelection)
+ {	GLOBAL A_unitID, O_scTypeCount, O_scTypeHighlighted, S_scStructure, O_scUnitIndex, GameIdentifier, B_SelectionStructure
+ 	, S_uStructure, GameIdentifier 
+	aSelection := []
+	selectionCount := getSelectionCount()
+	ReadRawMemory(B_SelectionStructure, GameIdentifier, MemDump, selectionCount * S_scStructure + O_scUnitIndex)
+	aSelection["Count"]	:= numget(MemDump, 0, "Short")
+	aSelection["Types"]	:= numget(MemDump, O_scTypeCount, "Short")
+	aSelection["HighlightedGroup"]	:= numget(MemDump, O_scTypeHighlighted, "Short")
+	aSelection.Queens := []
+
+	loop % aSelection["Count"]
+	{
+		unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
+		if (isUnitLocallyOwned(Unit) &&  A_unitID["Queen"] = getUnitType(unit) && ((energy := getUnitEnergy(unit)) >= 25))
+			aSelection.Queens.insert(objectGetUnitXYZAndEnergy(unit))
+	}
+	return 	aSelection.Queens.maxindex()
+ }
+
+isQueenNearHatch(Queen, Hatch, MaxXYdistance) ; takes objects which must have keys of x, y and z
+{
+	x_dist := Abs(Queen.X - Hatch.X)
+	y_dist := Abs(Queen.Y- Hatch.Y)																									
+																								; there is a substantial difference in height even on 'flat ground' - using a max value of 1 should give decent results
+	Return Result := (x_dist > MaxXYdistance) || (y_dist > MaxXYdistance) || (Abs(Queen.Z - Hatch.Z) > 1) ? 0 : 1 ; 0 Not near
+}
+
+ objectGetUnitXYZAndEnergy(unit) ;this will dump just a unit
+ {	Local UnitDump
+	ReadRawMemory(B_uStructure + unit * S_uStructure, GameIdentifier, UnitDump, S_uStructure)
+	Local x := numget(UnitDump, O_uX, "int")/4096, y := numget(UnitDump, O_uY, "int")/4096, Local z := numget(UnitDump, O_uZ, "int")/4096
+	Local Energy := numget(UnitDump, O_uEnergy, "int")/4096
+	return { "unit": unit, "X": x, "Y": y, "Z": z, "Energy": energy}
+ }
+
+ numGetUnitPositionXFromMemDump(ByRef MemDump, Unit)
+ {	global
+ 	return numget(MemDump, Unit * S_uStructure + O_uX, "int")/4096
+ }
+ numGetUnitPositionYFromMemDump(ByRef MemDump, Unit)
+ {	global
+ 	return numget(MemDump, Unit * S_uStructure + O_uY, "int")/4096
+ }
+ numGetUnitPositionZFromMemDump(ByRef MemDump, Unit)
+ {	global
+ 	return numget(MemDump, Unit * S_uStructure + O_uZ, "int")/4096
+ }
+ numGetIsHatchInjectedFromMemDump(ByRef MemDump, Unit)
+ {	global ; 1 byte = 18h chrono for protoss structures, 48h when injected for zerg -  10h normal state
+ 	return (48 = numget(MemDump, Unit * S_uStructure + O_uChronoAndInjectState, "UChar")/4096) ? 1 : 0
+ }
+
+
+
 
 
 SortUnitsByAge(unitlist="", units*)
@@ -7127,7 +7431,10 @@ LoadMemoryAddresses(SC2EXE)
 		O2_IsUserCasting := 0x19C 			; auto casting e.g. swarm host displays 1 always 
 		O3_IsUserCasting := 0x228
 		O4_IsUserCasting := 0x168
-
+	
+		P_IsCursorReticle:= SC2EXE + 0x021857EC	; 1 byte	;seems to return 1 when cursors is reticle but not for inject larva on queen
+		O1_IsCursorReticle := 0x1C 					; also retursn 1 for burrowed swarm hosts though - auto cast? (and fungal - but reticle present for fungal)
+		O2_IsCursorReticle := 0x14 					; 0 when placing a building
 	return	
 	
 	
@@ -7161,6 +7468,7 @@ g_SelectArmy:
 	ReleaseModifiers(ModifierBeepSelectArmy)
 	Thread, NoTimers, true
 	SetBatchLines, -1
+	DoublteTap := 0
 	BufferInput(aButtons.List, "Buffer", 0)
 	If !isobject(SelectArmy)
 		SelectArmy := []
@@ -7168,6 +7476,7 @@ g_SelectArmy:
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
 	if (A_TickCount - SelectArmy.LastHotKeyPress < 700 && A_PriorKey = A_ThisHotkey)
 	{
+		DoublteTap := 1
 		if SelectArmyControlGroupEnable 	; && getControlGroupCount() - cant use this as some poeple wont have keys where 1 = group 1 etc or use ` key
 		{
 			SelectArmy.LastHotKeyPress := A_TickCount
@@ -7199,7 +7508,10 @@ g_SelectArmy:
 	BlockInput, MouseMoveOff
 	SetBatchLines, %SetBatchLines%
 	BufferInput(aButtons.List, "Off")
-	KeyWait, %castSelectArmy_key%, T3	;needed if the user just holds down the hotkey - can stuff things up - BUT THE buffer thing can still stuff things?
+	if !DoublteTap   ;needed if the user just holds down the hotkey - can stuff things up - BUT THE buffer thing can still stuff things?
+		KeyWait, %castSelectArmy_key%, T.1	;needed if the user just holds down the hotkey for ages - can stuff things up the hotkeys go weird - BUT THE buffer thing can still stuff things?
+	Else
+		KeyWait, %castSelectArmy_key%, T1  ; actually i dont think this or the above is really needed
 return
 
 getScreenAspectRatio()
@@ -7271,6 +7583,28 @@ DeselectUnitsFromPanel(a_RemoveUnits, sleep=20)
 	}	
 	return
 }
+
+ClickSelectUnitsPortriat(unit, sleep=20, ClickModifier="")	;can put ^ to do a control click
+{
+	SortSelectedUnits(a_SelectedUnits)
+	for SelectionIndex, objSelected in a_SelectedUnits
+		if (unit = objSelected.unit && SelectionIndex < 144 ) ;can only deselect up to unitselectionindex 143 (as thats the maximun on the card)
+		{
+			if ClickUnitPortrait(SelectionIndex - 1, X, Y, Xpage, Ypage) ; -1 as selection index begins at 0 i.e 1st unit at pos 0 top left
+				send {click Left %Xpage%, %Ypage%} ;clicks on the page number
+			if ClickModifier
+				send %ClickModifier%{click Left %X%, %Y%} 	;shift clicks the unit
+			else send {click Left %X%, %Y%} 	;shift clicks the unit
+			sleep, sleep
+		}
+	if getUnitSelectionPage()	;ie slection page is not 0 (hence its not on 1 (1-1))
+	{
+		ClickUnitPortrait(blank,X,Y, Xpage, Ypage, 1) ; this selects page 1 when done
+		send {click Left %Xpage%, %Ypage%}
+	}	
+	return
+}
+
 
 ClickUnitPortrait(SelectionIndex=0, byref X=0, byref Y=0, byref Xpage=0, byref Ypage=0, ClickPageTab = 0) ;SelectionIndex begins at 0 topleft unit
 {
@@ -7597,7 +7931,7 @@ isUnitChronoed(unit)
 ; hatch/lair/hive unit structure + 0xE2 = inject state 
 isHatchInjected(Hatch)
 {	global	; 1 byte = 18h chrono for protoss structures, 48h when injected for zerg -  10h normal state
-	if (48 = ReadMemory(B_uStructure + unit * S_uStructure + O_uChronoAndInjectState, GameIdentifier, 1))	
+	if (48 = ReadMemory(B_uStructure + Hatch * S_uStructure + O_uChronoAndInjectState, GameIdentifier, 1))	
 		return 1
 	else return 0
 }
@@ -7732,7 +8066,6 @@ getEnemyUnitCount(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUn
 	Return
 }
 
-
 FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPanelUnits, byref aUnitID, a_Player)	;care have used A_unitID everywhere else!!
 {	global aUnitInfo
 	;	aEnemyUnits[Owner, Type]
@@ -7797,13 +8130,6 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 			priorityObject[priority].remove(removeUnit, "")
 		}
 
-		for index, removeUnit in aUnitPanelUnits[race, "FilteredCompleted"]
-		{
-			removeUnit := aUnitID[removeUnit]
-			priority := aUnitInfo[removeUnit, "Priority"]
-			priorityObject[priority].remove(removeUnit, "")
-		}
-
 		for subUnit, mainUnit in aAddUnits[Race]
 		{
 			subunit := aUnitID[subUnit]
@@ -7825,7 +8151,12 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 			}	
 		}
 
-
+		for index, removeUnit in aUnitPanelUnits[race, "FilteredCompleted"]
+		{
+			removeUnit := aUnitID[removeUnit]
+			priority := aUnitInfo[removeUnit, "Priority"]
+			priorityObject[priority].remove(removeUnit, "")
+		}
 
 
 		for index, unit in aUnitOrder[race]
@@ -7838,8 +8169,6 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 			}		
 
 
-
-
 ;		for index, unit in aDeleteKeys												; **********	remove(unit, "") Removes an integer key and returns its value, but does NOT affect other integer keys.
 ;			priorityObject[aEnemyUnitPriorities[unit]].remove(unit, "")				;				as the keys are integers, otherwise it will decrease the keys afterwards by 1 for each removed unit!!!!													
 	}
@@ -7848,22 +8177,6 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 	{
 		race := a_Player[owner, "Race"]	
 		
-		for index, removeUnit in aUnitPanelUnits[race, "FilteredUnderConstruction"]
-		{
-			removeUnit := aUnitID[removeUnit]
-			priority := aUnitInfo[removeUnit, "Priority"]
-			priorityObject[priority].remove(removeUnit, "")
-		}
-
-
-		for index, unit in aUnitOrder[race]		;this will ensure the change in priority matches the changes made above to make the order correct, so they can be added together.
-			if (count := priorityObject[aUnitInfo[aUnitID[unit], "Priority"], aUnitID[unit]])
-			{
-				index := 0 - aUnitOrder[race].maxindex() + A_index ; hence so the first unit in array eg SCV will be on the left - last unit will have priority 0
-			 	priorityObject[index, aUnitID[unit]] := count 		;change priority to fake ones - so that Obital is on far left, followed by
-			 	priority := aUnitInfo[aUnitID[unit], "Priority"]		; PF and then CC
-			 	priorityObject[priority].remove(aUnitID[unit], "")	
-			}	
 		for subUnit, mainUnit in aAddConstruction[Race]
 		{
 			subunit := aUnitID[subUnit]
@@ -7881,6 +8194,23 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 				aEnemyBuildingConstruction[Owner, "TotalCount"] -= total 	;these counts still seem to be out, but works for zerg?
 			}		
 		}
+
+		for index, removeUnit in aUnitPanelUnits[race, "FilteredUnderConstruction"]
+		{
+			removeUnit := aUnitID[removeUnit]
+			priority := aUnitInfo[removeUnit, "Priority"]
+			priorityObject[priority].remove(removeUnit, "")
+		}
+
+		for index, unit in aUnitOrder[race]		;this will ensure the change in priority matches the changes made above to make the order correct, so they can be added together.
+			if (count := priorityObject[aUnitInfo[aUnitID[unit], "Priority"], aUnitID[unit]])
+			{
+				index := 0 - aUnitOrder[race].maxindex() + A_index ; hence so the first unit in array eg SCV will be on the left - last unit will have priority 0
+			 	priorityObject[index, aUnitID[unit]] := count 		;change priority to fake ones - so that Obital is on far left, followed by
+			 	priority := aUnitInfo[aUnitID[unit], "Priority"]		; PF and then CC
+			 	priorityObject[priority].remove(aUnitID[unit], "")	
+			}	
+
 	
 	}
 	return
@@ -8114,10 +8444,6 @@ isGatewayProducingOrConvertingToWarpGate(Gateway)
 }
 
 
-
-
-;0x3C89300
-;0x3C89368	0 when active
 
 ; //fold
 ; unit + 0xE2 ; 1 byte = 18h chrono for protoss structures 10h normal

@@ -34,6 +34,8 @@ CreateColourRainbow(_BAR)
 CreateSpectrum(_PRGS_, 255, 0, 0, , True, Height, Width)
 TransparencySlider := "0xFF" 
 Gui, Show, 
+Gui, +OwnerOptions
+Gui, Options:+Disabled
 return
 
 Invoke_Slide:	;colour chart

@@ -1,24 +1,47 @@
 V2.968		8/05/13
+
+New:
+	• Custom unit filter for unit panel:
+		- Found in the "Overlay" section in the options menu
+		- This prevents the selected units being displayed in the unit panel
+		- There are two active lists, one for existing units and the other for units under construction
+
 Fixes:
-	• A bug which resulted in already warned buildings being rewarned when the program was restarted during a match
+	• A bug which resulted in already warned buildings being re-warned when the program was restarted or settings changed/saved during a match
 		-This bug was introduced a couple of versions ago and I never noticed.
 	• A couple of errors in the default detection lists
-	• A bug in the unit detection GUI which could result in the unit lists being completely wrong when deleting certain warnings.
+	• A bug in the unit detection GUI which could result in the unit lists being completely wrong after deleting certain warnings.
 		- This bug has been around for a long time 
-		- I recommend anyone who uses this function should ensure that their warnings match the associated unitName or simply delete their config file and load the default ones which can then be altered.
+		- I request anyone who uses this function to ensure that their warnings match the associated unitName or simply delete their config file and load the default ones which can then be altered.
 		- If you find a bug with this GUI please report it.
 
+
 Changes:
+	• Added an additional two Minimap Unit Colour Highlight categories/lists
 	• Double tapping the Select Army Button will result in the camera moving to the army location.
 	• ChronoBoost Warpgates/Gateways
 		- Currently gateways are chronoed after warpgates and only if they're not already chronoed.
 		- In addition to this, gateways will only be chronoed if they have a unit in production or are morphing into a warpgate.
 	• Big speed increases for memory reads and their dependent functions - around 35% for a basic read and up to 1,900% for large iterations
 		- Although you will probably not notice this
+	Injects:
+		-General (minimap method):
+			+ Queens can now inject more than one hatch providing she:
+				- Is the only queen near the hatch
+				- Has enough engery for the additional injects
+				- The Checkbox under Injects->"Advanced settings"->"Queen can inject multiple hatcheries." is enabled.
+				Note: This may increase the chances of queens going walkabouts (especially during a forced inject) - but so far I have not observed this during testing.
+		- Forced/Fully-Automated:
+			+ 2 Seconds after an inject round the haterchies are checked for a successful inject
+				-If a queen is near an unsuccessful hatch, another inject round will be attempted for the missed hatcheries
+			+ Improved the method used to detect if a zerg player is attempting to cast a spell or place a building. 
+				- Previously injects would be postponed if a hatch was selected and it was building a queen or if  a burrowed swarmhost was selected
 
 	• Event Key delay
 
 	Note: I have changed a lot of things, so if anyone finds a new bug please report it!
+
+	select army hotkey works a lot better if user doesnt have a modifier
 
 V2.967		8/05/13
 Fixes:
