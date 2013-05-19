@@ -3,6 +3,7 @@ ColourSelectorSave:
 %LaunchedColour% := TransparencySlider colour ;save the new colour to the variable stored in the variablde :(
 LaunchedColour := "_"  LaunchedColour	;get the handle name
 paintPictureControl(%LaunchedColour%, colour, TransparencySlider, 300,22)
+Gui, Options:-Disabled  
 Gui, Destroy
 Return
 

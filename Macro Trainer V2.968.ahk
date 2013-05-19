@@ -16,7 +16,9 @@
 	Team send warn message after clicking building..maybe
 	remove 			dspeak("Correct Injection")
 	disable backspace adv
-	post russian character test
+	Add Tooltip to burrow
+	check queen tumour
+	need to find a bool value for queen laying tumour
 */
 
 
@@ -162,15 +164,19 @@ If (A_GuiControl = "Disable_Auto_Update" OR A_GuiControl = "Cancel_Auto_Update")
 
 If launch_settings
 	gosub options_menu
-CreateHotkeys()			;create them before launching the game incase users want to edit them
-Try hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and give it the highest possible priority
+
+
+Try hotkey, q, g_DoNothing  ; hotkeys  that contain q  give 'q' is not a valid hotkey on russian language settings
 	Catch, Error  ;error is an object
 	{
 	  clipboard := "Error: " error.message "`nLine: " error.line "`nExtra: "error.Extra
-	  msgbox % "There was an error while creating this hotkey.`n`nIf you are using a non-English language/character-set, I recommend you try changing your keyboard layout/language to English."
-	      . "`n`nThe error has been copied to your clipboard if you wish to report it.`n`nError: " error.message "`nLine: " error.line "`nSpecifically: " error.Extra
+	  msgbox % "There was an error while creating a hotkey.`n`nIf you are using a non-English language/character-set, I recommend you try changing your keyboard layout/language to English."
+	      . "`n`nThis error has been copied to your clipboard if you wish to report it.`n`nError: " error.message "`nLine: " error.line "`nSpecifically: " error.Extra
 	}
-	; it seems that some russian language keyboard layouts cause a prblem with <#q hotkey - think it might be the <#? pheraps its the q
+	; it seems that some russian language keyboard layouts cause a prblem with <#q hotkey
+Try hotkey, q, off ;disable the ruski guard test hotkey
+CreateHotkeys()			;create them before launching the game incase users want to edit them
+hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and give it the highest possible priority
 
 process, exist, %GameExe%
 If !errorlevel
@@ -314,12 +320,63 @@ ReleaseModifiersOld(Beep = 1, CheckIfCasting = 0)
 		sleep, 35	;give time for sc2 to update keystate - it can be a slower!
 }
 
-ReleaseModifiers(Beep = 1, CheckIfCasting = 0)
+
+
+;	This ReleaseModifiers function needs to wait an additional amount of time, as SC2 can be slow to 
+;	update its keystate and/or it buffers input/keys for a while.
+; 	I have added the AdditionalKeys which is mainly used for zerg burrow
+;	and i have provided an additional 15 ms sleep time if burrow is being held down
+
+ReleaseModifiers(Beep = 1, CheckIfCasting = 0, AdditionalKeys = "")
 {
+	GLOBAL HotkeysZergBurrow
 	startReleaseModifiers:
 	count := 0
 	firstRun++
-	while (iscasting := CheckIfCasting && isZerguserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
+	while getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
+	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
+	||  AdditionalKeys && (ExtraKeysDown := isaKeyPhysicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
+	|| (iscasting := CheckIfCasting && isZerguserCastingOrBuilding()) ; have this function last as it can take the longest if lots of units selected
+	{
+		count++
+		if (count = 1 && Beep) && !iscasting && !ExtraKeysDown && firstRun = 1	;wont beep if casting or burrow AKA 'extra key' is down
+			SoundPlay, %A_Temp%\ModifierDown.wav	
+		if ExtraKeysDown
+			LastExtraKeyHeldDown := ExtraKeysDown ; as ExtraKeysDown will get blanked in the loop preventing detection in the below if
+		else LastExtraKeyHeldDown := ""
+		sleep, 5
+	}
+
+	if count
+	{
+		if (LastExtraKeyHeldDown = HotkeysZergBurrow)
+			sleep 50
+		else sleep, 35	;give time for sc2 to update keystate - it can be a slower! 
+		Goto, startReleaseModifiers
+	}
+	return
+}
+
+isaKeyPhysicallyDown(Keys)
+{
+  if isobject(Keys)
+  {
+    for Index, Key in Keys
+      if getkeystate(Key, "P")
+        return key
+  }
+  else if getkeystate(Keys, "P")
+  return Keys ;keys!
+  return 0
+}
+
+
+ReleaseModifiersTest(Beep = 1, CheckIfCasting = 0)
+{
+	startReleaseModifiersTest:
+	count := 0
+	firstRun++
+	while (iscasting := CheckIfCasting && isZerguserCastingOrBuilding()) || getkeystate("R", "P")  || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
 	{
 		count++
@@ -332,10 +389,11 @@ ReleaseModifiers(Beep = 1, CheckIfCasting = 0)
 	{
 		if (firstRun = 1)
 			sleep, 35	;give time for sc2 to update keystate - it can be a slower! 
-		gosub, startReleaseModifiers
+		gosub, startReleaseModifiersTest
 	}
 	return
 }
+
 
 
 g_SendBaseCam:
@@ -912,13 +970,6 @@ BlockInput(Mode="Disable", byref L_Keys="", Delimiter="|") ; eg 	;	BlockInput("A
 Return
 }
 
-f2::
-Thread, NoTimers, true
-soundplay *-1
-sleep 4000
-soundplay *-1
-return
-
 
 
 ;this function has a problem with burrowing queens if user is spamming the r button. I think its might be on sc2s side, as the blocking seems to work!
@@ -926,7 +977,7 @@ return
 cast_ForceInject:
 cast_inject:
 	If (A_ThisLabel = "cast_ForceInject")
-		ReleaseModifiers(F_Inject_ModifierBeep, 1)	;note b4 critical section
+		ReleaseModifiers(F_Inject_ModifierBeep, 1, HotkeysZergBurrow)
 	else ReleaseModifiers(1,0)	;hence will cast if user presses f5 and a swarmhost is highlighted
 ;	Critical ;cant use with input buffer, as prevents hotkey threads launching and hence tracking input
 	Inject := []
@@ -980,7 +1031,7 @@ cast_inject:
 
 	SetBatchLines %SetBatchLines%
 	Thread, NoTimers, false
-	inject_set := time
+	inject_set := getTime()  ;** Note: Have to use gettime, as for forced ReleaseModifiers (via the iszergcasting) puts thread into critical, and then this thread turns off timers - so can result in the time being out and then having the next inject occuring too soon!
 	if auto_inject_alert
 		settimer, auto_inject, 250
 	If F_Inject_Enable
@@ -999,21 +1050,56 @@ cast_inject:
 	}
 Return
 
-g_ForceInjectSuccessCheck:
-	For Index, CurrentHatch in oHatcheries
-		if (CurrentHatch.NearbyQueen && !isHatchInjected(CurrentHatch.Unit)) ;probably should check if hatch is alive and still a hatch...
-		{
-			
-			AttemptCorrectInjection := 1
-			Gosub, cast_ForceInject
-			AttemptCorrectInjection := 0
-			dspeak("Correct Injection")
 
-			return
-		}
+
+
+g_ForceInjectSuccessCheck:
+
+	if (getBurrowedQueenCountInControlGroup(MI_Queen_Group, UnburrowedQueenCount) > 1)
+	{
+		TooManyBurrowedQueens := 1
+		SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
+		SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
+		ReleaseModifiers(0, 1, HotkeysZergBurrow)
+		Thread, NoTimers, true  ;cant use critical with input buffer, as prevents hotkey threads launching and hence tracking input
+		SetBatchLines -1		
+		send % "^" Inject_control_group
+		send % MI_Queen_Group
+		if UnburrowedQueenCount
+			send {Tab}
+		send %HotkeysZergBurrow%
+		send %Inject_control_group%	
+		TooManyBurrowedQueens := 0
+		SetBatchLines %SetBatchLines%
+		Thread, NoTimers, false
+	}
+	else TooManyBurrowedQueens := 0
+
+For Index, CurrentHatch in oHatcheries
+	if (CurrentHatch.NearbyQueen && !isHatchInjected(CurrentHatch.Unit)) ;probably should check if hatch is alive and still a hatch...
+	{
+		AttemptCorrectInjection := 1
+		Gosub, cast_ForceInject
+		AttemptCorrectInjection := 0
+		
+		dspeak("Correct Injection")
+
+		return
+	}
 return
 
 
+getBurrowedQueenCountInControlGroup(Group, ByRef UnburrowedCount="")
+{	GLOBAL A_unitID
+	UnburrowedCount := BurrowedCount := 0
+	numGetControlGroupnObject(oControlGroup, Group)
+	for index, unit in oControlGroup.units
+		if (unit.type = A_unitID.QueenBurrowed)
+			BurrowedCount ++
+		else if (unit.type = A_unitID.Queen)
+			UnburrowedCount++
+	return BurrowedCount
+}
 
 getCurrentlyHighlightedUnitType()
 {
@@ -2129,6 +2215,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, cast_inject_key, %config_file%, Auto Inject, auto_inject_key, F5
 	IniRead, Inject_control_group, %config_file%, Auto Inject, control_group, 9
 	IniRead, Inject_spawn_larva, %config_file%, Auto Inject, spawn_larva, v
+	IniRead, HotkeysZergBurrow, %config_file%, Auto Inject, HotkeysZergBurrow, r
 	
 	; [MiniMap Inject]
 	section := "MiniMap Inject"
@@ -2337,6 +2424,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, BlockingMouseKeys, %config_file%, %section%, BlockingMouseKeys, 1
 	IniRead, BlockingMultimedia, %config_file%, %section%, BlockingMultimedia, 1
 	IniRead, BlockingModifier, %config_file%, %section%, BlockingModifier, 1
+	IniRead, LwinDisable, %config_file%, %section%, LwinDisable, 1
 
 	aButtons := []
 	aButtons.List := getKeyboardAndMouseButtonArray(BlockingStandard*1 + BlockingFunctional*2 + BlockingNumpad*4
@@ -2566,7 +2654,7 @@ ini_settings_write:
 		Catch, Error	;error is an object
 		{
 			clipboard := "Error: " error.message "`nLine: " error.line "`nExtra: "error.Extra
-			msgbox % "There was an error while updating the hotkey state.`nYour previous hotkeys may still be active until you restart.`nThis error is NOT very important.`nPlease report this error (it has been copied to the clipboard).`n`nError: " error.message "`nLine: " error.line "`nSpecifically: " error.Extra
+			msgbox % "There was an error while updating the hotkey state.`n`nYour previous hotkeys may still be active until you restart the program.`n`nIf you have just edited the options, then this error is NOT very important, but it has been copied to the clipboard if you wish to report it.`n`nNote:`nIf you have just started the program and are receiving this error, then either your hotkeys in your MT_config.ini are corrupted or you are using a non-English keyboard layout. If the latter, you can try changing your keyboard layout to ""English"".`n`nError: " error.message "`nLine: " error.line "`nSpecifically: " error.Extra
 		}
 		IF (Tmp_GuiControl = "save")
 		{
@@ -2583,6 +2671,7 @@ ini_settings_write:
 	IniWrite, %cast_inject_key%, %config_file%, Auto Inject, auto_inject_key
 	IniWrite, %Inject_control_group%, %config_file%, Auto Inject, control_group
 	IniWrite, %Inject_spawn_larva%, %config_file%, Auto Inject, spawn_larva
+	IniWrite, %HotkeysZergBurrow%, %config_file%, Auto Inject, HotkeysZergBurrow
 
 	;[Manual Inject Timer]
 	IniWrite, %manual_inject_timer%, %config_file%, Manual Inject Timer, manual_timer_enable
@@ -2838,6 +2927,7 @@ ini_settings_write:
 	IniWrite, %BlockingMouseKeys%, %config_file%, %section%, BlockingMouseKeys
 	IniWrite, %BlockingMultimedia%, %config_file%, %section%, BlockingMultimedia
 	IniWrite, %BlockingModifier%, %config_file%, %section%, BlockingModifier
+	IniWrite, %LwinDisable%, %config_file%, %section%, LwinDisable
 	
 	;[Alert Location]
 	IniWrite, %Playback_Alert_Key%, %config_file%, Alert Location, Playback_Alert_Key
@@ -3007,24 +3097,27 @@ Gui, Tab,  Auto
 				Else droplist_var := 3
 				Gui, Add, DropDownList,x+10 yp-2 w130 vAuto_inject Choose%droplist_var%, MiniMap||Backspace CtrlGroup|Backspace|Disabled
 				tmp_xvar := OriginTabx + 10
-		Gui, Add, Checkbox, x%tmp_xvar% yp+30 vauto_inject_alert checked%auto_inject_alert%, Enable Alert
-			GuiControlGet, XTab, Pos, auto_inject_alert ;XTabX = x loc
-		Gui, Add, Text,y+15, Time Between Alerts (s):
-		Gui, Add, Edit, Number Right x+25 yp-2 w45 
-			Gui, Add, UpDown, Range1-100000 vauto_inject_time, %auto_inject_time% ;these belong to the above edit
-		Gui, Add, Text, X%XTabX% yp+35, Inject Hotkey:
+	
+
+		Gui, Add, Text, X%tmp_xvar% yp+45 vSillyGUIControlIdentVariable, Inject Hotkey:
+			GuiControlGet, XTab, Pos, SillyGUIControlIdentVariable ;XTabX = x loc
+
 		Gui, Add, Edit, Readonly yp-2 xs+85 center w65 vcast_inject_key gedit_hotkey, %cast_inject_key%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#cast_inject_key,  Edit ;have to use a trick eg '#' as cant write directly to above edit var, or it will activate its own label!
 
 		Gui, Add, Text, X%XTabX% yp+35 w70, Spawn Larva:
-		Gui, Add, Edit, Readonly yp-2 xs+85 w65 center vInject_spawn_larva , %Inject_spawn_larva%
+		Gui, Add, Edit, Readonly yp-2 xs+85 w65 center vInject_spawn_larva, %Inject_spawn_larva%
 			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#Inject_spawn_larva,  Edit
+
+		Gui, Add, Text, X%XTabX% yp+35 w70, Burrow Key:
+			Gui, Add, Edit, Readonly yp-2 xs+85 w65 center vHotkeysZergBurrow, %HotkeysZergBurrow%
+				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#HotkeysZergBurrow,  Edit			
 
 		Gui, Add, Text, X%XTabX% yp40, Control Group: %A_space%(Unit Selection Storage)
 			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vInject_control_group , %Inject_control_group%
 				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#Inject_control_group,  Edit	
 
-	Gui, Add, GroupBox, xs y+30 w200 h140, Advanced Settingss
+	Gui, Add, GroupBox, xs y+45 w200 h140, Advanced Settings
 				Gui, Add, Text, xs+20 yp+25 vSG1, Sleep time (ms):`n(Lower is faster)
 					GuiControlGet, XTab2, Pos, SG1 ;XTabX = x loc
 				Gui, Add, Edit, Number Right xs+125 yp-2 w45 vEdit_pos_var 
@@ -3033,7 +3126,7 @@ Gui, Tab,  Auto
 				Gui, Add, Checkbox, x%XTab2X% y+25 vCanQueenMultiInject checked%CanQueenMultiInject%,
 				Gui, Add, Text, x+0 yp-5, Queen Can Inject`nMultiple Hatcheries ; done as checkbox with 2 lines text is too close to checkbox
 	
-Gui, Add, GroupBox, w200 h240 ys xs+210 section, Backspace && Forced Setup
+Gui, Add, GroupBox, w200 h180 ys xs+210 section, Backspace && Forced Setup
 		Gui, Add, Text, xs+10 yp+25, Drag Origin:
 		if (Drag_origin = "Right")
 			droplist_var :=2
@@ -3048,8 +3141,14 @@ Gui, Add, GroupBox, w200 h240 ys xs+210 section, Backspace && Forced Setup
 		Gui, Add, Text, xs+10 yp+40, Camera Position: %A_space% %A_space% (Goto Location)
 			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vBI_camera_pos_x , %BI_camera_pos_x%
 				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#BI_camera_pos_x,  Edit
+
+Gui, Add, GroupBox, w200 h61 y+10 xs,
+		Gui, Add, Checkbox, xs+10 yp+13 vauto_inject_alert checked%auto_inject_alert%, Enable Alert
+		Gui, Add, Text,xs+10 y+12, Time Between Alerts (s):
+		Gui, Add, Edit, Number Right x+25 yp-2 w45 
+			Gui, Add, UpDown, Range1-100000 vauto_inject_time, %auto_inject_time% ;these belong to the above edit
 				
-Gui, Add, GroupBox, xs y+88 w200 h140, MiniMap && BackspaceCtrlG Setup
+Gui, Add, GroupBox, xs y+20 w200 h140, MiniMap && BackspaceCtrlG Setup
 		Gui, Add, Text, xs+10 yp+25, Queen Control Group:
 			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vMI_Queen_Group, %MI_Queen_Group%
 				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#MI_Queen_Group,  Edit			
@@ -3441,13 +3540,14 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 		
 		Gui, Add, Checkbox,xs+10 yp+30 Vauto_update checked%auto_update%, Auto Check For Updates
 	
-	Gui, Add, GroupBox, xs yp+30 w161 h170, Key Blocking
+	Gui, Add, GroupBox, xs yp+30 w161 h185, Key Blocking
 		Gui, Add, Checkbox,xp+10 yp+25 vBlockingStandard checked%BlockingStandard%, Standard Keys	
 		Gui, Add, Checkbox, y+10 vBlockingFunctional checked%BlockingFunctional%, Functional F-Keys 	
 		Gui, Add, Checkbox, y+10 vBlockingNumpad checked%BlockingNumpad%, Numpad Keys	
 		Gui, Add, Checkbox, y+10 vBlockingMouseKeys checked%BlockingMouseKeys%, Mouse Buttons	
 		Gui, Add, Checkbox, y+10 vBlockingMultimedia checked%BlockingMultimedia%, Mutimedia Buttons	
 		Gui, Add, Checkbox, y+10 vBlockingModifier checked%BlockingModifier%, Modifier Keys	
+		Gui, Add, Checkbox, y+10 vLwinDisable checked%LwinDisable%, Disable Left Windows Key
 	
 	Gui, Add, GroupBox, xs yp+30 w161 h60, Unit Deselection
 		Gui, Add, Text, xp+10 yp+25, Sleep Time:
@@ -3460,7 +3560,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vexit_hotkey , %exit_hotkey%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#exit_hotkey,  Edit
 
-	Gui, Add, GroupBox, Xs+171 yp+65 w245 h170, Debugging
+	Gui, Add, GroupBox, Xs+171 yp+65 w245 h185, Debugging
 		Gui, Add, Button, xp+10 yp+30  Gg_ListVars w75 h25,  List Variables
 		Gui, Add, Button, xp yp+30  Gg_GetDebugData w75 h25,  Debug Data
 		
@@ -5445,6 +5545,28 @@ SetupColourArrays(ByRef HexColour, Byref MatrixColour)
 	Return
 }
 
+
+numGetControlGroupnObject(Byref oControlGroup, Group)
+{	GLOBAL
+	oControlGroup := []
+	LOCAL GroupSize := getControlGroupCount(Group)
+	local MemDump
+	ReadRawMemory(B_CtrlGroupStructure + S_CtrlGroup * (group - 1), GameIdentifier, MemDump, GroupSize * S_scStructure + O_scUnitIndex)
+	oControlGroup["Count"]	:= numget(MemDump, 0, "Short")
+	oControlGroup["Types"]	:= numget(MemDump, O_scTypeCount, "Short")
+	oControlGroup.units := []
+	loop % oControlGroup["Count"]
+	{
+		Local unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
+		Local Type := getUnitType(unit)
+		oControlGroup.units.insert({ "UnitIndex": unit, "Type": Type}) ;note the object is unitS not unit!!!
+	}
+	return aSelection["Count"]
+}
+
+
+
+
 isInControlGroup(group, unit) 
 {	; group# = 1, 2,3-0  
 	global  
@@ -5626,18 +5748,10 @@ numGetUnitSelectionObject(ByRef aSelection, Sort = 0)
 }
 
 
-getUnitInformationForAutoGrouping(Unit)
-{
-	unitInfo := []
-	ReadRawUnit(Unit, UnitDump)
-	unitInfo.Type := getUnitType(unit)
-	unitInfo.Owner := getUnitOwner(unit)
-
-}
 
 ReadRawUnit(unit, ByRef Memory)	; dumps the raw memory for one unit
 {	GLOBAL
-	ReadRawMemory(B_uStructure + unit * S_uStructure, GameIdentifier, Memory, S_scStructure)
+	ReadRawMemory(B_uStructure + unit * S_uStructure, GameIdentifier, Memory, S_uStructure)
 	return
 }
 
@@ -6793,6 +6907,7 @@ CreateHotkeys()
 	Else ;If (input_method = "input")
 		SendMode Input 
 	#If, WinActive(GameIdentifier) 
+	#If, WinActive(GameIdentifier) && LwinDisable
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && !isMenuOpen() && time 
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time  
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
@@ -6813,7 +6928,8 @@ CreateHotkeys()
 		hotkey, %program_volume_down_key%, program_volume_down, on
 		hotkey, %warning_toggle_key%, mt_pause_resume, on		
 		hotkey, *~LButton, g_LbuttonDown, on
-		hotkey, Lwin, g_DoNothing, on		
+	Hotkey, If, WinActive(GameIdentifier) && LwinDisable
+			hotkey, Lwin, g_DoNothing, on		
 	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
 		hotkey, %ping_key%, ping, on									;on used to re-enable hotkeys as were 
 	Hotkey, If, WinActive(GameIdentifier) && time						;turned off during save to allow for swaping of keys
@@ -6860,7 +6976,9 @@ CreateHotkeys()
 		hotkey, +%i%, g_LimitGrouping, % status
 		hotkey, ^+%i%, g_LimitGrouping, % status
 	}
-	Hotkey, If	
+	Hotkey, If
+	; Note : I have the emergency hotkey here if the user decides to set a hotkey to <#Space, so it cant get changed
+	hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and give it the highest possible priority		
 	Return
 }
 
@@ -6959,14 +7077,14 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		if ForceInject
 			send % BI_create_camera_pos_x 	;just incase it stuffs up and moves the camera
 		send % MI_Queen_Group
-		
-		 oHatcheries := [] ; Global used to check if successfuly without having to iterate again
+
+		oHatcheries := [] ; Global used to check if successfuly without having to iterate again
 		local BaseCount := zergGetHatcheriesToInject(oHatcheries)
 		Local oSelection := []
 		Local SkipUsedQueen := []
 		local MissedHatcheries := []
 	    randomcount := 0
-		If(Local QueenCount := getSelectedQueensWhichCanInject(oSelection))
+		If(Local QueenCount := getSelectedQueensWhichCanInject(oSelection))  ; this wont fetch burrowed queens!! so dont have to do a check below - as burrowed queens can make cameramove when clicking their hatch
 		{
 			For Index, CurrentHatch in oHatcheries
 			{
@@ -6975,9 +7093,9 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 				{
 					if SkipUsedQueen[Queen.unit]
 						continue
-					if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && isInControlGroup(MI_Queen_Group, Queen.unit) && Queen.Energy >= 25)
+					if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && isInControlGroup(MI_Queen_Group, Queen.unit) && Queen.Energy >= 25) ; previously queen type here (unit id/tpye) doesnt seem to work! weird
 					{
-						FoundQueen := CurrentHatch.NearbyQueen := SkipUsedQueen[Queen.unit] := 1
+						FoundQueen := CurrentHatch.NearbyQueen := SkipUsedQueen[Queen.unit] := 1 																		
 						send % Inject_spawn_larva
 						click_x := CurrentHatch.MiniMapX, click_y := CurrentHatch.MiniMapY
 						If HumanMouse
@@ -7175,23 +7293,33 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
  }
 
 
+f2::
+getSelectedQueensWhichCanInject(aSelection)
+objtree(aSelection, "aSelection")
+objtree(oHatcheries, "oHatcheries")
+objtree(oSelection, "oSelection")
+return
+
  getSelectedQueensWhichCanInject(ByRef aSelection)
  {	GLOBAL A_unitID, O_scTypeCount, O_scTypeHighlighted, S_scStructure, O_scUnitIndex, GameIdentifier, B_SelectionStructure
  	, S_uStructure, GameIdentifier 
 	aSelection := []
 	selectionCount := getSelectionCount()
 	ReadRawMemory(B_SelectionStructure, GameIdentifier, MemDump, selectionCount * S_scStructure + O_scUnitIndex)
-	aSelection["Count"]	:= numget(MemDump, 0, "Short")
+	aSelection["SelectedUnitCount"]	:= numget(MemDump, 0, "Short")
 	aSelection["Types"]	:= numget(MemDump, O_scTypeCount, "Short")
 	aSelection["HighlightedGroup"]	:= numget(MemDump, O_scTypeHighlighted, "Short")
 	aSelection.Queens := []
 
-	loop % aSelection["Count"]
+	loop % selectionCount
 	{
 		unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
-		if (isUnitLocallyOwned(Unit) &&  A_unitID["Queen"] = getUnitType(unit) && ((energy := getUnitEnergy(unit)) >= 25))
-			aSelection.Queens.insert(objectGetUnitXYZAndEnergy(unit))
+		type := getUnitType(unit)
+		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25))
+			aSelection.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aSelection.Queens[aSelection.Queens.MaxIndex(), "Type"] := Type
+
 	}
+	aSelection["Count"] := 	aSelection.Queens.maxIndex() ; as "SelectedUnitCount" will contain total selected queens + other units in group
 	return 	aSelection.Queens.maxindex()
  }
 
