@@ -66,12 +66,22 @@
         Numpad9
         NumpadDot
        )
-		 ; *LButton	;note Lbutton may not work due to modifiers and so needs this
-		; but when blocking the mouse, can cause the drag issue
+		 ; Note: **** it seems when using *~LButton to monitor user mouse/drag position
+         ; it stuffs up using *lbutton as a modifier for blocking the button press is still passed to the active window
+         ; hence have to manually enter all the +^! combinations
+         ; this works fine even with the * modifier added to them
+		
     ;-- Mouse
     l_MouseKeysList=
        (ltrim join|
         LButton
+        +LButton
+        ^LButton
+        !LButton
+        +^LButton
+        +!LButton
+        ^!LButton
+        +^!LButton
         RButton
         MButton
         WheelDown

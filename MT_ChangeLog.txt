@@ -1,4 +1,4 @@
-V2.968		8/05/13
+V2.97		20/05/13
 
 New:
 	• Custom unit filter for unit panel:
@@ -19,6 +19,7 @@ New:
 		- Please ensure that you only have one active hotkey to burrow queens in the SC2 hotkeysetup i.e. no alternate burrow key!
 
 Fixes:
+	• Problem with the left mouse button not being blocked during automation routines which could lead to the camera moving and missing hatcheries/chronos
 	• A bug which resulted in already warned buildings being re-warned when the program was restarted or settings changed/saved during a match
 		-This bug was introduced a couple of versions ago and I never noticed.
 
@@ -32,6 +33,8 @@ Fixes:
 
 
 Changes:
+	• Disabled the use of modifiers with with select army function
+		- As this function works much much better when these are not used!!
 	• Added an additional two Minimap Unit Colour Highlight categories/lists
 	• Double tapping the Select Army Button will result in the camera focusing on the army.
 	• ChronoBoost Warpgates/Gateways
@@ -59,9 +62,8 @@ Changes:
 				- This key is under "Options -> Injects -> Auto Inject -> Burrow Key"
 				-Please ensure this matches the hotkey you use to burrow queens
 				-Please ensure that you only have one active hotkey to burrow queens in the SC2 hotkeysetup i.e. no alternate burrow key!
-			+ Greatly Improved the method used to detect if a player is attempting to perform an action such as cast a spell, place a building, move the camera (via quick scroll, minimap, screen edge, or directional keys), attack, patrol etc. 
+			+ Greatly Improved the method used to detect if a player is attempting to perform an action such as cast a spell, place a building, move the camera (via quick scroll, minimap, screen edge, or directional keys), attack, patrol, box drag etc. 
 				- Previously injects were delayed while a queen, a hatch which was building a queen, or a burrowed swarmhost was selected (this is no longer the case).
-			+ 
 
 
 	• Inject & Chronoboost key delay has been replaced with a single "Event Key delay"
@@ -71,9 +73,11 @@ Changes:
 		- Generally SendInput is more reliable and superior to SendEvent and so I urge users to use "SendInput" - unless this causes issues with their computer/setup.
 
 
-	Note: I have changed a lot of things, so if anyone finds a new bug please report it!
+	Note: I have changed a lot of things, so if anyone finds a new bug please report it!!
 
-	select army hotkey works a lot better if user doesnt have a modifier
+
+--------------------------------------------------------------------------------------------	
+--------------------------------------------------------------------------------------------	
 
 V2.967		8/05/13
 Fixes:
@@ -88,7 +92,8 @@ Changes:
 	•  Unit Grouping GUI (in the options menu) - only the units for the selected race will appear in the selection screen.
 Fixes:
 	• A bug preventing the checkbox in 'auto unit grouping' from displaying the correct on/off state (this bug was introduced in the version released an hour ago - 2.965)
---------------------------------------------------------------------------------------------	
+
+
 V2.965		7/05/13
 Changes:
 	• Updated offsets for HotS 2.08

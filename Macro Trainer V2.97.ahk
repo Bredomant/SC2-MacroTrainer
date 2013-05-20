@@ -14,12 +14,9 @@
 
 /*	Things to do
 	Team send warn message after clicking building..maybe
-	remove 			dspeak("Correct Injection")
 	disable backspace adv
-	Add Tooltip to burrow
 	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
-	test how injects works while user is moving cameras
-	ensure change 'drone' in is workingcasting routine from test
+
 */
 
 
@@ -44,7 +41,7 @@
 
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #SingleInstance force
-#MaxHotkeysPerInterval 999999	; a user requested feature (they must have their own macro script)
+#MaxHotkeysPerInterval 999999	; a user requested feature (they probably have their own macro script)
 #InstallMouseHook
 #InstallKeybdHook
 #UseHook
@@ -86,7 +83,7 @@ url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 program := []
 program.info := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
 
-version := 2.968
+version := 2.97
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -251,6 +248,7 @@ ping:
 
 g_DoNothing:
 Return			
+
 g_LbuttonDown:	;Get the location of a dragbox
 	MouseGetPos, MLDownX, MLDownY
 Return	
@@ -307,28 +305,12 @@ if (getSelectionCount() > 1)
 return
 
 
-ReleaseModifiersOld(Beep = 1, CheckIfCasting = 0)
-{
-	while (iscasting := CheckIfCasting && isUserPerformingAction()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
-	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
-	{
-		count++
-		if (count = 1 && Beep) && !iscasting 	;wont beep if casting
-			SoundPlay, %A_Temp%\ModifierDown.wav	
-		sleep, 5
-	}
-	if count
-		sleep, 35	;give time for sc2 to update keystate - it can be a slower!
-}
-
-
-
 ;	This ReleaseModifiers function needs to wait an additional amount of time, as SC2 can be slow to 
 ;	update its keystate and/or it buffers input/keys for a while.
 ; 	I have added the AdditionalKeys which is mainly used for zerg burrow
 ;	and i have provided an additional 15 ms sleep time if burrow is being held down
 
-ReleaseModifiers(Beep = 1, CheckIfCasting = 0, AdditionalKeys = "")
+ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "")
 {
 	GLOBAL HotkeysZergBurrow
 	startReleaseModifiers:
@@ -337,10 +319,10 @@ ReleaseModifiers(Beep = 1, CheckIfCasting = 0, AdditionalKeys = "")
 	while getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
 	||  AdditionalKeys && (ExtraKeysDown := isaKeyPhysicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
-	|| (iscasting := CheckIfCasting && isUserPerformingAction()) ; have this function last as it can take the longest if lots of units selected
+	|| (isPerformingAction := CheckIfUserPerformingAction && isUserPerformingAction()) ; have this function last as it can take the longest if lots of units selected
 	{
 		count++
-		if (count = 1 && Beep) && !iscasting && !ExtraKeysDown && firstRun = 1	;wont beep if casting or burrow AKA 'extra key' is down
+		if (count = 1 && Beep) && !isPerformingAction && !ExtraKeysDown && firstRun = 1	;wont beep if casting or burrow AKA 'extra key' is down
 			SoundPlay, %A_Temp%\ModifierDown.wav	
 		if ExtraKeysDown
 			LastExtraKeyHeldDown := ExtraKeysDown ; as ExtraKeysDown will get blanked in the loop preventing detection in the below if
@@ -945,16 +927,16 @@ BlockInput(Mode="Disable", byref L_Keys="", Delimiter="|") ; eg 	;	BlockInput("A
 Return
 }
 
-
-
-;this function has a problem with burrowing queens if user is spamming the r button. I think its might be on sc2s side, as the blocking seems to work!
+; due to actually blocking the mouse properly, cant restore the boxdrag but I have it checking Mouse state via SC2 memory in the is casting section anyway
 
 cast_ForceInject:
 cast_inject:
 	If (A_ThisLabel = "cast_ForceInject")
 		ReleaseModifiers(F_Inject_ModifierBeep, 1, HotkeysZergBurrow)
-	else ReleaseModifiers(1,0)	;hence will cast if user presses f5 and a swarmhost is highlighted
+	else ReleaseModifiers(1,0)	
 ;	Critical ;cant use with input buffer, as prevents hotkey threads launching and hence tracking input
+	Thread, NoTimers, true  ;cant use critical with input buffer, as prevents hotkey threads launching and hence tracking input
+	SetBatchLines -1
 	Inject := []
 	If (A_ThisLabel = "cast_ForceInject")
 	{
@@ -966,15 +948,16 @@ cast_inject:
 			if F_Inject_Beep
 				SoundPlay, %A_Temp%\Windows Ding3.wav 
 	}
-	Thread, NoTimers, true  ;cant use critical with input buffer, as prevents hotkey threads launching and hence tracking input
-	SetBatchLines -1
+
 	Inject := []
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
 
+
+	BufferInput(aButtons.List, "Buffer", 0)
+
 	If (Inject.LMouseState := GetKeyState("LButton")) ; 1=down
 		send {click Left up}
-	BufferInput(aButtons.List, "Buffer", 0)
 
 	MouseGetPos, start_x, start_y
 	If (ChatStatus := isChatOpen())
@@ -997,6 +980,9 @@ cast_inject:
 	Else		
 		send {click  %start_x%, %start_y%, 0}
 	
+	; its acutally having the lbutton down and having it drag the camera across the minimap as its returing to its start location which can cause the camera to move while the lbutton is held down at start of inject 
+	; hence restore camera need to come afterwards but only half works as soon as user moves 1 pixel camera get thrown to closest minimap edge
+
 	If ChatStatus
 		send {Enter}
 	BufferInput(aButtons.List, "Send")
@@ -1056,9 +1042,6 @@ For Index, CurrentHatch in oHatcheries
 		AttemptCorrectInjection := 1
 		Gosub, cast_ForceInject
 		AttemptCorrectInjection := 0
-		
-		dspeak("Correct Injection")
-
 		return
 	}
 return
@@ -1118,9 +1101,9 @@ isUserPerformingAction()
 		worker := "Probe"
 	Else Worker := "Drone"
 	
-	if ( type = A_UnitID[Worker] && isUserBusyBuilding() ) || IsUserMovingCamera()
+	if ( type = A_UnitID[Worker] && isUserBusyBuilding() )  || IsUserMovingCamera() || IsMouseButtonActive() ; so it wont do anything if user is holding down a mousebutton! eg dragboxing
 		return 1
-	else return pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction)
+	else return pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ; this gives 1 when reticle/cast cursor is present
 }
 
 
@@ -1131,18 +1114,6 @@ isUserBusyBuilding()
 	return pointer(GameIdentifier, P_IsUserBuildingWithWorker, 01_IsUserBuildingWithWorker, 02_IsUserBuildingWithWorker, 03_IsUserBuildingWithWorker, 04_IsUserBuildingWithWorker)
 }
 	
-f2::
-
-while !breakloop
-{
-	action := 
-	isuserbuilding := isUserBusyBuilding()	
- ToolTip, % isUserPerformingAction() "`n" isUserBusyBuilding(), A_ScreenWidth / 2, A_ScreenHeight / 2
- sleep 100
-}
-return
-
-+f2::breakloop := !breakloop
 
 
 
@@ -3173,7 +3144,7 @@ Gui, Tab,  Info
 		gui, font, norm bold s10
 		Gui, Add, Text, X%OriginTabX% y+10 cFF0000, Problems:
 		gui, font, norm s11
-		gui, Add, Text, w410 y+15, If you are consistently missing hatcheries, try increasing the sleep time. The Backspace CtrlGroup method is less robust than the other methods. 
+		gui, Add, Text, w410 y+15, If you are consistently missing hatcheries, try increasing the sleep time. The Backspace CtrlGroup method is far less robust than the other methods. 
 		gui, Add, Text, w410 y+15, If something really goes wrong, you can reload the program by pressing "Lwin && space" three times.
 		gui, font, norm s10
 		gui, font, 		
@@ -3691,7 +3662,7 @@ Gui, Tab, Delay
 	Gui, Add, UpDown,  Range0-1500 vAG_Delay, %AG_Delay%	
 
 
-Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiscAutomation_TAB, Select Army||Split|Remove Unit|
+Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiscAutomation_TAB, Select Army||Spread|Remove Unit|
 Gui, Tab, Select Army
 	Gui, Add, Checkbox, y+25 x+15 vSelectArmyEnable Checked%SelectArmyEnable% , Enable Select Army Function		
 	Gui, Add, Checkbox, yp+25 xp+15 section vModifierBeepSelectArmy Checked%ModifierBeepSelectArmy%, Beep if modifier is held down		
@@ -3721,8 +3692,8 @@ Gui, Tab, Select Army
 
 	Gui, Add, Text, X420 y115 w160, ** This function will work better && FAR more reliably if this hotkey does not contain a modifier i.e Shift, Ctrl, or Alt.`n`n'F1' or 'F2' should work well.
 
-Gui, Tab, Split
-	Gui, Add, Checkbox, y+25 x+25 vSplitUnitsEnable Checked%SplitUnitsEnable% , Enable Split Unit Function	
+Gui, Tab, Spread
+	Gui, Add, Checkbox, y+25 x+25 vSplitUnitsEnable Checked%SplitUnitsEnable% , Enable Spread Unit Function	
 	Gui, Add, Text, section yp+35, Hotkey:
 	Gui, Add, Edit, Readonly yp-2 xs+85 center w65 vcastSplitUnit_key gedit_hotkey, %castSplitUnit_key%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#castSplitUnit_key,  Edit
@@ -3732,7 +3703,7 @@ Gui, Tab, Split
 	Gui, Add, Text, Xs yp+35, Sleep time (ms):
 	Gui, Add, Edit, Number Right xp+145 yp-2 w45 vTT_SleepSplitUnits
 	Gui, Add, UpDown,  Range0-100 vSleepSplitUnits, %SleepSplitUnits%
-	Gui, Add, Text, Xs yp+150 w380, Note: This is designed to spread your units BEFORE the engagement - Dont unit while being attacked!`n`n****This is in a very beta stage and will be improved later***
+	Gui, Add, Text, Xs yp+150 w380, Note: This is designed to spread your units BEFORE the engagement - Dont use it while being attacked!`n`n****This is in a very beta stage and will be improved later***
 
 Gui, Tab, Remove Unit
 	Gui, Add, Checkbox, y+25 x+25 vRemoveUnitEnable Checked%RemoveUnitEnable% , Enable Remove Unit Function	
@@ -4040,6 +4011,7 @@ auto_inject_time_TT := "This is in 'SC2' Seconds."
 #cast_inject_key_TT := cast_inject_key_TT := "This Hotkey is ONLY active while playing as zerg!"
 Auto_inject_sleep_TT := "Lower this to make the inject round faster, BUT this will make it more obvious that it is being automated!"
 CanQueenMultiInject_TT := "During minimap injects (and Forced-Injects) a queen may attempt to inject multiple hatcheries providing:`nShe is the only nearby queen and she has enough energy.`n`nThis may increase the chance of having queens go walkabouts (especially during a forced inject) - but so far I have not observed this during testing. "
+HotkeysZergBurrow_TT := #HotkeysZergBurrow_TT := "Please ensure this matches the 'Burrow' hotkey in SC2 & that you only have one active hotkey to burrow units i.e. No alternate burrow key!`n`nThis is used during forced injects to help prevent accidentally burrowing queens due to the way windows/SC2 buffers these repeated keypresses."
 Simulation_speed_TT := "How fast the mouse moves during inject rounds. 0 = Fastest - try 1,2 or 3 if you're having problems."
 Drag_origin_TT := "This sets the origin of the box drag to the top left or right corners. Hence making it compatible with observer panel hacks."
 manual_inject_time_TT := "The time between alerts."
@@ -6930,7 +6902,7 @@ CreateHotkeys()
 		hotkey, %program_volume_up_key%, program_volume_up, on
 		hotkey, %program_volume_down_key%, program_volume_down, on
 		hotkey, %warning_toggle_key%, mt_pause_resume, on		
-		hotkey, *~LButton, g_LbuttonDown, on
+;		hotkey, *~LButton, g_LbuttonDown, on
 	Hotkey, If, WinActive(GameIdentifier) && LwinDisable
 			hotkey, Lwin, g_DoNothing, on		
 	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
@@ -7567,8 +7539,10 @@ LoadMemoryAddresses(SC2EXE)
 		03_IsUserBuildingWithWorker := 0x3A8
 		04_IsUserBuildingWithWorker := 0x168
 
-	B_MouseButtonCameraMove := SC2EXE + 0x1FDF7BC 			;1 byte - 2 for middle mouse (camDragscroll, or on minimap) 1 for lbutton on minimap
-
+	B_MouseButtonState := SC2EXE + 0x1FDF7BC 				;1 byte - MouseButton state 1 for Lbutton,  2 for middle mouse, 4 for rbutton
+															; 
+	B_CameraDragScroll := SC2EXE + 0x1FDF4A8  				; 1 byte Returns 1 when user is moving camera via DragScroll i.e. mmouse button the main map
+															
 	B_DirectionalKeysCameraScroll := SC2EXE + 0x1FDF7D0		; 1 byte, but again can read it as 4
 															; 4 = left, 8 = Up, 16 = Right, 32 = Down (these are added if more than 1 key is down) - could do a bitmask on it!
 
@@ -7583,7 +7557,7 @@ LoadMemoryAddresses(SC2EXE)
 
  ; The below offsets are not Currently used but are current for 2.0.8
 
-	B_CameraDragScroll := SC2EXE + 0x1FDF4A8  				; 1 byte Returns 1 when user is moving camera via DragScroll i.e. mmouse button the main map
+	
 
  	P_IsUserCasting := SC2EXE +	0x0209C3C8					; this is probably something to do with the control card
 		O1_IsUserCasting := 0x364 							; 1 indicates user is casting a spell e.g. fungal, snipe, or is trying to place a structure
@@ -8243,7 +8217,8 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 							, "Protoss": ["Interceptor"]
 							, "Zerg": ["CreepTumorBurrowed","Broodling","Locust"]}
 
-	STATIC aAddUnits 	:=	{"Terran": {SupplyDepotLowered: "SupplyDepot", WidowMineBurrowed: "WidowMine", CommandCenterFlying: "CommandCenter", OrbitalCommandFlying: "OrbitalCommand", BarracksFlying: "Barracks", StarportFlying: "Starport"}
+	STATIC aAddUnits 	:=	{"Terran": {SupplyDepotLowered: "SupplyDepot", WidowMineBurrowed: "WidowMine", CommandCenterFlying: "CommandCenter", OrbitalCommandFlying: "OrbitalCommand"
+										, BarracksFlying: "Barracks", StarportFlying: "Starport", SiegeTankSieged: "SiegeTank", VikingAssault: "VikingAssault"}
 							, "Zerg": {DroneBurrowed: "Drone", ZerglingBurrowed: "Zergling", HydraliskBurrowed: "Hydralisk", UltraliskBurrowed: "Ultralisk", RoachBurrowed: "Roach"
 							, InfestorBurrowed: "Infestor", BanelingBurrowed: "Baneling", QueenBurrowed: "Queen", SporeCrawlerUprooted: "SporeCrawler", SpineCrawlerUprooted: "SpineCrawler"}} 
 
@@ -8539,7 +8514,7 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 
 IsUserMovingCamera()
 {
-	if (IsCameraMovingViaMouseButton() || IsCameraDirectionalKeyScollActivated() || IsCameraMovingViaMouseAtScreenEdge())
+	if (IsCameraDragScrollActivated() || IsCameraDirectionalKeyScollActivated() || IsCameraMovingViaMouseAtScreenEdge())
 		return 1
 	else return 0
 }
@@ -8552,10 +8527,10 @@ IsCameraDirectionalKeyScollActivated()
 	Return ReadMemory(B_DirectionalKeysCameraScroll, GameIdentifier, 1)
 }
 
-; byte - returs 2 when cameraDragScrollActivated i.e. middle mouse (camDragscroll, or on minimap) and 1 for lbutton on minimap
-IsCameraMovingViaMouseButton()
+ 	;1 byte - MouseButton state 1 for Lbutton,  2 for middle mouse, 4 for rbutton - again these can add togther eg lbutton + mbutton = 4
+IsMouseButtonActive()
 {	GLOBAL
-	Return ReadMemory(B_MouseButtonCameraMove, GameIdentifier, 1)
+	Return ReadMemory(B_MouseButtonState, GameIdentifier, 1)
 }
 
 ; Really a 1 byte value
@@ -8572,7 +8547,7 @@ IsCameraMovingViaMouseAtScreenEdge()
 
 
 ; 1 byte Returns 1 when user is moving camera via DragScroll i.e. Mmouse button the main map
-; IsCameraMovingViaMouseButton() detects this as well as lbutton on minimap so use that instead
+
 IsCameraDragScrollActivated() 
 {	GLOBAL
 	Return ReadMemory(B_CameraDragScroll, GameIdentifier, 1)
@@ -8606,34 +8581,6 @@ return
 
 
 */
-
-
-
-
-
-DeselectUnitsFromPanel2(a_RemoveUnits, sleep=20)	
-{
-	clipboard := ""
-	if a_RemoveUnits.MaxIndex()
-	{
-		SortSelectedUnits(a_SelectedUnits)
-		for Index, objRemove in a_RemoveUnits
-			for SelectionIndex, objSelected in a_SelectedUnits
-				if (objRemove.unit = objSelected.unit && SelectionIndex < 144 ) ;can only deselect up to unitselectionindex 143 (as thats the maximun on the card)
-				{
-					if ClickUnitPortrait(SelectionIndex - 1, X, Y, Xpage, Ypage) ; -1 as selection index begins at 0 i.e 1st unit at pos 0 top left
-						clipboard .= "`n SI: " SelectionIndex " ypage:" Ypage				
-					clipboard .= "`n SI: " SelectionIndex 
-
-				}
-	}
-	if getUnitSelectionPage()	;ie slection page is not 0 (hence its not on 1 (1-1))
-	{
-		ClickUnitPortrait(blank,X,Y, Xpage, Ypage, 1) ; this selects page 1 when done
-		send {click Left %Xpage%, %Ypage%}
-	}	
-	return
-}
 
 
 isGatewayProducingOrConvertingToWarpGate(Gateway)
