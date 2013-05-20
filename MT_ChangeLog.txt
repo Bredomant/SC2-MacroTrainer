@@ -11,7 +11,7 @@ New:
 		- Macro Trainer Left windows hotkeys (and non-overridden windows keybinds) will still function e.g. Lwin+F1 will read the spawning races
 		- Found under "options --> Key Blocking --> Disable Left Windows Key"
 
-	• For forced/fully automatic injects added a routine which checks if the user is spamming the burrow button 
+	• For forced/fully automatic injects a routine added which checks if the user is spamming the burrow button 
 		- Due to the SC2/Windows key buffering this can result in queens being burrowed during injects - even after the keyboard input has been blocked!
 		- For this to work properly you must set the hotkey to match your SC2 burrow key ("R" is the default)	
 		- This key is found under "Options -> Injects -> Auto Inject -> Burrow Key"
@@ -33,7 +33,7 @@ Fixes:
 
 Changes:
 	• Added an additional two Minimap Unit Colour Highlight categories/lists
-	• Double tapping the Select Army Button will result in the camera moving to the army location.
+	• Double tapping the Select Army Button will result in the camera focusing on the army.
 	• ChronoBoost Warpgates/Gateways
 		- Currently gateways are chronoed after warpgates and only if they're not already chronoed.
 		- In addition to this, gateways will now only be chronoed if they have a unit in production or are morphing into a warpgate.
@@ -44,29 +44,31 @@ Changes:
 
 		-General (minimap method):
 			+ If a burrowed queen is the only queen near a hatch, that hatch will be skipped during the inject round
-				- As this would cause the camera to jump, and increase the chances of a queen going walkabout
+				- As this would cause the camera to jump and increased the chances of a queen going walkabout
 			+ Queens can now inject more than one hatch providing she:
 				- Is the only queen near the hatch
 				- Has enough engery for the additional injects
-				- The Checkbox under Injects->"Advanced settings"->"Queen can inject multiple hatcheries." is enabled.
+				- The Checkbox under "Options->Injects->Advanced settings->Queen can inject multiple hatcheries" is enabled.
 				Note: This may increase the chances of queens going walkabouts (especially during a forced inject) but so far I have NOT observed this during testing.
+
 		- Forced/Fully-Automated:
 			+ Three Seconds after an inject round each hatch is checked for a successful inject
-				-If a queen is near an unsuccessful hatch, another inject round will be attempted for the missed hatcheries
+				-If a unburrowed queen is near an unsuccessful hatch, another inject round will be attempted for the missed hatcheries
 				-If more than 1 injecting queen is burrowed, the burrowed queens will unburrowed for the next inject round
 			+ Added a "burrow" key check, which should decrease the occurance of accidentally burrowing queens when spamming the burrow button 
 				- This key is under "Options -> Injects -> Auto Inject -> Burrow Key"
 				-Please ensure this matches the hotkey you use to burrow queens
 				-Please ensure that you only have one active hotkey to burrow queens in the SC2 hotkeysetup i.e. no alternate burrow key!
-			+ Improved the method used to detect if a zerg player is attempting to cast a spell or place a building. 
-				- Previously injects would be delayed while a queen, a hatch which was building a queen, or if a burrowed swarmhost was selected.
+			+ Greatly Improved the method used to detect if a player is attempting to perform an action such as cast a spell, place a building, move the camera (via quick scroll, minimap, screen edge, or directional keys), attack, patrol etc. 
+				- Previously injects were delayed while a queen, a hatch which was building a queen, or a burrowed swarmhost was selected (this is no longer the case).
 			+ 
 
 
 	• Inject & Chronoboost key delay has been replaced with a single "Event Key delay"
 		- This parameter is only used when the  "Input Method" is set to "Event"
 		- Option is found under "Settings -- >  Misc. Settings" (And is only visible if Input Method = "Event")
-		- Generally SendInput is more reliable and superior to SendEvent, and so I urge users to use "SendInput" - unless this causes issues with their computer/setup.
+		- If you use send Event mode, then you may wish to specify this value - the default is 10. Common values range from (-1) to 10 ms.
+		- Generally SendInput is more reliable and superior to SendEvent and so I urge users to use "SendInput" - unless this causes issues with their computer/setup.
 
 
 	Note: I have changed a lot of things, so if anyone finds a new bug please report it!

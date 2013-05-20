@@ -17,8 +17,9 @@
 	remove 			dspeak("Correct Injection")
 	disable backspace adv
 	Add Tooltip to burrow
-	check queen tumour
-	need to find a bool value for queen laying tumour
+	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
+	test how injects works while user is moving cameras
+	ensure change 'drone' in is workingcasting routine from test
 */
 
 
@@ -83,7 +84,8 @@ url.Homepage := "http://www.users.on.net/~jb10/"
 url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 
 program := []
-program["info"] := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
+program.info := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
+
 version := 2.968
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
@@ -109,7 +111,6 @@ If InStr(A_ScriptDir, old_backup_DIR)
 Gosub, pre_startup ; go read the ini file
 SoundSet, %overall_program%
 SAPI.volume := speech_volume
-
 
 ;-----------------------
 ;	Startup
@@ -150,7 +151,7 @@ If (auto_update AND A_IsCompiled AND HideTrayIcon <> 1 AND CheckForUpdates(versi
 	Gui, Font, Norm 
 	Gui, Add, Button, x+100 yp w100 h30 gLaunch vDisable_Auto_Update, &Disable
 	Gui, Add, Button, x+100 yp w100 h30 gLaunch vCancel_Auto_Update, &Cancel
-	Gui, Show,    w600, Macro Trainer Update
+	Gui, Show, w600, Macro Trainer Update
 	Return				
 }
 
@@ -308,7 +309,7 @@ return
 
 ReleaseModifiersOld(Beep = 1, CheckIfCasting = 0)
 {
-	while (iscasting := CheckIfCasting && isZerguserCastingOrBuilding()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
+	while (iscasting := CheckIfCasting && isUserPerformingAction()) || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
 	{
 		count++
@@ -336,7 +337,7 @@ ReleaseModifiers(Beep = 1, CheckIfCasting = 0, AdditionalKeys = "")
 	while getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
 	||  AdditionalKeys && (ExtraKeysDown := isaKeyPhysicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
-	|| (iscasting := CheckIfCasting && isZerguserCastingOrBuilding()) ; have this function last as it can take the longest if lots of units selected
+	|| (iscasting := CheckIfCasting && isUserPerformingAction()) ; have this function last as it can take the longest if lots of units selected
 	{
 		count++
 		if (count = 1 && Beep) && !iscasting && !ExtraKeysDown && firstRun = 1	;wont beep if casting or burrow AKA 'extra key' is down
@@ -350,7 +351,7 @@ ReleaseModifiers(Beep = 1, CheckIfCasting = 0, AdditionalKeys = "")
 	if count
 	{
 		if (LastExtraKeyHeldDown = HotkeysZergBurrow)
-			sleep 50
+			sleep 50 ;as burrow can 'buffer' within sc2
 		else sleep, 35	;give time for sc2 to update keystate - it can be a slower! 
 		Goto, startReleaseModifiers
 	}
@@ -366,35 +367,9 @@ isaKeyPhysicallyDown(Keys)
         return key
   }
   else if getkeystate(Keys, "P")
-  return Keys ;keys!
+  	return Keys ;keys!
   return 0
 }
-
-
-ReleaseModifiersTest(Beep = 1, CheckIfCasting = 0)
-{
-	startReleaseModifiersTest:
-	count := 0
-	firstRun++
-	while (iscasting := CheckIfCasting && isZerguserCastingOrBuilding()) || getkeystate("R", "P")  || getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
-	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
-	{
-		count++
-		if (count = 1 && Beep) && !iscasting && firstRun = 1	;wont beep if casting
-			SoundPlay, %A_Temp%\ModifierDown.wav	
-		sleep, 5
-	}
-
-	if count
-	{
-		if (firstRun = 1)
-			sleep, 35	;give time for sc2 to update keystate - it can be a slower! 
-		gosub, startReleaseModifiersTest
-	}
-	return
-}
-
-
 
 g_SendBaseCam:
 	send, {Backspace}
@@ -1101,13 +1076,16 @@ getBurrowedQueenCountInControlGroup(Group, ByRef UnburrowedCount="")
 	return BurrowedCount
 }
 
-getCurrentlyHighlightedUnitType()
+getCurrentlyHighlightedUnitType(ByRef SampleTargetFilter="")
 {
 	PreviousCritical := A_IsCritical
 	critical, on ;otherwise takes too long! still takes a long time for lots of selected units! 733ms for 118 selected units when sorting them
 
 	if (getSelectionHighlightedGroup() = 0 && getSelectionCount()) ; this is a trick to speed it up so if heaps of units are selected but only first highlighted, it wont sort them
+	{
+		Critical %PreviousCritical%
 		return getUnitType( getSelectedUnitIndex(0) )
+	}
 
 	CurrentGroup := -1 ; so 1st timein for loop != ++ will be 0
 	if numGetUnitSelectionObject(oSelection, "Sort") ; returns selection count
@@ -1119,6 +1097,7 @@ getCurrentlyHighlightedUnitType()
 				previousType := unit.type
 				if (CurrentGroup = oSelection.HighlightedGroup)
 				{
+					SampleTargetFilter := getUnitTargetFilterFast(unit.Index) ; so can be used as a basic test of unit type eg is it a structure
 					Critical %PreviousCritical%
 					return Unit.Type
 				}
@@ -1128,20 +1107,44 @@ getCurrentlyHighlightedUnitType()
 	Return 0 ;either error or no units selected
 }
 
-isZerguserCastingOrBuilding()
-{	
-	Local type := getCurrentlyHighlightedUnitType()
-	if (type = A_UnitID["Drone"] || type = A_UnitID["Queen"] || type = A_UnitID["Infestor"] || type = A_UnitID["Viper"]  || type = A_UnitID["Overseer"]                   )
-		return pointer(GameIdentifier, P_IsUserCasting, O1_IsUserCasting, O2_IsUserCasting, O3_IsUserCasting, O4_IsUserCasting) ; returns 1 for burrowed units  or buildings being built or working
-	else if (type = A_UnitID["InfestorBurrowed"])
-	{
-		local Pointer := pointer(GameIdentifier, P_IsCursorReticle, O1_IsCursorReticle)
-		return ReadMemory(Pointer + O2_IsCursorReticle, GameIdentifier, 1)
-	}
-	else return 0
+isUserPerformingAction()
+{	Local Type, worker
+	type := getCurrentlyHighlightedUnitType()
+;	if a_UnitTargetFilter.Structure & TargetFilter
+;		return 0 ; as it's a building and the user cant really be doing anything - perhaps set rally point for hatches via 'y'... Dont need to do this anymore
+	If (a_LocalPlayer["Race"] = "Terran")
+		worker := "SCV"	
+	Else If (a_LocalPlayer["Race"] = "Protoss")
+		worker := "Probe"
+	Else Worker := "Drone"
+	
+	if ( type = A_UnitID[Worker] && isUserBusyBuilding() ) || IsUserMovingCamera()
+		return 1
+	else return pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction)
 }
 
+
+; This will return 1 if the basic or advanced building selection card is up (even if all structures greyed out)
+; This will also return 1 when user is trying to place the structure
+isUserBusyBuilding()	
+{ 	GLOBAL
+	return pointer(GameIdentifier, P_IsUserBuildingWithWorker, 01_IsUserBuildingWithWorker, 02_IsUserBuildingWithWorker, 03_IsUserBuildingWithWorker, 04_IsUserBuildingWithWorker)
+}
 	
+f2::
+
+while !breakloop
+{
+	action := 
+	isuserbuilding := isUserBusyBuilding()	
+ ToolTip, % isUserPerformingAction() "`n" isUserBusyBuilding(), A_ScreenWidth / 2, A_ScreenHeight / 2
+ sleep 100
+}
+return
+
++f2::breakloop := !breakloop
+
+
 
 ;----------------------
 ;	Auto Mine
@@ -7293,13 +7296,6 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
  }
 
 
-f2::
-getSelectedQueensWhichCanInject(aSelection)
-objtree(aSelection, "aSelection")
-objtree(oHatcheries, "oHatcheries")
-objtree(oSelection, "oSelection")
-return
-
  getSelectedQueensWhichCanInject(ByRef aSelection)
  {	GLOBAL A_unitID, O_scTypeCount, O_scTypeHighlighted, S_scStructure, O_scUnitIndex, GameIdentifier, B_SelectionStructure
  	, S_uStructure, GameIdentifier 
@@ -7554,18 +7550,62 @@ LoadMemoryAddresses(SC2EXE)
 	; note I have Converted these hex numbers from their true decimal conversion 
 	; so that they can be used as bit flags with bit wise &
 
-	P_IsUserCasting := SC2EXE +	0x0209C3C8	; this is probably something to do with the control card
-		O1_IsUserCasting := 0x364 			; 1 indicates user is casting a spell e.g. fungal, snipe, or is trying to place a structure
-		O2_IsUserCasting := 0x19C 			; auto casting e.g. swarm host displays 1 always 
+
+	
+
+	
+	P_IsUserPerformingAction := SC2EXE + 0x0209C3C8			; This is a 1byte value and return 1  when user is casting or in is rallying a hatch via gather/rally or is in middle of issuing Amove/patrol command but
+		O1_IsUserPerformingAction := 0x254 					; if youre searching for a 4byte value in CE offset will be 254 (but really if using it as 1 byte it is 0x255) - but im lazy and use it as a 4byte with my pointer command
+															; also 1 when placing a structure (after structure is selected) or trying to land rax to make a addon Also gives 1 when trying to burrow spore/spine
+															; When searching for 4 byte value this offset will be 0x254 
+															; this address is really really useful!
+															; it is even 0 with a burrowed swarm host selected (unless user click 'y' for rally which is even better)
+
+	P_IsUserBuildingWithWorker := SC2EXE + 0x0209C3C8  	 	; this is like the one but will give 1 even when all structure are greyed out (eg lari tech having advanced mutations up)
+		01_IsUserBuildingWithWorker := 0x364 				; works for workers of all races
+		02_IsUserBuildingWithWorker := 0x17C           		; even during constructing SVC will give 0 - give 1 when selection card is up :)
+		03_IsUserBuildingWithWorker := 0x3A8
+		04_IsUserBuildingWithWorker := 0x168
+
+	B_MouseButtonCameraMove := SC2EXE + 0x1FDF7BC 			;1 byte - 2 for middle mouse (camDragscroll, or on minimap) 1 for lbutton on minimap
+
+	B_DirectionalKeysCameraScroll := SC2EXE + 0x1FDF7D0		; 1 byte, but again can read it as 4
+															; 4 = left, 8 = Up, 16 = Right, 32 = Down (these are added if more than 1 key is down) - could do a bitmask on it!
+
+	B_CameraMovingViaMouseAtScreenEdge := SC2EXE + 0x0209C3C8 		; Really a 1 byte value value indicates which direction screen will scroll due to mouse at edge of screen
+		01_CameraMovingViaMouseAtScreenEdge	:= 0x7C					; 1 = Diagonal Left/Top 		4 = Left Edge
+		02_CameraMovingViaMouseAtScreenEdge	:= 0x228				; 2 = Top 						5 = Right Edge			
+		03_CameraMovingViaMouseAtScreenEdge	:= 0x4B0				; 3 = Diagonal Right/Top 	  	6 = Diagonal Left/ Bot	
+																	; 7 = Bottom Edge 			 	8 = Diagonal Right/Bot
+
+
+									
+
+ ; The below offsets are not Currently used but are current for 2.0.8
+
+	B_CameraDragScroll := SC2EXE + 0x1FDF4A8  				; 1 byte Returns 1 when user is moving camera via DragScroll i.e. mmouse button the main map
+
+ 	P_IsUserCasting := SC2EXE +	0x0209C3C8					; this is probably something to do with the control card
+		O1_IsUserCasting := 0x364 							; 1 indicates user is casting a spell e.g. fungal, snipe, or is trying to place a structure
+		O2_IsUserCasting := 0x19C 							; auto casting e.g. swarm host displays 1 always 
 		O3_IsUserCasting := 0x228
 		O4_IsUserCasting := 0x168
-	
-		P_IsCursorReticle:= SC2EXE + 0x021857EC	; 1 byte	;seems to return 1 when cursors is reticle but not for inject larva on queen
-		O1_IsCursorReticle := 0x1C 					; also retursn 1 for burrowed swarm hosts though - auto cast? (and fungal - but reticle present for fungal)
-		O2_IsCursorReticle := 0x14 					; 0 when placing a building
+
+	P_IsCursorReticleBurrowedInfestor:= SC2EXE + 0x021857EC			; 1 byte	;seems to return 1 when cursors is reticle but not for inject larva on queen
+		O1_IsCursorReticleBurrowedInfestor := 0x1C 					; also retursn 1 for burrowed swarm hosts though - auto cast? (and fungal - but reticle present for fungal)
+		O2_IsCursorReticleBurrowedInfestor := 0x14 					; 0 when placing a building
+
+	P_IsUserBuildingWithDrone := SC2EXE + 0x0209C3C8		; gives 1 when drone has basic mutation or advance mutaion/ open
+		01_IsUserBuildingWithDrone := 0x364 				; Note: If still on hatch tech and all advanced building 'greyed out' will give 0!!!!!
+		02_IsUserBuildingWithDrone := 0x17C 				; also gives 1 when actually attempting to place building
+		03_IsUserBuildingWithDrone := 0x228
+		04_IsUserBuildingWithDrone := 0x168
+
+
 	return	
 	
-	
+
+
 /* Not Currently used
 	B_CameraBounds := SC2EXE + 0x209A094
 		O_x0Bound := 0x0
@@ -7577,6 +7617,8 @@ LoadMemoryAddresses(SC2EXE)
 		P1_CurrentBaseCam := 0x25C		;not current
 */	
 }
+
+
 
 g_SplitUnits:
 	Thread, NoTimers, true
@@ -8495,6 +8537,46 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 }
 
 
+IsUserMovingCamera()
+{
+	if (IsCameraMovingViaMouseButton() || IsCameraDirectionalKeyScollActivated() || IsCameraMovingViaMouseAtScreenEdge())
+		return 1
+	else return 0
+}
+
+; 4 = left, 8 = Up, 16 = Right, 32 = Down  ; can be used with bitmasks
+; these are added together if multiple keys are down e.g.  if Left, Up and Right are all active result = 28
+IsCameraDirectionalKeyScollActivated()  
+{
+	GLOBAL
+	Return ReadMemory(B_DirectionalKeysCameraScroll, GameIdentifier, 1)
+}
+
+; byte - returs 2 when cameraDragScrollActivated i.e. middle mouse (camDragscroll, or on minimap) and 1 for lbutton on minimap
+IsCameraMovingViaMouseButton()
+{	GLOBAL
+	Return ReadMemory(B_MouseButtonCameraMove, GameIdentifier, 1)
+}
+
+; Really a 1 byte value
+; 1 = Diagonal Left/Top 		4 = Left Edge
+; 2 = Top 						5 = Right Edge			
+; 3 = Diagonal Right/Top 	  	6 = Diagonal Left/ Bot	
+; 7 = Bottom Edge 			 	8 = Diagonal Right/Bot
+ 
+
+IsCameraMovingViaMouseAtScreenEdge()
+{	GLOBAL
+	return pointer(GameIdentifier, B_CameraMovingViaMouseAtScreenEdge, 01_CameraMovingViaMouseAtScreenEdge, 02_CameraMovingViaMouseAtScreenEdge, 03_CameraMovingViaMouseAtScreenEdge)
+}
+
+
+; 1 byte Returns 1 when user is moving camera via DragScroll i.e. Mmouse button the main map
+; IsCameraMovingViaMouseButton() detects this as well as lbutton on minimap so use that instead
+IsCameraDragScrollActivated() 
+{	GLOBAL
+	Return ReadMemory(B_CameraDragScroll, GameIdentifier, 1)
+}
 
 ;f1::
 /*
