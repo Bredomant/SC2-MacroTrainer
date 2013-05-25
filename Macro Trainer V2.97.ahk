@@ -47,6 +47,7 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #UseHook
 #Persistent
 #NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
+SetStoreCapslockMode, off ;neeeded in case a user bind something to the capslock key in sc2 - other AHK always sends capslock to adjust for case.
 OnExit, ShutdownProcedure
 
 Menu, Tray, Icon 
@@ -68,6 +69,7 @@ Else
 	Menu Tray, Icon, Starcraft-2.ico
 	debug := 1
 	debug_name := "Kalamity"
+	hotkey, ^+!F12, g_GiveLocalPalyerResources
 }
 
 start:
@@ -122,6 +124,7 @@ InstallSC2Files()
 
 CreatepBitmaps(a_pBitmap, a_unitID)
 aUnitInfo := []
+a_pBrush := []
 
 If (auto_update AND A_IsCompiled AND HideTrayIcon <> 1 AND CheckForUpdates(version, url.vr ))
 {
@@ -252,7 +255,13 @@ Return
 g_LbuttonDown:	;Get the location of a dragbox
 	MouseGetPos, MLDownX, MLDownY
 Return	
-	
+
+g_GiveLocalPalyerResources:
+	SetPlayerMinerals()
+	SetPlayerGas()
+return	
+
+
 speaker_volume_up:
 	Send {Volume_Up 2}
 	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
@@ -289,9 +298,11 @@ program_volume_down:
 	
 g_GLHF:
 	ReleaseModifiers(0)
+	SetStoreCapslockMode, On ;as I turned it off in the auto Exec section
 	if !isChatOpen()
 		send, +{Enter}
 	send, GL{ASC 3}HF{!}
+	SetStoreCapslockMode, Off
 return
 
 g_DeselectUnit:
@@ -595,7 +606,7 @@ clock:
 		game_status := "game", warpgate_status := "not researched"	
 		MiniMapWarning := [], a_BaseList := [], aUnitModel := []
 		if WinActive(GameIdentifier)
-			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := 1
+			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := ReDrawIdleWorkers := ReDrawLocalPlayerColour := 1
 		if idle_enable	;this is the idle AFK
 			settimer, user_idle, 1000
 ;		if (MaxWindowOnStart && !Auto_Mine && time < 5)  ;as automine has its own
@@ -767,11 +778,7 @@ CastChronoWarpgates()
 				Break		
 			sleep, %Chrono_Gate_Sleep% 
 			getMiniMapMousePos(unit, click_x, click_y)
-			If (CG_Random_off = 1)
-				Random, Random , -1, 1
-			Else
-				Random := 0
-			click_x := click_x + Random , click_y := click_y + Random
+			click_x := click_x, click_y := click_y
 			send % chrono_key
 			If HumanMouse
 				MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
@@ -1139,7 +1146,7 @@ If (time AND Time <= Start_Mine_Time + 8) && getIdleWorkers()
 			WinActivate, %GameIdentifier%
 			sleep 1500 ; give time for slower computers to make sc2 window 'truely' active
 			DestroyOverlays()
-			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := RedrawConstruction := 1
+			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := 1
 		}
 		Gosub overlay_timer	; here so can update the overlays
 		If (DrawMiniMap OR DrawAlerts OR DrawSpawningRaces)
@@ -1869,7 +1876,7 @@ doUnitDetection(unit, type, owner, mode = "")
 
 OverlayKeepOnTop:
 	if (!WinActive(GameIdentifier) And ReDraw <> 1)
-	{	ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := ReDrawIdleWorkers := RedrawUnit := RedrawConstruction := 1
+	{	ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := ReDrawIdleWorkers := RedrawUnit := ReDrawLocalPlayerColour := 1
 		DestroyOverlays()
 	}
 Return
@@ -1900,6 +1907,8 @@ overlay_timer: 	;DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdent=0, Bac
 			DrawWorkerOverlay(ReDrawWorker, WorkerOverlayScale, Dragoverlay) ;2 less parameters
 		If DrawIdleWorkersOverlay
 			DrawIdleWorkersOverlay(ReDrawIdleWorkers, IdleWorkersOverlayScale, dragOverlay)
+		if (DrawLocalPlayerColourOverlay && (GameType != "1v1" || GameType != "FFA"))   ;easier just to redraw it each time as otherwise have to change internal for when dragging
+			DrawLocalPlayerColour(ReDrawLocalPlayerColour, LocalPlayerColourOverlayScale, DragOverlay)
 	}
 Return
 
@@ -2255,7 +2264,6 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, CG_Enable, %config_file%, %section%, enable, 1
 	IniRead, Cast_ChronoGate_Key, %config_file%, %section%, Cast_ChronoGate_Key, F5
 	IniRead, CG_control_group, %config_file%, %section%, CG_control_group, 9
-	IniRead, CG_Random_off, %config_file%, %section%, CG_Random_off, 1
 	
 	IniRead, CG_nexus_Ctrlgroup_key, %config_file%, %section%, CG_nexus_Ctrlgroup_key, 4
 	IniRead, chrono_key, %config_file%, %section%, chrono_key, c
@@ -2455,7 +2463,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	
 	;[Overlays]
 	section := "Overlays"
-	list := "IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay"
+	list := "IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay,LocalPlayerColourOverlay"
 	loop, parse, list, `,
 	{
 		IniRead, Draw%A_LoopField%, %config_file%, %section%, Draw%A_LoopField%, 0
@@ -2529,6 +2537,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, TempHideMiniMapKey, %config_file%, %section%, TempHideMiniMapKey, !Space
 	IniRead, DrawSpawningRaces, %config_file%, %section%, DrawSpawningRaces, 1
 	IniRead, DrawAlerts, %config_file%, %section%, DrawAlerts, 1
+	IniRead, HostileColourAssist, %config_file%, %section%, HostileColourAssist, 0
 	
 	;[Hidden Options]
 	section := "Hidden Options"
@@ -2709,7 +2718,6 @@ ini_settings_write:
 	IniWrite, %CG_Enable%, %config_file%, %section%, enable
 	IniWrite, %Cast_ChronoGate_Key%, %config_file%, %section%, Cast_ChronoGate_Key
 	IniWrite, %CG_control_group%, %config_file%, %section%, CG_control_group
-	IniWrite, %CG_Random_off%, %config_file%, %section%, CG_Random_off
 	IniWrite, %CG_nexus_Ctrlgroup_key%, %config_file%, %section%, CG_nexus_Ctrlgroup_key
 	IniWrite, %chrono_key%, %config_file%, %section%, chrono_key
 	IniWrite, %CG_chrono_remainder%, %config_file%, %section%, CG_chrono_remainder
@@ -2908,7 +2916,7 @@ ini_settings_write:
 
 	;[Overlays]
 	section := "Overlays"
-	list := "IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay"
+	list := "IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay,LocalPlayerColourOverlay"
 	loop, parse, list, `,
 	{
 		drawname := "Draw" A_LoopField,	drawvar := %drawname%
@@ -2957,6 +2965,7 @@ ini_settings_write:
 	IniWrite, %TempHideMiniMapKey%, %config_file%, %section%, TempHideMiniMapKey
 	IniWrite, %DrawSpawningRaces%, %config_file%, %section%, DrawSpawningRaces
 	IniWrite, %DrawAlerts%, %config_file%, %section%, DrawAlerts
+	IniWrite, %HostileColourAssist%, %config_file%, %section%, HostileColourAssist
 
 	;this writes back the unit detection lists and settings
 	
@@ -2964,6 +2973,8 @@ ini_settings_write:
 	{
 		alert_array[A_LoopField, "Enabled"] := BAS_on_%A_LoopField%
 		alert_array[A_LoopField, "Clipboard"] := BAS_copy2clipboard_%A_LoopField%
+		IniWrite, % alert_array[A_LoopField, "Enabled"], %config_file%, Building & Unit Alert %A_LoopField%, enable	;alert system on/off
+		IniWrite, % alert_array[A_LoopField, "Clipboard"], %config_file%, Building & Unit Alert %A_LoopField%, copy2clipboard
 	}
 
 	if (program.Info.IsUpdating && A_IsCompiled)	;as both of these have there own write routines which activate on clicking 'save' in their on guis
@@ -3576,9 +3587,8 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vBug_TAB, Report Bug
 	Gui, Add, Button, vB_Report gB_Report xp+80 y+20 w80 h50, Report
 	
 Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
-	Gui, Add, GroupBox, w200 h220 section, Settings
+	Gui, Add, GroupBox, w200 h190 section, Settings
 		Gui, Add, Checkbox, xp+10 yp+25 vCG_Enable checked%CG_Enable%, Enable
-		Gui, Add, Checkbox, y+15 vCG_Random_off checked%CG_Random_off%, Add Random Offset
 		Gui, Add, Text, yp+35 w40,Hotkey:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoGate_Key , %Cast_ChronoGate_Key%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoGate_Key,  Edit				
@@ -3590,7 +3600,7 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
 		Gui, Add, Edit, Number Right xp+120 yp-2 w45 vTT_CG_chrono_remainder 
 			Gui, Add, UpDown,  Range0-1000 vCG_chrono_remainder, %CG_chrono_remainder%		
 					
-	Gui, Add, GroupBox, ys x+25  w200 h220 section, SC2 Keys && Control Groups
+	Gui, Add, GroupBox, ys x+25  w200 h190 section, SC2 Keys && Control Groups
 		Gui, Add, Text, xp+10 yp+25 , Stored Selection Control Group:
 			Gui, Add, Edit, Readonly xp+25 y+10  w100  center vCG_control_group , %CG_control_group%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#CG_control_group,  Edit				
@@ -3830,16 +3840,17 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||Overla
 Gui, Tab, MiniMap
 	
 	CurrentGuiTabX := XTabX -5
-	Gui, Add, Checkbox, X%CurrentGuiTabX% Y+15 vDrawMiniMap Checked%DrawMiniMap% gG_GuiSetupDrawMiniMapDisable, Enable MiniMap
+	Gui, Add, Checkbox, X%CurrentGuiTabX% Y+10 vDrawMiniMap Checked%DrawMiniMap% gG_GuiSetupDrawMiniMapDisable, Enable MiniMap
 	Gui, Add, Checkbox, xp+20 Y+5 vDrawSpawningRaces Checked%DrawSpawningRaces%, Display Spawning Races
 	Gui, Add, Checkbox, vDrawAlerts Checked%DrawAlerts%, Display Alerts
+	Gui, Add, Checkbox, vHostileColourAssist Checked%HostileColourAssist%, Hostile Colour Assist
 
 
-		Gui, add, text, y+20 X%CurrentGuiTabX% w45, Exclude:
+		Gui, add, text, y+15 X%CurrentGuiTabX% w45, Exclude:
 		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightExcludeList, %UnitHighlightExcludeList%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightExcludeList,  Edit 
 	
-		Gui, add, text, y+25 X%CurrentGuiTabX%, Highlight:
+		Gui, add, text, y+20 X%CurrentGuiTabX%, Highlight:
 		Gui, Add, Edit, yp-2 x+10 w300 section  center r1 vUnitHighlightList1, %UnitHighlightList1%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList1,  Edit
 		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
@@ -3888,12 +3899,13 @@ Gui, Tab, MiniMap
 
 Gui, Tab, Overlays
 		;Gui, add, text, y+20 X%XTabX%, Display Overlays:
-		Gui, Add, GroupBox, y+30 x+20  w170 h200 section, Display Overlays:
+		Gui, Add, GroupBox, y+30 x+20  w170 h225 section, Display Overlays:
 		Gui, Add, Checkbox, xp+10 yp+30 vDrawIncomeOverlay Checked%DrawIncomeOverlay% , Income Overlay
 		Gui, Add, Checkbox, xp y+15 vDrawResourcesOverlay Checked%DrawResourcesOverlay% , Resource Overlay
 		Gui, Add, Checkbox, xp y+15 vDrawArmySizeOverlay Checked%DrawArmySizeOverlay% , Army Size Overlay
 		Gui, Add, Checkbox, xp y+15 vDrawWorkerOverlay Checked%DrawWorkerOverlay% , Local Harvester Count
 		Gui, Add, Checkbox, xp y+15 vDrawIdleWorkersOverlay Checked%DrawIdleWorkersOverlay%, Idle Worker Count
+		Gui, Add, Checkbox, xp y+15 vDrawLocalPlayerColourOverlay Checked%DrawLocalPlayerColourOverlay%, Local Player Colour
 		Gui, Add, Checkbox, xp y+15 vDrawUnitOverlay Checked%DrawUnitOverlay%, Unit Panel
 		
 ;		Gui, Add, Text, xp-10 y+40, Custom Unit Filter:
@@ -3902,7 +3914,7 @@ Gui, Tab, Overlays
 		;Gui, Font,
 
 
-		Gui, Add, GroupBox, ys XS+205 w170 h200, Overlays Misc:
+		Gui, Add, GroupBox, ys XS+205 w170 h225, Overlays Misc:
 		Gui, Add, Checkbox, yp+25 xp+10 vOverlayBackgrounds Checked%OverlayBackgrounds% , Show Icon Background		
 		Gui, Add, Text, yp+30 w80, Player Identifier:
 		if OverlayIdent in 0,1,2,3
@@ -4086,6 +4098,10 @@ BlendUnits_TT := "This will draw the units 'blended together', like SC2 does.`nI
 TT_OverlayRefresh_TT := OverlayRefresh_TT := "Determines how frequently these overlays are refreshed:`nIncome, Resource, Army, Local Harvesters, and Idle Workers."
 TT_UnitOverlayRefresh_TT := UnitOverlayRefresh_TT := "Determines how frequently the unit panel is refreshed.`nThis requires more resources than the other overlays and so it has its own refresh rate."
 
+DrawLocalPlayerColourOverlay_TT := "During team games and while using hostile colours (green, yellow, and red) a small circle is drawn which indiactes your local player colour.`n`n"
+									. "This is helpful when your allies refer to you by colour."
+HostileColourAssist_TT := "During team games while using hostile colours (green, yellow, and red) enemy bases will still be displayed using player colours.`n`n"
+						. "This helps when co-ordinating attacks e.g. Let's attack yellow!"
 
 SleepSplitUnit_TT := TT_SleepSplitUnits_TT := TT_SleepSelectArmy_TT := SleepSelectArmy_TT := "Increase this value if the function doesn't work properly`nThis time is required to update the selection buffer."
 Sc2SelectArmy_Key_TT := #Sc2SelectArmy_Key_TT := "The in game (SC2) button used to select your entire army.`nDefault is F2"
@@ -4193,13 +4209,13 @@ return
 	
 
 P_Protoss_Joke:	
-	DSpeak("Baby's first Race.")
+	DSpeak("Tosser.")
 	return
 P_Terran_Joke:	
-	DSpeak("The defenders of freedom and all round good guys")
+	DSpeak("Terran")
 	return
 P_zerg_Joke:
-	DSpeak("The OPee Race")
+	DSpeak("Easy Mode")
 	return	
 
 B_HelpFile:
@@ -6177,7 +6193,7 @@ Return
 }
 
 getEnemyUnitsMiniMap(byref A_MiniMapUnits)
-{  LOCAL Unitcount, UnitAddress, pUnitModel, Filter, MemDump, Radius, x, y, PlayerColours, MemDump, PlayerColours, Unitcount, owner
+{  LOCAL Unitcount, UnitAddress, pUnitModel, Filter, MemDump, Radius, x, y, PlayerColours, MemDump, PlayerColours, Unitcount, owner, unitName
   A_MiniMapUnits := []
   PlayerColours := arePlayerColoursEnabled()
   Unitcount := DumpUnitMemory(MemDump)
@@ -6219,6 +6235,14 @@ getEnemyUnitsMiniMap(byref A_MiniMapUnits)
            Else if PlayerColours
               Colour := 0xcFF HexColour[a_Player[Owner, "Colour"]]   ;FF=Transparency
            Else Colour := 0xcFF HexColour["Red"]  
+
+           if (GameType != "1v1" && HostileColourAssist)
+           {
+	           unitName := A_UnitName[type]
+	           if unitName in CommandCenter,CommandCenterFlying,OrbitalCommand,PlanetaryFortress,Nexus,Hatchery,Lair,Hive
+	          		Colour := 0xcFF HexColour[a_Player[Owner, "Colour"]]
+	       }
+
            A_MiniMapUnits.insert({"X": x, "Y": y, "Colour": Colour, "Radius": Radius*2})  
 
      }
@@ -6310,7 +6334,7 @@ OverlayResize_WM_MOUSEWHEEL(wParam) 		;(wParam, lParam) 0x20A =mousewheel
 { local WheelMove, ActiveTitle, newScale, Scale
 	WheelMove := wParam > 0x7FFFFFFF ? HiWord(-(~wParam)-1)/120 :  HiWord(wParam)/120 ;get the higher order word & /120 = number of rotations
 	WinGetActiveTitle, ActiveTitle 			;downard rotations are -negative numbers
-	if ActiveTitle in IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay ; here cos it can get non overlay titles
+	if ActiveTitle in IncomeOverlay,ResourcesOverlay,ArmySizeOverlay,WorkerOverlay,IdleWorkersOverlay,UnitOverlay,LocalPlayerColourOverlay ; here cos it can get non overlay titles
 	{	
 		newScale := %ActiveTitle%Scale + WheelMove*.05
 		if (newScale >= .5)
@@ -6798,6 +6822,85 @@ DrawWorkerOverlay(ByRef Redraw, UserScale=1,Drag=0)
 	DeleteDC(hdc) 
 	Return
 }
+
+
+DrawLocalPlayerColour(ByRef Redraw, UserScale=1,Drag=0)
+{	global a_LocalPlayer, GameIdentifier, config_file, LocalPlayerColourOverlayX, LocalPlayerColourOverlayY, a_pBitmap, HexColour, a_pBrush
+	static Overlay_RunCount, hwnd1, DragPrevious := 0,  PreviousPlayerColours := 0 			
+
+	playerColours := arePlayerColoursEnabled()
+
+	if (!playerColours && PreviousPlayerColours) ; this just toggles the colour circle when the player changes the Player COlour state. A bit messy with the stuff below but im lazy
+	{
+		Redraw := 1
+		PreviousPlayerColours := 0
+	}
+	else if (playerColours && !PreviousPlayerColours)
+	{
+		Try Gui, LocalPlayerColourOverlay: Destroy
+		PreviousPlayerColours := 1
+		return
+	}
+	else if playerColours
+		return
+
+	Overlay_RunCount ++	
+	If (Redraw = -1)
+	{
+		Try Gui, LocalPlayerColourOverlay: Destroy
+		Overlay_RunCount := 0
+		Redraw := 0
+		Return
+	}	
+	Else if (ReDraw AND WinActive(GameIdentifier))
+	{
+		Try Gui, LocalPlayerColourOverlay: Destroy
+		Overlay_RunCount := 1
+		Redraw := 0
+	}	
+	If (Overlay_RunCount = 1)
+	{
+		Gui, LocalPlayerColourOverlay: -Caption Hwndhwnd1 +E0x20 +E0x80000 +LastFound  +ToolWindow +AlwaysOnTop
+		Gui, LocalPlayerColourOverlay: Show, NA X%LocalPlayerColourOverlayX% Y%LocalPlayerColourOverlayY% W400 H400, LocalPlayerColourOverlay
+		OnMessage(0x201, "OverlayMove_LButtonDown")
+		OnMessage(0x20A, "OverlayResize_WM_MOUSEWHEEL")
+	}
+	If (Drag AND !DragPrevious)
+	{	DragPrevious := 1
+		Gui, LocalPlayerColourOverlay: -E0x20
+	}
+	Else if (!Drag AND DragPrevious)
+	{	DragPrevious := 0
+		Gui, LocalPlayerColourOverlay: +E0x20 +LastFound
+		WinGetPos,LocalPlayerColourOverlayX,LocalPlayerColourOverlayY		
+		IniWrite, %LocalPlayerColourOverlayX%, %config_file%, Overlays, LocalPlayerColourOverlayX
+		Iniwrite, %LocalPlayerColourOverlayY%, %config_file%, Overlays, LocalPlayerColourOverlayY
+	}
+
+
+	hbm := CreateDIBSection(A_ScreenWidth, A_ScreenHeight) ;/10 not really necessary but should be plenty large enough
+	hdc := CreateCompatibleDC()
+	obm := SelectObject(hdc, hbm)
+	G := Gdip_GraphicsFromHDC(hdc)
+	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)	
+	Gdip_SetSmoothingMode(G, 4) ; for some reason its smoother than calling my setDrawingQuality(G) fucntion.......
+	colour := a_LocalPlayer["Colour"]
+	if !a_pBrush[colour]
+		a_pBrush[colour] := Gdip_BrushCreateSolid(0xcFF HexColour[colour])	
+	Radius := 12 * UserScale
+	Gdip_FillEllipse(G, a_pBrush[colour], 0, 0, Radius, Radius)
+
+	Gdip_DeleteGraphics(G)	
+	UpdateLayeredWindow(hwnd1, hdc)
+	SelectObject(hdc, obm) 
+	DeleteObject(hbm)  
+	DeleteDC(hdc) 
+	Return
+}
+
+
+
+
 	
 DestroyOverlays()
 {	
@@ -6807,6 +6910,7 @@ DestroyOverlays()
 	Try Gui, ArmySizeOverlay: Destroy
 	Try Gui, WorkerOverlay: Destroy			
 	Try Gui, idleWorkersOverlay: Destroy			
+	Try Gui, LocalPlayerColourOverlay: Destroy			
 	Try Gui, UnitOverlay: Destroy			
 }
 
@@ -6867,11 +6971,12 @@ CreatepBitmaps(byref a_pBitmap, a_unitID)
 }
 
 
-;	Some commands which can come in handy for some functions - but cant be used with hotkey command
+;	Some commands which can come in handy for some functions (obviously have to use within the hotkey command)
 ; 	#MaxThreadsBuffer on 		- this will buffer a hotkeys own key for 1 second, hence this is more in series - subsequent threads will begin when the previous one finishes
 ;	#MaxThreadsPerHotkey 3 		- this will allow a simultaneous 'thread' of hotkeys i.e. parallel
 ;	#MaxThreadsPerHotkey 1 		- 
 ;	#MaxThreadsBuffer off
+
 CreateHotkeys()
 {	global
 	Hotkeys:	 
@@ -6902,7 +7007,7 @@ CreateHotkeys()
 		hotkey, %program_volume_up_key%, program_volume_up, on
 		hotkey, %program_volume_down_key%, program_volume_down, on
 		hotkey, %warning_toggle_key%, mt_pause_resume, on		
-;		hotkey, *~LButton, g_LbuttonDown, on
+		hotkey, *~LButton, g_LbuttonDown, on
 	Hotkey, If, WinActive(GameIdentifier) && LwinDisable
 			hotkey, Lwin, g_DoNothing, on		
 	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
@@ -7855,7 +7960,13 @@ debugData()
 { 	global a_Player, O_mTop, GameIdentifier
 	Player := getLocalPlayerNumber()
 	unit := getSelectedUnitIndex()
-	return data := "GetGameType: " GetGameType(a_Player) "`n"
+	return "Is64bitOS: " A_Is64bitOS "`n"
+	. "OSVersion: " A_OSVersion "`n"
+	. "Language Code: " A_Language "`n"
+	. "==========================================="
+	. "`n"
+	. "`n"
+	. "GetGameType: " GetGameType(a_Player) "`n"
 	. "Enemy Team Size: " getEnemyTeamsize() "`n"
 	. "Time: " gettime() "`n"
 	. "Idle Workers: " getIdleWorkers() "`n"
@@ -7890,8 +8001,8 @@ debugData()
 	. A_Tab "Map Top: " getMapTop() "`n"
 	. A_Tab "Map Top: "ReadMemory(O_mTop, GameIdentifier) "`n"
 	. A_Tab "`n`n"
-	. A_Tab "PosZ Round: " round(getUnitPositionZ(unit), 1)
-	. A_Tab "`nPosZ : " getUnitPositionZ(unit)
+	.  "PosZ Round: " round(getUnitPositionZ(unit), 1)
+	.  "`nPosZ : " getUnitPositionZ(unit)
 }
 
 SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
@@ -8601,6 +8712,31 @@ isGatewayProducingOrConvertingToWarpGate(Gateway)
 }
 
 
+SetPlayerMinerals(amount=99999)
+{ 	global
+	player := 1
+	Return WriteMemory(B_pStructure + O_pMinerals + (player-1) * S_pStructure, GameIdentifier, amount,"ushort")   	 
+}
+SetPlayerGas(amount=99999)
+{ 	global
+	player := 1	
+	Return WriteMemory(B_pStructure + O_pGas + (player-1) * S_pStructure, GameIdentifier, amount,"ushort")   
+}
+
+
+return
+
+unit := getSelectedUnitIndex()
+
+msgbox % clipboard := pAbilities := dectohex(		getUnitAbilityPointer(unit)		) ;this contains a few pointers ()
+msgbox % clipboard := pQueueInfoAddress := dectohex(		pAbilities + 0x24	)	;but we want the one at +ox24
+msgbox % clipboard := pQueueInfo := dectohex(	ReadMemory(	pQueueInfoAddress, GameIdentifier)	)	;but we want the one at +ox24
+msgbox %  UnitsInProductionCount :=  ReadMemory( pQueueInfo + 0x28, GameIdentifier ) ; the number in production is here 
+
+
+
+;	O_P_uAbilityPointer := 0xD8 (+4)
+return
 
 ; //fold
 ; unit + 0xE2 ; 1 byte = 18h chrono for protoss structures 10h normal

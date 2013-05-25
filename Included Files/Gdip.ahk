@@ -1,5 +1,11 @@
+; **********************
+; *******************
+	;Remember for GDIp update I have manually added SetImageX(hCtrl, hBM)  at end of gdip - not normally part of file 
+
+
+
 ; Gdip standard library v1.45 by tic (Tariq Porter) 07/09/11
-; Modifed by Rseding91 using fincs 64 bit compatible Gdip library
+; Modifed by Rseding91 using fincs 64 bit compatible Gdip library 5/1/2013
 ; Supports: Basic, _L ANSi, _L Unicode x86 and _L Unicode x64
 ;
 ;#####################################################################################
@@ -1465,20 +1471,32 @@ Gdip_SaveBitmapToFile(pBitmap, sOutput, Quality=75)
 	if !(nCount && nSize)
 		return -2
 	
-	Loop, %nCount%
-	{
-		If (A_PtrSize)
-			StrGet_Name := "StrGet"
-		Else
-			StrGet_Name := "StrGetB"
-		
-		sString := %StrGet_Name%(NumGet(ci, (idx := (48+7*(A_PtrSize ? A_PtrSize : 4))*(A_Index-1))+32+3*(A_PtrSize ? A_PtrSize : 4)), "UTF-16")
-		if !InStr(sString, "*" Extension)
-			continue
-		
-		pCodec := &ci+idx
-		break
+	If (A_IsUnicode){
+		StrGet_Name := "StrGet"
+		Loop, %nCount%
+		{
+			sString := %StrGet_Name%(NumGet(ci, (idx := (48+7*A_PtrSize)*(A_Index-1))+32+3*A_PtrSize), "UTF-16")
+			if !InStr(sString, "*" Extension)
+				continue
+			
+			pCodec := &ci+idx
+			break
+		}
+	} else {
+		Loop, %nCount%
+		{
+			Location := NumGet(ci, 76*(A_Index-1)+44)
+			nSize := DllCall("WideCharToMultiByte", "uint", 0, "uint", 0, "uint", Location, "int", -1, "uint", 0, "int",  0, "uint", 0, "uint", 0)
+			VarSetCapacity(sString, nSize)
+			DllCall("WideCharToMultiByte", "uint", 0, "uint", 0, "uint", Location, "int", -1, "str", sString, "int", nSize, "uint", 0, "uint", 0)
+			if !InStr(sString, "*" Extension)
+				continue
+			
+			pCodec := &ci+76*(A_Index-1)
+			break
+		}
 	}
+	
 	if !pCodec
 		return -3
 
@@ -1675,10 +1693,13 @@ Gdip_CreateBitmapFromFile(sFile, IconNumber=1, IconSize="")
 	if ext in exe,dll
 	{
 		Sizes := IconSize ? IconSize : 256 "|" 128 "|" 64 "|" 48 "|" 32 "|" 16
-		VarSetCapacity(buf, 32+2*(A_PtrSize ? A_PtrSize : 4))
+		BufSize := 16 + (2*(A_PtrSize ? A_PtrSize : 4))
+		
+		VarSetCapacity(buf, BufSize, 0)
 		Loop, Parse, Sizes, |
 		{
 			DllCall("PrivateExtractIcons", "str", sFile, "int", IconNumber-1, "int", A_LoopField, "int", A_LoopField, PtrA, hIcon, PtrA, 0, "uint", 1, "uint", 0)
+			
 			if !hIcon
 				continue
 
@@ -1687,10 +1708,10 @@ Gdip_CreateBitmapFromFile(sFile, IconNumber=1, IconSize="")
 				DestroyIcon(hIcon)
 				continue
 			}
-			hbmColor := NumGet(buf, 12+(A_PtrSize ? A_PtrSize : 4))
-			hbmMask  := NumGet(buf, 12)
-
-			if !(hbmColor && DllCall("GetObject", Ptr, hbmColor, "int", 24, Ptr, &buf))
+			
+			hbmMask  := NumGet(buf, 12 + ((A_PtrSize ? A_PtrSize : 4) - 4))
+			hbmColor := NumGet(buf, 12 + ((A_PtrSize ? A_PtrSize : 4) - 4) + (A_PtrSize ? A_PtrSize : 4))
+			if !(hbmColor && DllCall("GetObject", Ptr, hbmColor, "int", BufSize, Ptr, &buf))
 			{
 				DestroyIcon(hIcon)
 				continue
@@ -1700,22 +1721,21 @@ Gdip_CreateBitmapFromFile(sFile, IconNumber=1, IconSize="")
 		if !hIcon
 			return -1
 
-		Width := NumGet(buf, 4, "int"),  Height := NumGet(buf, 8, "int")
+		Width := NumGet(buf, 4, "int"), Height := NumGet(buf, 8, "int")
 		hbm := CreateDIBSection(Width, -Height), hdc := CreateCompatibleDC(), obm := SelectObject(hdc, hbm)
-
 		if !DllCall("DrawIconEx", Ptr, hdc, "int", 0, "int", 0, Ptr, hIcon, "uint", Width, "uint", Height, "uint", 0, Ptr, 0, "uint", 3)
 		{
 			DestroyIcon(hIcon)
 			return -2
 		}
-
-		VarSetCapacity(dib, 84)
-		DllCall("GetObject", Ptr, hbm, "int", A_PtrSize = 8 ? 96 : 84, Ptr, &dib) ; sizeof(DIBSECTION) = 76+2*(A_PtrSize=8?4:0)+2*A_PtrSize
+		
+		VarSetCapacity(dib, 104)
+		DllCall("GetObject", Ptr, hbm, "int", A_PtrSize = 8 ? 104 : 84, Ptr, &dib) ; sizeof(DIBSECTION) = 76+2*(A_PtrSize=8?4:0)+2*A_PtrSize
 		Stride := NumGet(dib, 12, "Int"), Bits := NumGet(dib, 20 + (A_PtrSize = 8 ? 4 : 0)) ; padding
-
 		DllCall("gdiplus\GdipCreateBitmapFromScan0", "int", Width, "int", Height, "int", Stride, "int", 0x26200A, Ptr, Bits, PtrA, pBitmapOld)
-		pBitmap := Gdip_CreateBitmap(Width, Height), G := Gdip_GraphicsFromImage(pBitmap)
-		Gdip_DrawImage(G, pBitmapOld, 0, 0, Width, Height, 0, 0, Width, Height)
+		pBitmap := Gdip_CreateBitmap(Width, Height)
+		G := Gdip_GraphicsFromImage(pBitmap)
+		, Gdip_DrawImage(G, pBitmapOld, 0, 0, Width, Height, 0, 0, Width, Height)
 		SelectObject(hdc, obm), DeleteObject(hbm), DeleteDC(hdc)
 		Gdip_DeleteGraphics(G), Gdip_DisposeImage(pBitmapOld)
 		DestroyIcon(hIcon)
@@ -1731,6 +1751,7 @@ Gdip_CreateBitmapFromFile(sFile, IconNumber=1, IconSize="")
 		else
 			DllCall("gdiplus\GdipCreateBitmapFromFile", Ptr, &sFile, PtrA, pBitmap)
 	}
+	
 	return pBitmap
 }
 
@@ -2683,6 +2704,7 @@ StrGetB(Address, Length=-1, Encoding=0)
 }
 
 ;###############################################
+
 SetImageX(hCtrl, hBM) 
 {  ; SetImage without flicker :	   www.autohotkey.com/forum/viewtopic.php?p=488784#488784
  hdcSrc  := DllCall( "CreateCompatibleDC", UInt,0 )

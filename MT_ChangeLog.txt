@@ -1,3 +1,25 @@
+V2.98		20/05/13
+New:
+	• Local Player Colour indicator
+		- During team games and while using hostile colours (green, yellow, and red) a small circle is drawn which indiactes your local player colour.
+		- This is helpful when your allies refer to you by colour.
+	
+	• Hostile Colour Assist
+		- During team games and while using hostile colours (green, yellow, and red) enemy bases will still be displayed using player colours.
+		- This helps when co-ordinating attacks e.g. Let's attack yellow!
+
+	Note: These options can be enabled/disabled from within the minimap and overlay options.
+
+
+Fixes:
+	• Disabled " SetStoreCapslockMode "
+		- 	Users can now have things bound to the CapsLock key in SC2 hotkeys without that function being invoked by this program during a routine
+			(as AHK attempts to corrrect for a difference between the current capslock state and the required send keystrokes).
+	• The GUI check boxes in "Detection List" not saving their specified state.
+		-	I believe this problem was introduced in the previous version.
+
+	• Boxdrag correctly restored 
+
 V2.97		20/05/13
 
 New:
@@ -33,7 +55,7 @@ Fixes:
 
 
 Changes:
-	• Disabled the use of modifiers with with select army function
+	• Disabled the use of modifiers with select army function
 		- As this function works much much better when these are not used!!
 	• Added an additional two Minimap Unit Colour Highlight categories/lists
 	• Double tapping the Select Army Button will result in the camera focusing on the army.
