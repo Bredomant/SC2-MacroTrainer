@@ -270,12 +270,12 @@ speaker_volume_up:
 	Send {Volume_Up 2}
 	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
 	return
-	
+
 speaker_volume_down:
 	Send {Volume_Down 2}
 	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
 	return
-	
+
 speech_volume_up:
 	if (100 <  speech_volume := SAPI.volume + 2)
 		speech_volume := 100
@@ -299,7 +299,7 @@ program_volume_down:
 	SoundSet, -2
 	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
 	Return
-	
+
 g_GLHF:
 	ReleaseModifiers(0)
 	SetStoreCapslockMode, On ;as I turned it off in the auto Exec section
@@ -484,7 +484,7 @@ g_PrevWarning:
 	}
 	Else DSpeak("There have been no alerts")
 Return
-	
+
 Adjust_overlay:
 	Dragoverlay := 1
 	{
@@ -519,7 +519,7 @@ Toggle_Identifier:
 	gosub, g_unitPanelOverlay_timer
 Return
 
-	
+
 Overlay_Toggle:
 	if (A_ThisHotkey = CycleOverlayKey)
 	{
@@ -578,7 +578,7 @@ Overlay_Toggle:
 		gosub, g_unitPanelOverlay_timer
 	else gosub, overlay_timer ;this makes the change take effect immediately. 
 Return
-	
+
 mt_pause_resume:
 	if (mt_on := !mt_on)	; 1st run mt_on blank so considered false and does else	
 	{
@@ -737,7 +737,7 @@ CastChronoWarpgates()
 	, HumanMouseTimeLo, HumanMouseTimeHi
 	a_warpgates := [], a_gateways := [],
 	a_WarpgatesOnCoolDown := [], F_baselist_var := [],  a_Result := []
-	
+
 	MouseGetPos, start_x, start_y
 	HighlightedGroup := getSelectionHighlightedGroup()
 	send % "^" CG_control_group
@@ -772,7 +772,7 @@ CastChronoWarpgates()
 			Sort2DArray(a_WarpgatesOnCoolDown, "Cooldown", 0)	;so warpgates with longest cooldown get chronod first
 		if a_gateways.MaxIndex()	
 			RandomiseSimpleArray(a_gateways)
-		
+
 		for index, Warpgate in a_WarpgatesOnCoolDown
 			a_Result.insert(Warpgate.Unit)	
 		for index, Gateways in a_gateways
@@ -911,7 +911,7 @@ inject_reset:
 	inject_timer := 1
 	DSpeak("Reset")
 	return
-	
+
 Cast_DisableInject:	
 	If (F_Inject_Enable := !F_Inject_Enable)
 		DSpeak("Injects On")
@@ -924,7 +924,7 @@ Cast_DisableInject:
 	}
 	Return
 
-	
+
 BlockInput(Mode="Disable", byref L_Keys="", Delimiter="|") ; eg 	;	BlockInput("All", keylist)
 { 							
 	If (Mode = "All")		;note 2 button hotkeys eg Shift+1 or ctrl+a will still work
@@ -983,7 +983,7 @@ cast_inject:
 	If (A_ThisLabel = "cast_ForceInject")
 		castInjectLarva(auto_inject, 1, F_Sleep_Time)	
 	else castInjectLarva(auto_inject, 0, auto_inject_sleep) ;ie nomral injectmethod
-	
+
 	If Inject.LMouseState 
 	{
 		If HumanMouse
@@ -1133,7 +1133,7 @@ isUserPerformingAction()
 	Else If (a_LocalPlayer["Race"] = "Protoss")
 		worker := "Probe"
 	Else Worker := "Drone"
-	
+
 	if ( type = A_UnitID[Worker] && isUserBusyBuilding() )  || IsUserMovingCamera() || IsMouseButtonActive() ; so it wont do anything if user is holding down a mousebutton! eg dragboxing
 		return 1
 	else return pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ; this gives 1 when reticle/cast cursor is present
@@ -1232,7 +1232,7 @@ If (time AND Time <= Start_Mine_Time + 8) && getIdleWorkers()
 	Else If (Time >= Start_Mine_Time + 10) ; kill the timer if problem - done this way incase timer interupt and change time
 		Settimer, Auto_mine, Off
 Return	
-		
+
 SelectHomeMain(LocalBase)		
 {	global	base_camera, A_unitID
 	If (getSelectionCount() = 1) &&	((unit := getSelectionType(0)) = A_unitID["CommandCenter"] || Unit = A_unitID["Nexus"] || Unit = A_unitID["Hatchery"])
@@ -1494,7 +1494,7 @@ worker:
 WorkerInProduction(a_BaseList, maxIdleTime, maxWarnings, folloupWarningDelay, MaxWorkerCount)	;add secondary delay and max workers
 {	global a_LocalPlayer, w_workerprod_T, w_workerprod_P, w_workerprod_Z
 	static lastWorkerInProduction, warningCount, lastwarning
-	
+
 	if (getPlayerWorkerCount() >= MaxWorkerCount)	;stop warnings enough workers
 		return
 
@@ -1515,7 +1515,7 @@ WorkerInProduction(a_BaseList, maxIdleTime, maxWarnings, folloupWarningDelay, Ma
 	}
 	if !lazyBases && morphingBases
 		lastWorkerInProduction := time	;this prevents you getting a warning immeditely after the base finishes morphing
-		
+
 	if lazybases && (time - lastWorkerInProduction >= maxIdleTime) && ( warningCount < maxWarnings)
 	{
 		if (warningCount && time - lastwarning < folloupWarningDelay)
@@ -1602,14 +1602,14 @@ inject:
 	{
 		inject_timer := 1
 		inject_set:=time
-		
+
 		If W_inject_ding_on
 			SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
 		If W_inject_speech_on
 			DSpeak(w_inject_spoken)	
 	}		
 	return
-	
+
 auto_inject:
 	if ( time - inject_set >= auto_inject_time ) && (!F_Inject_Enable ||  ForceCount >= F_Max_Injects)
 	{
@@ -1624,7 +1624,7 @@ auto_inject:
 			DSpeak(w_inject_spoken)
 	}
 	return
-	
+
 Force_Inject:  		;not used any more
 	if (time - inject_set >= F_Inject_Delay + randomForcedInjectDelay) AND ( ForceCount < F_Max_Injects) AND WinActive(GameIdentifier)
 		gosub cast_ForceInject
@@ -1754,7 +1754,7 @@ warpgate_warn:
 	{
 		warpgate_warn_count ++
 		warpgateGiveWarningAt := getTime() + delay_warpgate_warn_followup
-		
+
 		for index, object in aGatewayWarnings
 		{
 			object.time := time ; so this will display an x even with long  follow up delay
@@ -1790,7 +1790,7 @@ while (A_Index <= UnitBankCount)
 	Filter := numgetUnitTargetFilter(UBMemDump, u_iteration)
 	; unit_HP := MAXHP - sustained dmg
 	; unit_HP := (ReadMemory((( ReadMemory(B_uStructure + ((A_Index - 1) * S_uStructure) + O_uModelPointer,"StarCraft II") << 5) & 0xFFFFFFFF) + u_MaxHP_Off,"StarCraft II") /4096) - (ReadMemory(B_uStructure + ((A_Index - 1) * S_uStructure) + 0x10C,"StarCraft II")/4096)
-		
+
 	If (Filter & DeadFilterFlag)
 		Continue
 	if (unit_owner = a_LocalPlayer["Slot"])
@@ -1849,7 +1849,7 @@ doUnitDetection(unit, type, owner, mode = "")
 	}
 	else If (Mode = "Save")
 	{
-	
+
 		loop, parse, l_WarningArrays, `,
 		{
 			For index, Object in %A_loopfield%
@@ -1913,12 +1913,12 @@ doUnitDetection(unit, type, owner, mode = "")
 					For index, object in Alert_TimedOut	; ;checks if the exact unit is in the time list already (eg if time > dont_warn_before, the original if statement wont be true so BAS_Warning will remain "give warning")			
 						if ( unit = object[owner, Alert_Index] ) ;checks if type is in the list already									
 								break loop_AlertList
-																						
+
 					If  !alert_array[GameType, A_Index, "Repeat"] ;else check if this unit type has already been warned												
 						For index, warned_type in Alerted_Buildings ;	if ( type = Alerted_Buildings[index, owner] ) ;checks if type is in the list already						
 							if ( Alert_Index = warned_type[owner] ) ;checks if alert index i.e. alert 1,2,3 is in the list already						
 								break loop_AlertList			
-								
+
 					For index, warned_unit in Alerted_Buildings_Base  ; this list contains all the exact units which have already been warned				
 						if ( unit = warned_unit[owner] ) ;checks if type is in the list already				
 							break loop_AlertList ; this warning is for the exact unitbase Address																				
@@ -2024,7 +2024,7 @@ SetMiniMap(byref minimap)
 		ScreenBottom := (947/960) * A_ScreenHeight
 		ScreenRight := (257/1280) * A_ScreenWidth 
 		ScreenTop := (718/960) * A_ScreenHeight
-		
+
 	}
 	Else ;16:9 Else if (AspectRatio = "16:9")
 	{
@@ -2037,7 +2037,7 @@ SetMiniMap(byref minimap)
 	minimap.ScreenHeight := ScreenBottom - ScreenTop
 	minimap.MapPlayableWidth 	:= minimap.MapRight - minimap.MapLeft
 	minimap.MapPlayableHeight 	:= minimap.MapTop - minimap.MapBottom
-	
+
 	if (minimap.MapPlayableWidth >= minimap.MapPlayableHeight)
 	{
 		minimap.scale := minimap.Screenwidth / minimap.MapPlayableWidth
@@ -2048,7 +2048,7 @@ SetMiniMap(byref minimap)
 		minimap.ScreenBottom := ScreenBottom - Y_offset
 		minimap.Height := minimap.ScreenBottom - minimap.ScreenTop
 		minimap.Width := minimap.ScreenWidth 
-		
+
 	}
 	else
 	{
@@ -2073,7 +2073,7 @@ drawUnitRectangle(G, x, y, width, height)
 	static pPen
 	width *= minimap.scale
 	height *= minimap.scale
-	
+
 	x := x - width / 2
 	y :=y - height /2
 					;as pen is only 1 pixel, it doesn't encroach into the fill paint (only occurs when >=2)
@@ -2183,7 +2183,7 @@ Return
 AUpdate_OnClose: ;from the Auto Update GUI
 	Gui Destroy
 	Goto Launch
-	
+
 TrayUpdate:
 	IfWinExist, Macro Trainer Update
 	{	WinActivate
@@ -2255,7 +2255,7 @@ Update:
 ;	Startup/Reading the ini file
 ;------------
 pre_startup:
-	
+
 if FileExist(config_file) ; the file exists lets read the ini settings
 {
 	;[Version]
@@ -2334,7 +2334,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, CG_Enable, %config_file%, %section%, enable, 1
 	IniRead, Cast_ChronoGate_Key, %config_file%, %section%, Cast_ChronoGate_Key, F5
 	IniRead, CG_control_group, %config_file%, %section%, CG_control_group, 9
-	
+
 	IniRead, CG_nexus_Ctrlgroup_key, %config_file%, %section%, CG_nexus_Ctrlgroup_key, 4
 	IniRead, chrono_key, %config_file%, %section%, chrono_key, c
 	IniRead, CG_chrono_remainder, %config_file%, %section%, CG_chrono_remainder, 2
@@ -2495,7 +2495,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, AM_MiniMap_PixelVariance, %config_file%, %section%, AM_MiniMap_PixelVariance, 0
 	IniRead, Start_Mine_Time, %config_file%, %section%, Start_Mine_Time, 1
 	IniRead, AM_KeyDelay, %config_file%, %section%, AM_KeyDelay, 2
-	
+
 	IniRead, Idle_Worker_Key, %config_file%, %section%, Idle_Worker_Key, {F1}
 	IniRead, Gather_Minerals_key, %config_file%, %section%, Gather_Minerals_key, g
 	IniRead, Base_Control_Group_Key, %config_file%, %section%, Base_Control_Group_Key, 4
@@ -2616,7 +2616,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	
 	; Resume Warnings
 	Iniread, ResumeWarnings, %config_file%, Resume Warnings, Resume, 0
-		
+
 	if ( version > read_version ) ; its an update and the file exists - better backup the users settings
 	{
 		program.Info.IsUpdating := 1
@@ -2665,7 +2665,7 @@ ini_settings_write:
 			hotkey, %program_volume_up_key%, off		; create hotkeys section
 			hotkey, %program_volume_down_key%, off		; still left the overall try just incase i missed something
 			hotkey, %warning_toggle_key%, off			; gives the user a friendlier error
-		
+
 			Hotkey, If, WinActive(GameIdentifier) && time	
 			hotkey, %worker_count_local_key%, off
 			hotkey, %worker_count_enemy_key%, off
@@ -2940,7 +2940,7 @@ ini_settings_write:
 	IniWrite, %SelectArmyDeselectPatrolling%, %config_file%, %section%, SelectArmyDeselectPatrolling
 	IniWrite, %SelectArmyDeselectHoldPosition%, %config_file%, %section%, SelectArmyDeselectHoldPosition
 	IniWrite, %SelectArmyDeselectFollowing%, %config_file%, %section%, SelectArmyDeselectFollowing
-	
+
 	IniWrite, %SelectArmyControlGroupEnable%, %config_file%, %section%, SelectArmyControlGroupEnable
 	IniWrite, %Sc2SelectArmyCtrlGroup%, %config_file%, %section%, Sc2SelectArmyCtrlGroup
 	IniWrite, %SplitUnitsEnable%, %config_file%, %section%, SplitUnitsEnable
@@ -3039,7 +3039,7 @@ ini_settings_write:
 	IniWrite, %HostileColourAssist%, %config_file%, %section%, HostileColourAssist
 
 	;this writes back the unit detection lists and settings
-	
+
 	loop, parse, l_GameType, `,
 	{
 		alert_array[A_LoopField, "Enabled"] := BAS_on_%A_LoopField%
@@ -3074,7 +3074,7 @@ ini_settings_write:
 		UserSavedAppliedSettings := 1
 		If (game_status = "game") ; so if they change settings during match will update timers
 			UpdateTimers := 1
-		
+
 	}
 Return
 
@@ -3121,7 +3121,7 @@ ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity 
  
 loop, parse, options_menu, | ; | = delimter
 	IL_Add(ImageListID, A_Temp "\" A_LoopField) 
-	
+
 Gui, Add, TreeView, -Lines ReadOnly ImageList%ImageListID% h440 w150 gOptionsTree
 
 TV_Add("Home", 0, "Icon1")  
@@ -3153,7 +3153,7 @@ Gui, Tab,  Basic
 				Else droplist_var := 3
 				Gui, Add, DropDownList,x+10 yp-2 w130 vAuto_inject Choose%droplist_var%, MiniMap||Backspace|Disabled
 				tmp_xvar := OriginTabx + 10
-	
+
 
 		Gui, Add, Text, X%tmp_xvar% yp+45 vSillyGUIControlIdentVariable, Inject Hotkey:
 			GuiControlGet, XTab, Pos, SillyGUIControlIdentVariable ;XTabX = x loc
@@ -3181,7 +3181,7 @@ Gui, Tab,  Basic
 					GuiControlGet, settingsR, Pos, Edit_pos_var ;XTabX = x loc
 				Gui, Add, Checkbox, x%XTab2X% y+25 vCanQueenMultiInject checked%CanQueenMultiInject%,
 				Gui, Add, Text, x+0 yp-5, Queen Can Inject`nMultiple Hatcheries ; done as checkbox with 2 lines text is too close to checkbox
-	
+
 Gui, Add, GroupBox, w200 h180 ys xs+210 section, Backspace
 		Gui, Add, Text, xs+10 yp+25, Drag Origin:
 		if (Drag_origin = "Right")
@@ -3189,11 +3189,11 @@ Gui, Add, GroupBox, w200 h180 ys xs+210 section, Backspace
 		Else
 			droplist_var := 1
 		Gui, Add, DropDownList,x+60 yp-2 w50 vDrag_origin Choose%droplist_var%, Left|Right|
-		
+
 		Gui, Add, Text, xs+10 yp+40, Create Camera: %A_space% %A_space% (Location Storge)
 			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vBI_create_camera_pos_x , %BI_create_camera_pos_x%
 				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#BI_create_camera_pos_x,  Edit
-		
+
 		Gui, Add, Text, xs+10 yp+40, Camera Position: %A_space% %A_space% (Goto Location)
 			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vBI_camera_pos_x , %BI_camera_pos_x%
 				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#BI_camera_pos_x,  Edit
@@ -3203,12 +3203,12 @@ Gui, Add, GroupBox, w200 h61 y+10 xs,
 		Gui, Add, Text,xs+10 y+12, Time Between Alerts (s):
 		Gui, Add, Edit, Number Right x+25 yp-2 w45 vTT_auto_inject_time
 			Gui, Add, UpDown, Range1-100000 vauto_inject_time, %auto_inject_time% ;these belong to the above edit
-				
+
 Gui, Add, GroupBox, xs y+20 w200 h140, MiniMap
 		Gui, Add, Text, xs+10 yp+25, Queen Control Group:
 			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vMI_Queen_Group, %MI_Queen_Group%
 				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#MI_Queen_Group,  Edit			
-		
+
 		Gui, Add, Text, xs+10 yp+40, Max Queen Distance:`n%A_Space% %A_Space% (From Hatch)
 			Gui, Add, Edit, Number Right xp+132 yp w45 vTT2_MI_QueenDistance
 					Gui, Add, UpDown,  Range1-100000 vMI_QueenDistance, %MI_QueenDistance%			
@@ -3230,7 +3230,7 @@ Gui, Tab,  Info
 		gui, Add, Text, w410 y+15, If something really goes wrong, you can reload the program by pressing "Lwin && space" three times.
 		gui, font, norm s10
 		gui, font, 		
-		
+
 Gui, Tab,  Manual
 		Gui, Add, GroupBox,  w295 h165, Manual Inject Timer	;h185
 				Gui, Add, Checkbox,xp+10 yp+30 vmanual_inject_timer checked%manual_inject_timer%, Enable
@@ -3246,7 +3246,7 @@ Gui, Tab,  Manual
 				Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#inject_reset_key,  Edit
 				Gui, Add, Text,yp+75 x%settings2RX% w340,  This is a very basic timer. It will simply beep every x seconds
 
-				
+
 Gui, Tab,  Auto
 	Gui, Add, GroupBox, y+20 w225 h220, Fully Automated Injects
 		Gui, Add, Checkbox,xp+10 yp+30 vF_Inject_Enable checked%F_Inject_Enable%, Enable
@@ -3279,8 +3279,8 @@ Gui, Tab,  Auto
 ;			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Alert_PreTime
 ;				Gui, Add, UpDown, Range0-100000 vF_Alert_PreTime, %F_Alert_PreTime%
 	Gui, Add, Text,yp+50 x%settings2RX% w340,  Note:`n`nAuto injects will begin after you control group your queen to the correct (inject) queen control group.`n`nAuto injects are performed using the 'MiniMap' macro.`n`nPlease ensure you have correctly set the settings under the 'basic' inject tab. This includes the 'minimap' settings as well as the 'spawn larva key', 'burrow key' and control group storage settings.
-		
-		
+
+
 Gui, Tab,  Alert
 		Gui, Add, GroupBox,  w210 h140, Basic Inject Alert Type
 		Gui, Add, Checkbox,xp+10 yp+30 vW_inject_ding_on checked%W_inject_ding_on%, Windows Ding
@@ -3290,18 +3290,18 @@ Gui, Tab,  Alert
 		Gui, Font, s10
 		Gui, Add, Text, y+60 w360, Note: Due to an inconsistency with the programming language, some systems may not hear the 'windows ding'.
 		Gui, Font	
-							
+
 
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vKeys_TAB, SC2 Keys				
 	Gui, Add, GroupBox, w280 h135, Starcraft Settings && Keys
 		Gui, Add, Text, xp+10 yp+30 w90, Pause Game: 
 			Gui, Add, Edit, Readonly yp-2 x+10 w120  center vpause_game , %pause_game%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#pause_game,  Edit
-				
+
 		Gui, Add, Text, X%XTabX% yp+35 w90, Escape:
 			Gui, Add, Edit, Readonly yp-2 x+10 w120  center vescape , %escape%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#escape,  Edit
-				
+
 		Gui, Add, Text, X%XTabX% yp+35 w90, Base Camera:
 			Gui, Add, Edit, Readonly yp-2 x+10 w120  center vbase_camera , %base_camera%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#base_camera,  Edit
@@ -3311,16 +3311,16 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vKeys_TAB, SC2 Keys
 		Gui, Add, Text,  X%tmpX% y+50 +wrap, Ensure the following keys match the associated SC2 Functions.
 		Gui, Add, Text,  X%tmpX% y+5 +wrap, (either change these settings here or in the SC2 Hotkey options/menu)
 		gui, font, 		
-			
+
 
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vWarnings_TAB, Supply||Macro|Macro2|Warpgates
 Gui, Tab, Supply	
 ; Gui, Add, GroupBox, w420 h335, Supply				
 	Gui, Add, Checkbox, X%XTabX% y+30 Vsupplyon checked%supplyon%, Enable Alert
 
-		
+
 			Gui, Add, GroupBox, X%XTabX% yp+35 w175 h260 section, Supply Ranges && Deltas
-	
+
 			Gui, font, italic
 			Gui, Add, Text,xs+10 yp+25 w100, Warn When Below:
 			Gui, font, 
@@ -3336,8 +3336,8 @@ Gui, Tab, Supply
 			Gui, font, 
 				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_sub_middelta
 					Gui, Add, UpDown, Range1-200 Vsub_middelta, %sub_middelta%
-					
-					
+
+
 			Gui, Add, Text,xs+10 y+15 w100, Middle Range Cutoff:
 				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_supplymid
 					Gui, Add, UpDown, Range1-200 Vsupplymid, %supplymid%
@@ -3347,7 +3347,7 @@ Gui, Tab, Supply
 			Gui, font, 
 				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_sub_upperdelta
 					Gui, Add, UpDown, Range1-200 Vsub_upperdelta, %sub_upperdelta%
-					
+
 
 			Gui, Add, Text,xs+10 y+15 w100, Upper Range Cutoff:
 				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_supplyupper
@@ -3361,7 +3361,7 @@ Gui, Tab, Supply
 
 					2XTabX := XTabX -10
 		Gui, Add, GroupBox, ys x+30 w200 h260, Warnings
-		
+
 			Gui, Add, Text,xp+10 yp+25 w125 section, Silent If Supply Below:
 			Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_minimum_supply
 			Gui, Add, UpDown, Range1-200 Vminimum_supply, %minimum_supply%	
@@ -3373,7 +3373,7 @@ Gui, Tab, Supply
 			Gui, Add, Text,y+15 xs w125, Secondary Delay:
 				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_additional_delay_supply
 					Gui, Add, UpDown, Range0-200 Vadditional_delay_supply, %additional_delay_supply%
-		
+
 			Gui, Add, Text,y+15 xs w125, Spoken Warning:
 				Gui, Add, Edit, w180 Vw_supply center, %w_supply%
 
@@ -3383,21 +3383,21 @@ Gui, Tab, Macro
 		Gui, Add, Text, y+10 section w105, Trigger Amount:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_mineraltrigger
 				Gui, Add, UpDown, Range1-20000 Vmineraltrigger, %mineraltrigger%
-				
+
 		Gui, Add, Text,xs y+10 w105, Secondary Warnings:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_sec_mineral
 				Gui, Add, UpDown, Range0-20000 Vsec_mineral, %sec_mineral%
-				
+
 		Gui, Add, Text,xs y+10 w105, Secondary Delay:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_additional_delay_minerals
 				Gui, Add, UpDown, Range1-20000 Vadditional_delay_minerals, %additional_delay_minerals%
-				
+
 		Gui, Add, Text, X%XTabX% y+5 w125, Spoken Warning:
 			Gui, Add, Edit, w165 Vw_mineral center, %w_mineral%		
-				
+
 	Gui, Add, GroupBox, x%OriginTabX% y+20  w185 h205, Gas
 		Gui, Add, Checkbox, xp+10 yp+20  Vgas_on checked%gas_on%, Enable Alert
-		
+
 		Gui, Add, Text, y+10 section w105, Trigger Amount:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_gas_trigger
 				Gui, Add, UpDown, Range1-20000 Vgas_trigger, %gas_trigger%
@@ -3405,37 +3405,37 @@ Gui, Tab, Macro
 		Gui, Add, Text,xs y+10 w105, Secondary Warnings:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_sec_gas
 				Gui, Add, UpDown, Range0-20000 Vsec_gas, %sec_gas%
-				
+
 		Gui, Add, Text,xs y+10 w105, Secondary Delay:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_additional_delay_gas
 				Gui, Add, UpDown, Range1-20000 Vadditional_delay_gas, %additional_delay_gas%
-				
+
 		Gui, Add, Text, xs y+5 w125, Spoken Warning:
 			Gui, Add, Edit, w165 Vw_gas center, %w_gas%		
-			
+
 	Gui, Add, GroupBox, y%OriginTaby% X+35 w185 h175 section Vmacro_R_TopGroup, Idle Worker	;h185
 	GuiControlGet, macro_R_TopGroup, Pos, macro_R_TopGroup
-	
+
 		Gui, Add, Checkbox, xp+10 yp+20  Vidleon checked%idleon%, Enable Alert
 		Gui, Add, Text, y+10 section w105, Trigger Amount:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_idletrigger
 				Gui, Add, UpDown, Range1-20000 Vidletrigger, %idletrigger%
-				
+
 		Gui, Add, Text,xs y+10 w105, Secondary Warnings:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_sec_idle
 				Gui, Add, UpDown, Range0-20000 Vsec_idle, %sec_idle%
-				
+
 		Gui, Add, Text,xs y+10 w105, Secondary Delay:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_additional_idle_workers
 				Gui, Add, UpDown, Range1-20000 Vadditional_idle_workers, %additional_idle_workers%
-				
+
 		Gui, Add, Text, xs y+5 w125, Spoken Warning:
 			Gui, Add, Edit, w165 Vw_idle center, %w_idle%	
-	
+
 Gui, Tab, Macro2
 	;Gui, Add, GroupBox, y+20 x%macro_R_TopGroupX% w185 h205, Worker Production	
 	Gui, Add, GroupBox, w185 h270, Worker Production	
-	
+
 		Gui, Add, Checkbox, xp+10 yp+20  Vworkeron checked%workeron%, Enable Alert
 		Gui, Add, Text, y+10 section w105, Time without Production - Zerg:
 			Gui, Add, Edit, Number Right x+5 yp+2 w55 vTT_workerproduction_time
@@ -3444,29 +3444,29 @@ Gui, Tab, Macro2
 		Gui, Add, Text, xs y+20 w105, Time without Production - T && P:
 			Gui, Add, Edit, Number Right x+5 yp+2 w55 vTT_workerProductionTPIdle
 				Gui, Add, UpDown, Range1-20000 VworkerProductionTPIdle, %workerProductionTPIdle%
-				
+
 		Gui, Add, Text,xs y+20 w105, Secondary Warnings:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_sec_workerprod
 				Gui, Add, UpDown, Range0-20000 Vsec_workerprod, %sec_workerprod%
-				
+
 		Gui, Add, Text,xs y+10 w105, Secondary Delay:
 			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_additional_delay_worker_production
 				Gui, Add, UpDown, Range1-20000 Vadditional_delay_worker_production, %additional_delay_worker_production%
-				
+
 		Gui, Add, Text, xs y+10 w85, Terran Warning:
 			Gui, Add, Edit, yp x+0 W85 Vw_workerprod_T center, %w_workerprod_T%	
-			
+
 		Gui, Add, Text, xs y+5 w85,Protoss Warning:
 			Gui, Add, Edit, yp x+0 W85 Vw_workerprod_P center, %w_workerprod_P%	
-		
+
 		Gui, Add, Text, xs y+5 w85,Zerg Warning:
 			Gui, Add, Edit, yp x+0 W85 Vw_workerprod_Z center, %w_workerprod_Z%	
 
 Gui, Tab, Warpgates
 Gui, Add, GroupBox, y+20 w410 h135, Forgotten Gateway/Warpgate Warning
-	
+
 		Gui, Add, Checkbox,xp+10 yp+25 Vwarpgate_warn_on checked%warpgate_warn_on%, Enable Alert
-		
+
 		Gui, Add, Text, y+10 section w105, Warning Count:
 			Gui, Add, Edit,  Number Right x+5 yp-2 w55 vTT_sec_warpgate
 				Gui, Add, UpDown, Range1-20000 Vsec_warpgate, %sec_warpgate%		
@@ -3478,22 +3478,22 @@ Gui, Add, GroupBox, y+20 w410 h135, Forgotten Gateway/Warpgate Warning
 		Gui, Add, Text, x%xtabx% y+10  w105, Secondary Delay:
 			Gui, Add, Edit,  Number Right x+5 yp-2 w55 vTT_delay_warpgate_warn_followup
 				Gui, Add, UpDown, Range1-20000 Vdelay_warpgate_warn_followup, %delay_warpgate_warn_followup%						
-		
+
 		Gui, Add, Text, x+30 ys section w75, Warning:
 			Gui, Add, Edit, yp-2 x+10 w110 Vw_warpgate center, %w_warpgate%		
 
-	
+
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Abilities
 	Gui, Add, GroupBox, w240 h150 section, Misc Hotkeys
-		
+
 		Gui, Add, Text, xp+10 yp+30 w80, Worker Count:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vworker_count_local_key , %worker_count_local_key%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#worker_count_local_key,  Edit
-				
+
 		Gui, Add, Text, X%XTabX% yp+35 w80, Enemy Workers:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vworker_count_enemy_key , %worker_count_enemy_key%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#worker_count_enemy_key,  Edit		
-		
+
 		Gui, Add, Text, X%XTabX% yp+35 w80, Trainer On/Off:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vwarning_toggle_key , %warning_toggle_key%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#warning_toggle_key,  Edit
@@ -3501,23 +3501,23 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Abilities
 		Gui, Add, Text, X%XTabX% yp+35 w80, Ping Map:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vping_key , %ping_key%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#ping_key,  Edit
-	
+
 	Gui, Add, GroupBox, x+20 ys w160 h150, Detect Spawning Races
-		
+
 		Gui, Add, Checkbox,xp+10 yp+30 Vrace_reading checked%race_reading%, Enable
 		Gui, Add, Checkbox, y+10 vAuto_Read_Races checked%Auto_Read_Races%, Run on match start
 		Gui, Add, Checkbox, y+10 Vrace_speech checked%race_speech%, Speak Races
 		Gui, Add, Checkbox, y+10 Vrace_clipboard checked%race_clipboard%, Copy to Clipboard
-		
+
 		Gui, Add, Text, yp+25 w20, Hotkey:
 			Gui, Add, Edit, Readonly yp-2 x+5 w65  center Vread_races_key , %read_races_key%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#read_races_key,  Edit
-				
+
 	Gui, Add, GroupBox, xs ys+160 w410 h110, Auto Game Pause - Idle/AFK@Start
-	
+
 	Gui, Add, Checkbox,xp+10 yp+25 Vidle_enable checked%idle_enable%, Enable
 	;	Gui, Add, Checkbox,xp+10 yp+25 Vidle_enable checked0 disabled, Enable
-		
+
 		Gui, Add, Text,xp y+10, User Idle Time:
 			Gui, Add, Edit,  Number Right x+10 yp-2 w40 vTTidle_time  
 				Gui, Add, UpDown, Range1-20000 Vidle_time , %idle_time%
@@ -3525,14 +3525,14 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Abilities
 			Gui, Add, Text, X%tmpX% yp-25 w105, Don't Pause Before:
 				Gui, Add, Edit,  Number Right x+5 yp-2 w40 vTTUserIdle_LoLimit 
 					Gui, Add, UpDown, Range1-20000 VUserIdle_LoLimit , %UserIdle_LoLimit%
-	
+
 			Gui, Add, Text, X%tmpX% y+10 w105 vTTTUserIdle_HiLimit , Don't Pause After:
 				Gui, Add, Edit,  Number Right x+5 yp-2 w40  vTTUserIdle_HiLimit 
 					Gui, Add, UpDown, Range1-20000 VUserIdle_HiLimit , %UserIdle_HiLimit%					
-				
+
 		Gui, Add, Text, x%xtabx% y+10, Chat Message:
 			Gui, Add, Edit, yp-2 x+10 w310 Vchat_text center, %chat_text%	
-	
+
 	Gui, Add, GroupBox, xs y+20 w410 h110, Misc		
 		Gui, Add, Checkbox, x%xtabx% yp+25 VMaxWindowOnStart Checked%MaxWindowOnStart%, Maximise Starcraft on match start		
 		Gui, Add, Checkbox, x%xtabx% yp+30 gHumanMouseWarning VHumanMouse Checked%HumanMouse%, Use human like mouse movements
@@ -3543,23 +3543,23 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Abilities
 		Gui, Add, Text,yp+25 x450, Upper limit:
 		Gui, Add, Edit, Number Right x+25 yp-2 w45 
 			Gui, Add, UpDown,  Range1-300 vHumanMouseTimeHi, %HumanMouseTimeHi%, ;these belong to the above edit
-		
+
 
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vVolume_TAB, Volume
 	Gui, Add, GroupBox, w265 h310 section, Volume
-	
+
 		Gui, Add, Text,X%XTabX% yp+30 w90, Speech:
 			Gui, Add, Slider, ToolTip  NoTicks w125 x+2 yp-2  Vspeech_volume, %speech_volume%
 				Gui, Add, Button, xp+123 0 yp w30 h23 vTest_VOL_Speech gTest_VOL, Test
-		
+
 		Gui, Add, Text,X%XTabX% y+15 w90, Overall Program:
 			Gui, Add, Slider, ToolTip  NoTicks w125 x+2 yp-2  Voverall_program, %overall_program%
 				Gui, Add, Button, xp+123 yp w30 h23 vTest_VOL_All gTest_VOL, Test
-		
+
 		Gui, Add, Text, X%XTabX% yp+35 w90, +Speaker Volume: 
 			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vspeaker_volume_up_key , %speaker_volume_up_key%
 				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#speaker_volume_up_key,  Edit
-				
+
 		Gui, Add, Text, X%XTabX% yp+40 w90, -Speaker Volume:
 			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vspeaker_volume_down_key , %speaker_volume_down_key%
 				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#speaker_volume_down_key,  Edit
@@ -3571,7 +3571,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vVolume_TAB, Volume
 		Gui, Add, Text, X%XTabX% yp+40 w90, -Speech Volume:
 			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vspeech_volume_down_key , %speech_volume_down_key%
 				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#speech_volume_down_key,  Edit
-				
+
 		Gui, Add, Text, X%XTabX% yp+40 w90, +Program Volume:
 			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vprogram_volume_up_key , %program_volume_up_key%
 				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#program_volume_up_key,  Edit
@@ -3579,12 +3579,12 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vVolume_TAB, Volume
 		Gui, Add, Text, X%XTabX% yp+40 w90, -Program Volume:
 			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vprogram_volume_down_key , %program_volume_down_key%
 				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#program_volume_down_key,  Edit
-				
-			
+
+
 
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings				
 	Gui, Add, GroupBox, xs ys+5 w161 h110 section, Misc. Settings
-	
+
 		Gui, Add, Text, xp+10 yp+30 w80, Input Method:
 		if (input_method = "Input")
 			droplist2_var := 3
@@ -3599,9 +3599,9 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 			Gui, Add, UpDown,  Range-1-300 vEventKeyDelay, %EventKeyDelay%
 		gosub, g_ToggleEventKeyDelay ;to hide the menu item if required
 
-		
+
 		Gui, Add, Checkbox,xs+10 yp+30 Vauto_update checked%auto_update%, Auto Check For Updates
-	
+
 	Gui, Add, GroupBox, xs yp+30 w161 h185, Key Blocking
 		Gui, Add, Checkbox,xp+10 yp+25 vBlockingStandard checked%BlockingStandard%, Standard Keys	
 		Gui, Add, Checkbox, y+10 vBlockingFunctional checked%BlockingFunctional%, Functional F-Keys 	
@@ -3610,7 +3610,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 		Gui, Add, Checkbox, y+10 vBlockingMultimedia checked%BlockingMultimedia%, Mutimedia Buttons	
 		Gui, Add, Checkbox, y+10 vBlockingModifier checked%BlockingModifier%, Modifier Keys	
 		Gui, Add, Checkbox, y+10 vLwinDisable checked%LwinDisable%, Disable Left Windows Key
-	
+
 	Gui, Add, GroupBox, xs yp+30 w161 h60, Unit Deselection
 		Gui, Add, Text, xp+10 yp+25, Sleep Time:
 		Gui, Add, Edit, Number Right x+25 yp-2 w45 vTT_DeselectSleepTime
@@ -3625,7 +3625,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 	Gui, Add, GroupBox, Xs+171 yp+65 w245 h185, Debugging
 		Gui, Add, Button, xp+10 yp+30  Gg_ListVars w75 h25,  List Variables
 		Gui, Add, Button, xp yp+30  Gg_GetDebugData w75 h25,  Debug Data
-		
+
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vDetection_TAB, Detection List
 	loop, parse, l_GameType, `,
 	{
@@ -3655,14 +3655,14 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vDetection_TAB, Detection List
 	Gui, Font, s10
 	Gui, Add, Button, center xs-145 yp+50 w275 h60 gAlert_List_Editor vAlert_List_Editor, Launch Alert List Editor
 	Gui, Font,
-	
+
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vBug_TAB, Report Bug
 	Gui, Add, Text, y+30 section w100 , Your Email Address:`n%A_Space%%A_Space%%A_Space%%A_Space%%A_Space%(optional) 
 	Gui, Add, Edit, x+20 yp w250 vReport_Email,
 	Gui, Add, Text, xs ys+40 w100, Problem Description:
 	Gui, Add, Edit, x+20 yp w250 h200 vReport_TXT,
 	Gui, Add, Button, vB_Report gB_Report xp+80 y+20 w80 h50, Report
-	
+
 Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
 	Gui, Add, GroupBox, w200 h190 section, Settings
 		Gui, Add, Checkbox, xp+10 yp+25 vCG_Enable checked%CG_Enable%, Enable
@@ -3676,7 +3676,7 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
 		Gui, Add, Text, X%tmpx% yp+35, Chrono Remainder:`n    (1 = 25 mana)
 		Gui, Add, Edit, Number Right xp+120 yp-2 w45 vTT_CG_chrono_remainder 
 			Gui, Add, UpDown,  Range0-1000 vCG_chrono_remainder, %CG_chrono_remainder%		
-					
+
 	Gui, Add, GroupBox, ys x+25  w200 h190 section, SC2 Keys && Control Groups
 		Gui, Add, Text, xp+10 yp+25 , Stored Selection Control Group:
 			Gui, Add, Edit, Readonly xp+25 y+10  w100  center vCG_control_group , %CG_control_group%
@@ -3687,10 +3687,10 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
 		Gui, Add, Text, xs+10 yp+35 ,Chrono Boost Key:
 			Gui, Add, Edit, Readonly xp+25 y+10  w100  center vchrono_key , %chrono_key%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#chrono_key,  Edit	
-		
+
 		Gui, Add, Text, X%tmpx% y+85 cRed, Note:
 		Gui, Add, Text, x+10 yp+0, If gateways exist, they will be chrono boosted after the warpgates. 
-				
+
 
 Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vAutoGroup_TAB, Terran||Protoss|Zerg|Delay|Info	
 Short_Race_List := "Terr|Prot|Zerg"
@@ -3720,7 +3720,7 @@ loop, parse, Short_Race_List, |
 		if (10 = i := A_Index)	; done like this so 0 comes after 9
 			i := 0
 		Units := A_UnitGroupSettings[Tmp_LongRace, i]
-		 
+
 		Gui, add, text, y+20 X%XLeft%, Group %i%
 		Gui, Add, Edit, yp-2 x+10 w280  center r1 vAG_%Tmp_LongRace%%i%, %Units%
 	;	Gui, Add, Edit, yp-2 x+10 w280  center r1 vAG_%A_LoopField%%i%, %Units%
@@ -3732,8 +3732,8 @@ loop, parse, Short_Race_List, |
 }				
 Gui, Tab, Info
 	Gui, Font, s10
-	Gui, add, text, x+25 y+15 w380,Auto Unit Grouping:`n`nThis function will add (shift + control group) selected units to their preselected control groups, providing:`n`n• One of the selected units in not in said control group.`n• All of the selected units 'belong'  in this (preselected) control group.`nUnits are added after the control, shift, alt, && windows keys are released.
-	Gui, add, text, y+20 w380,Restrict Unit Grouping:`n`nIf units have been specified for a particular control group, only these preselected units can be added to that control group.`n`nThis prevents users erroneously adding units to control groups.`n`n• Any unit can be added to a blank control group.
+	Gui, add, text, x+25 y+15 w380,Auto Unit Grouping:`n`nThis function will add (shift + control group) selected units to their preselected control groups, providing:`n`nÂ• One of the selected units in not in said control group.`nÂ• All of the selected units 'belong'  in this (preselected) control group.`nUnits are added after the control, shift, alt, && windows keys are released.
+	Gui, add, text, y+20 w380,Restrict Unit Grouping:`n`nIf units have been specified for a particular control group, only these preselected units can be added to that control group.`n`nThis prevents users erroneously adding units to control groups.`n`nÂ• Any unit can be added to a blank control group.
 	Gui, Font, s10 BOLD
 	Gui, add, text, X%XTabX% y+8 cRED , Note:
 	Gui, Font, s10 norm
@@ -3760,7 +3760,7 @@ Gui, Tab, Select Army
 	Gui, Add, Text, Xs yp+35 w70, Select Army:
 	Gui, Add, Edit, Readonly yp-2 xs+85 w65 center vSc2SelectArmy_Key , %Sc2SelectArmy_Key%
 		Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#Sc2SelectArmy_Key,  Edit
-		
+
 	Gui, Add, Text, Xs yp+35, Sleep time (ms):
 	Gui, Add, Edit, Number Right xp+145 yp-2 w45 vTT_SleepSelectArmy
 	Gui, Add, UpDown,  Range0-100 vSleepSelectArmy, %SleepSelectArmy%
@@ -3799,32 +3799,32 @@ Gui, Tab, Remove Unit
 	Gui, Add, Edit, Readonly yp-2 xs+85 center w65 vcastRemoveUnit_key gedit_hotkey, %castRemoveUnit_key%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#castRemoveUnit_key,  Edit
 	Gui, Add, Text, Xs yp+70 w380, This removes the first unit (top left of selection card) from the selected units.`n`nThis is very usefuly for 'cloning' workers to geisers or sending 1 ling towards a group of banelings etc.
-				
+
 Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vAutoMine_TAB, Settings||Hotkeys|
 Gui, Tab, Settings	
 	Gui, Add, GroupBox, y+20 w195 h300 section, Settings
 		Gui, Add, Checkbox, xp+10 yp+30 vAuto_mine checked%auto_mine%, Enable
 		Gui, Add, Checkbox, yp+25 vAuto_mineMakeWorker checked%Auto_mineMakeWorker%, Make Worker
 		Gui, Add, Checkbox, yp+25 vAuto_Mine_Set_CtrlGroup checked%Auto_Mine_Set_CtrlGroup%, Set Base Ctrl Group
-		
+
 		Gui, Add, Text,y+20 w85, Split Type: 
 		if WorkerSplitType
 			droplist3_var := substr(WorkerSplitType, 0, 1)
 		else droplist3_var := 1
 		Gui, Add, DropDownList, x+35 yp-2 w45 vWorkerSplitType Choose%droplist3_var%, 6x1|3x2||2x3	
-		
+
 		Gui, Add, Text, X%XTabX% y+20 w65, Method:
 		droplist3_var := AutoMineMethod = "MiniMap" ? 2 : 1		
 		Gui, Add, DropDownList, x+35 yp-2 w65 gg_GuiSetupAutoMine vAutoMineMethod Choose%droplist3_var%, Normal||MiniMap	
-		
+
 		Gui, Add, Text, X%XTabX% y+20 w85, Sleep (ms):castSplitUnit_key
 		Gui, Add, Edit, Number Right x+35 yp-2 w45 vAuto_Mine_Sleep2
 			Gui, Add, UpDown, Range1-100000 vTT_Auto_Mine_Sleep2, %Auto_Mine_Sleep2%		
-		
+
 		Gui, Add, Text, X%XTabX% y+20 w85, Input Delay (ms):
 			Gui, Add, Edit, Number Right X+35 yp-2 w45 vTT_AM_KeyDelay
 				Gui, Add, UpDown,  Range0-10 vAM_KeyDelay, %AM_KeyDelay%			
-					
+
 		Gui, Add, Text,X%XTabX% y+20 w85, Start Mining at (s): 
 		Gui, Add, Edit, Number Right x+35 yp-2 w45 vStart_Mine_Time
 			Gui, Add, UpDown, Range0-100000, %Start_Mine_Time%	
@@ -3845,7 +3845,7 @@ Gui, Tab, Settings
 			Gui, Add, Edit, Number Right x+35 yp-2 w45 vAM_MiniMap_PixelColourGreen, %AM_MiniMap_PixelColourGreen%
 		Gui, Add, Text, x%XMenu% y+15 w55 vAMGUI6, Blue:
 			Gui, Add, Edit, Number Right x+35 yp-2 w45 vAM_MinsiMap_PixelColourBlue, %AM_MinsiMap_PixelColourBlue%
-	
+
 		Gui, Add, Button, x%XMenu% y+15 w60 h23 gg_GuiSetupResetPixelColour v#ResetPixelColour,  Reset	
 		Gui, Add, Button, x+30 yp  w60 h23 gg_FindTestPixelColourMsgbox v#FindPixelColour,  Find	
 
@@ -3855,9 +3855,9 @@ Gui, Tab, Settings
 			Gui, Add, UpDown, Range0-100 vTT_AM_MiniMap_PixelVariance, %AM_MiniMap_PixelVariance%	
 		Gui, Add, Button, xp-60 y+15 w60 h23 gg_PixelColourFinderHelpFile vAMGUI8,  About	
 		gosub, g_GuiSetupAutoMine	;hide/show the minimap items
-		
-		
-		
+
+
+
 Gui, Tab, Hotkeys	
 Gui, Add, GroupBox, xs y+20 w235 h210 section, SC2 HotKeys
 		Gui, Add, Text, X%XTabX% yp+25  w80 , Idle Worker:
@@ -3893,7 +3893,7 @@ Gui, Tab, Home
 		Gui, Add, Button, y+20 gB_HelpFile w150, Read The Help File
 		Gui, Add, Button, y+20 gB_ChangeLog w150, Read The ChangeLog
 		Gui, Add, Checkbox,y+30 Vlaunch_settings checked%launch_settings%, Show this menu on startup	
-		
+
 		if ( input_method <> "input" )
 		{
 			Gui, Add, Text, y+25 cRED, Note:
@@ -3902,7 +3902,7 @@ Gui, Tab, Home
 		Gui, Add, Picture, x170 y320 h90 w90 gP_Protoss_Joke vProtossPic, %A_Temp%\Protoss90.png
 		Gui, Add, Picture, x+50 yp-20 h128 w128 gP_Terran_Joke vTerranPic , %A_Temp%\Terran90.png
 		Gui, Add, Picture, x+50  yp+20 h90 w90 gP_zerg_Joke vZergPic, %A_Temp%\Zerg90.png
-		
+
 Gui, Tab, Emergency	
 	Gui, Font, S16 CDefault bold UNDERLINE, Verdana
 	Gui, Add, Text, x+20 y+30 center cRed, IMPORTANT
@@ -3916,7 +3916,7 @@ Gui, Tab, Emergency
 Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||Overlays|Hotkeys|Info
 
 Gui, Tab, MiniMap
-	
+
 	CurrentGuiTabX := XTabX -5
 	Gui, Add, Checkbox, X%CurrentGuiTabX% Y+10 vDrawMiniMap Checked%DrawMiniMap% gG_GuiSetupDrawMiniMapDisable, Enable MiniMap
 	Gui, Add, Checkbox, xp+20 Y+5 vDrawSpawningRaces Checked%DrawSpawningRaces%, Display Spawning Races
@@ -3927,7 +3927,7 @@ Gui, Tab, MiniMap
 		Gui, add, text, y+15 X%CurrentGuiTabX% w45, Exclude:
 		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightExcludeList, %UnitHighlightExcludeList%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightExcludeList,  Edit 
-	
+
 		Gui, add, text, y+20 X%CurrentGuiTabX%, Highlight:
 		Gui, Add, Edit, yp-2 x+10 w300 section  center r1 vUnitHighlightList1, %UnitHighlightList1%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList1,  Edit
@@ -3947,7 +3947,7 @@ Gui, Tab, MiniMap
 		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
 		Gui, Add, Picture, xs yp-4 w300 h22 0xE HWND_UnitHighlightList3Colour v#UnitHighlightList3Colour gColourSelector ;0xE required for GDI
 		paintPictureControl(_UnitHighlightList3Colour, UnitHighlightList3Colour)
-		
+
 		Gui, add, text, y+12 X%CurrentGuiTabX%, Highlight:
 		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightList4, %UnitHighlightList4%
 		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList4,  Edit
@@ -3965,15 +3965,15 @@ Gui, Tab, MiniMap
 		Gui, Font, s8 
 		Gui, add, text, x+3 yp+5, <--- Click Me
 		Gui, Font, norm 
-	
-	
+
+
 	Gui, Add, Text, Y50 x367, Refresh Rate (ms):
 		Gui, Add, Edit, Number Right x+20 yp-2 w55 vTT_MiniMapRefresh
 			Gui, Add, UpDown,  Range1-1500 vMiniMapRefresh, %MiniMapRefresh%	
 	Gui, Add, Text, x367 yp+30, Hide MiniMap:
 	Gui, Add, Edit, Readonly yp-2 xp+80 center w90 vTempHideMiniMapKey gedit_hotkey, %TempHideMiniMapKey%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#TempHideMiniMapKey,  Edit 		
-		
+
 
 Gui, Tab, Overlays
 		;Gui, add, text, y+20 X%XTabX%, Display Overlays:
@@ -4010,15 +4010,15 @@ Gui, Tab, Hotkeys
 		Gui, Add, Text, X%XTabX% y+40, Toggle Income:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleIncomeOverlayKey gedit_hotkey, %ToggleIncomeOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleIncomeOverlayKey,  Edit 		
-		
+
 		Gui, Add, Text, X%XTabX% yp+35, Toggle Resources:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleResourcesOverlayKey gedit_hotkey, %ToggleResourcesOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleResourcesOverlayKey,  Edit 		
-		
+
 		Gui, Add, Text, X%XTabX% yp+35, Toggle Army Size:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleArmySizeOverlayKey gedit_hotkey, %ToggleArmySizeOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleArmySizeOverlayKey,  Edit 		
-		
+
 		Gui, Add, Text, X%XTabX% yp+35, Toggle Workers:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleWorkerOverlayKey gedit_hotkey, %ToggleWorkerOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleWorkerOverlayKey,  Edit 		
@@ -4026,11 +4026,11 @@ Gui, Tab, Hotkeys
 		Gui, Add, Text, X%XTabX% yp+35, Toggle Unit Panel:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleUnitOverlayKey gedit_hotkey, %ToggleUnitOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleUnitOverlayKey,  Edit 		
-		
+
 		Gui, Add, Text, X%XTabX% yp+35, Cycle Overlays:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vCycleOverlayKey gedit_hotkey, %CycleOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#CycleOverlayKey,  Edit 		
-		
+
 		Gui, Add, Text, X%XTabX% yp+35, Cycle Identifier:
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vToggleIdentifierKey gedit_hotkey, %ToggleIdentifierKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleIdentifierKey,  Edit 		
@@ -4040,7 +4040,7 @@ Gui, Tab, Hotkeys
 		Gui, Add, Edit, Readonly yp-2 xp+120 center w85 vAdjustOverlayKey gedit_hotkey, %AdjustOverlayKey%
 		Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#AdjustOverlayKey,  Edit 
 		Gui, Add, Text, x+10 yp+5, * See 'Info' Tab for Instructions		
-		
+
 Gui, Tab, Info
 	Gui, Font, S11 CDefault bold UNDERLINE, Verdana
 	Gui, Add, Text, x+20 y+30 center cRed, How to Move/Resize Overlays:	
@@ -4059,7 +4059,7 @@ Resizing: Simply left click somewhere on the overlay and 			then rotate the mous
 When you're done, release the "Move/Resize" Hotkey. 
 You will hear a beep indicating that the new positions have been saved.
 )	
-	
+
 	Gui, Add, Text, xp y+20 w405, %text%
 	Gui, Font, S11 CDefault bold, Verdana
 	Gui, Add, Text, xp y+35 w405 center cRed, The MiniMap and Overlays will only work when SC is in 'Windowed (fullscreen)' mode.
@@ -4073,9 +4073,9 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY%, %A_Space% ;This is never hidd
 		Gui, Add, Button, x+20 w50 h25 gOptionsGuiClose, Canel
 		Gui, Add, Button, x+20 w50 h25 gIni_settings_write, Apply
 		Gui, Font, 
-	
 
-	 
+
+
 unhidden_menu := "Home_TAB"
 
 GuiControl, Hide, Home_TAB 
@@ -4261,7 +4261,7 @@ GuiControlGet, Slection,, input_method
 if (Slection != "Event")
 	command := "Hide"
 else command := "Show"
-	
+
 GuiControl, %command%, TT_EventKeyDelayText
 GuiControl, %command%, TT_EventKeyDelay
 GuiControl, %command%, EventKeyDelay
@@ -4273,7 +4273,7 @@ g_GuiSetupDrawMiniMapDisable:
 	if !Checked
 	{	GUIControl, Disable, DrawSpawningRaces
 		GUIControl, Disable, DrawAlerts
-	
+
 		GUIControl, Disable, UnitHighlightExcludeList
 		GUIControl, Disable, #UnitHighlightExcludeList
 
@@ -4318,7 +4318,7 @@ g_GuiSetupAutoMine:
 	loop, parse, l_control, `,
 		GuiControl, Hide%state%, %A_LoopField%
 return
-	
+
 
 P_Protoss_Joke:	
 	DSpeak("Tosser.")
@@ -4340,7 +4340,7 @@ B_HelpFile:
 	WB.Navigate(url.HelpFile)
 	Gui, Show,, MT Help File
 	Return
-	
+
 
 B_ChangeLog:
 	IfWinExist, ChangeLog Vr: %version%
@@ -4353,7 +4353,7 @@ B_ChangeLog:
 	WB.Navigate(url.changelog)
 	Gui, Show,,ChangeLog Vr: %version%
 Return
-	
+
 B_Report:
 	GuiControlGet, Report_Email,
 	GuiControlGet, Report_TXT,
@@ -4458,7 +4458,7 @@ Test_VOL:
 	speech_volume:= TmpSpeechVol := Round(TmpSpeechVol, 0)
 	GuiControlGet, TmpTotalVolume,, overall_program
 	overall_program := Round(TmpTotalVolume, 0)
-	
+
 	If ( A_GuiControl = "Test_VOL_All")
 	{
 		SoundSet, overall_program
@@ -4477,7 +4477,7 @@ Test_VOL:
 		DSpeak("A templar comes back to base with a terrified look on his face. The zealots asks - what happened? You look like you've seen a ghost")
 	Else If ( Rand_joke = 3 )
 	{
-	
+
 		DSpeak("A Three Three Protoss army walks into a bar and asks")
 		sleep 50
 		DSpeak("Where is the counter?")
@@ -4572,7 +4572,7 @@ GuiControlGet, OriginTabRAL, Pos
 	Gui, Add, Text,y+10 w80, Don't Warn if Made After (s):
 	Gui, Add, Text,y+12, Repeat on New?
 	Gui, Add, Text,y+16, ID Code:
-	
+
 	Gui, Add, Edit, Right ys xs+85 section w135 vEdit_Name	
 	Gui, Add, Edit, Number Right y+11 w135 vTT_Edit_DWB
 		Gui, Add, UpDown,  Range0-100000 vEdit_DWB, 0
@@ -4589,7 +4589,7 @@ Gui, Add, GroupBox, y+30 x%OriginTabRALX% w245 h175, Alert Submission
 	Gui, Add, Button, xs y+5 w225 section gDelete_Alert vB_Delete_Alert Center, Delete Alert
 	gui, Add, Text, Readonly yp+5 x+15 w90 center vCurrent_Selected_Alert2, `n`n
 	Gui, Add, Text,xs ys+27 w225 center, OR
-	
+
 Gui, Add, GroupBox, y+5 xs-5 w235 h55 section, New Alert	
 	Gui, Add, Button, xs+5 yp+20 w120 vB_Add_New_Alert gB_Add_New_Alert, Add This Alert to List
 	Gui, Add, Checkbox, checked x+10 yp-5 section vC_Add_1v1, 1v1
@@ -4599,7 +4599,7 @@ Gui, Add, GroupBox, y+5 xs-5 w235 h55 section, New Alert
 
 Gui, Add, Button, xp-100 y+30 vB_ALert_Cancel gGuiClose w100 h50, Cancel
 Gui, Add, Button, xp-200 yp vB_ALert_Save gB_ALert_Save w100 h50, Save Changes
-	
+
 Gui, Show, w490 h455, Alert List Editor  ; Show the window and its TreeView.
 
 OnMessage(0x200, "WM_MOUSEMOVE")
@@ -4644,7 +4644,7 @@ Delete_Alert:
 	TV_Delete(TV_GetSelection())
 	GUIControl,, B_Delete_Alert, Delete Alert - %GameTypeTV% %ItemTxt% ;update tne name on button
 	GUIControl,, B_Modify_Alert, Modify Alert - %GameTypeTV% %ItemTxt%
-	
+
 Return
 
 B_Modify_Alert:
@@ -4692,7 +4692,7 @@ B_Add_New_Alert:
 				Editalert_array[game_mode, New_Item_Pos, "Repeat"] := 1
 			Else Editalert_array[game_mode, New_Item_Pos, "Repeat"] := 0
 			Editalert_array[game_mode, New_Item_Pos, "IDName"] := drop_ID	
-		
+
 			loop, parse, l_GameType, `, ; 1s,2s,3s,4s
 			{		
 				if ( game_mode = A_LoopField )
@@ -4739,7 +4739,7 @@ MyTree:
 		GUIControl,, B_Modify_Alert, Modify Alert
 		GUIControl, Disable, B_Delete_Alert
 		GUIControl, Disable, B_Modify_Alert
-		
+
 	}
 	return
 
@@ -4820,7 +4820,7 @@ TV_CountP()
 WM_MOUSEMOVE()
 {
 	static CurrControl, PrevControl, _TT  ; _TT is kept blank for use by the ToolTip command below.
-	
+
     CurrControl := A_GuiControl
     If (CurrControl <> PrevControl and not InStr(CurrControl, " "))
     {
@@ -5157,7 +5157,7 @@ class TwoPanelSelection_LV
 		return
 	}
 }
-		
+
 	ModifyColListView(ListView = "", options = "")
 	{
 		if ListView
@@ -5225,7 +5225,7 @@ class TwoPanelSelection_LV
 	}
 	retrieveItemsFromListView(ListView="")
 	{
-		
+
 		if ListView
 			Gui, ListView, %ListView% ;note all future and current threads now refer to this listview!
 		a := []
@@ -5337,7 +5337,7 @@ SortUnitsByMapOrder(unitlist="", units*)
 	}	
 	for index, unit in units
 		List[A_Index] := {Unit:unit, X: getUnitPositionX(unit), Y: getUnitPositionY(unit)}	
-				
+
 	Sort2DArray(List, "X") ;3rd param def 1 OR ascending
 	For index, obj in List
 	{
@@ -5377,7 +5377,7 @@ areUnitsNearEachOther(unit1, unit2, x_max_dist = "", y_max_dist = "", compareZ =
 	Else If  !y_max_dist
 		y_max_dist := x_max_dist
 	Else x_max_dist := y_max_dist
-	
+
 	x_dist := Abs(getUnitPositionX(unit1) - getUnitPositionX(unit2))
 	y_dist := Abs(getUnitPositionY(unit1) - getUnitPositionY(unit2))																									
 																								; there is a substantial difference in height even on 'flat ground' - using a max value of 1 should give decent results
@@ -5413,7 +5413,7 @@ local u_x, u_y, tx, ty
 	u_x := getUnitPositionX(u_array_index_number)
 	u_y := getUnitPositionY(u_array_index_number)
 
-	
+
 	X_Bmap_conv := 950/(61954/4096)  ; pixel/map_X
 	if (u_x >= P_Xcam)
 	{
@@ -5427,7 +5427,7 @@ local u_x, u_y, tx, ty
 		tx := u_x * X_Bmap_conv
 		tx := 960 - tx
 	}
-	
+
 	if (u_y >= P_Ycam)
 	{
 	;	SoundPlay *-1
@@ -5436,7 +5436,7 @@ local u_x, u_y, tx, ty
 	;	Y_Bmap_conv := (375/7.89) *.7
 	;	Y_Bmap_conv := (u_y/(41661/4096)) *	375/(41661/4096) *1.3
 		Y_Bmap_conv :=  375/ (10.17114 - (5.6 + (u_y/(41661/4096)))*.1)
-		
+
 		ty := u_y * Y_Bmap_conv	
 		ty := 375 - ty
 	}
@@ -5492,7 +5492,7 @@ isUserCastingOrBuilding()	;note auto casting e.g. swarm host will always activat
 	return pointer(GameIdentifier, P_IsUserCasting, O1_IsUserCasting, O2_IsUserCasting, O3_IsUserCasting, O4_IsUserCasting)
 }
 
-	
+
 filterSlectionTypeByEnergy(EnergyFilter="", F_utype*) ;Returns the [Unit] index number
 {	
 	selection_i := getSelectionCount()
@@ -5791,7 +5791,7 @@ Dspeak>:
 
 dSpeak(Message, fSapi_vol="", fOverall_vol="")
 {	global overall_program, speech_volume
-	
+
 	if !fSapi_vol
 		fSapi_vol := speech_volume
 	if !fOverall_vol
@@ -5914,7 +5914,7 @@ getPlayerWorkerCount(player="")
 }
 getUnitType(Unit) ;starts @ 0 i.e. first unit at 0
 { global 
-	
+
 	LOCAL pUnitModel := ReadMemory(B_uStructure + (Unit * S_uStructure) + O_uModelPointer, GameIdentifier) ; note - this isnt really the correct pointer still have to << 5 
 	if !aUnitModel[pUnitModel]
     	getUnitModelInfo(pUnitModel)
@@ -5939,7 +5939,7 @@ getUnitOwner(Unit) ;starts @ 0 i.e. first unit at 0 - 2.0.4 starts at 1?
 
 getUnitTargetFilter(Unit) ;starts @ 0 i.e. first unit at 0
 {	local Memory, result 		;ReadRawMemory/numget is only ~11% faster
-				
+
 	ReadRawMemory(B_uStructure + Unit * S_uStructure + O_uTargetFilter, GameIdentifier, Memory, 8)
 	loop 8 
 		result += numget(Memory, A_index-1 , "Uchar") << 8*(A_Index-1)
@@ -5963,7 +5963,7 @@ getSubGroupPriority(Unit)	;this is a messy workaround fix
 
 	if (!Priority := aUnitInfo[type, "Priority"])	; faster to check array than read a value
 		 Priority := aUnitInfo[type, "Priority"] := getRealSubGroupPriority(unit)
-	
+
 	if (type = A_unitID.SwarmHostBurrowed)
 		Priority += .2		;can't use .5 as then if 1 is 18 and other 17 can both equal 17.5 which isnt right
 	else if (Filter & BuriedFilterFlag) && (type != A_unitID.WidowMineBurrowed)	; as this doesnt effect where the widow mine is in its subgroup
@@ -6240,7 +6240,7 @@ DrawMiniMap()
 	{
 		setDrawingQuality(G)
 		A_MiniMapUnits := []
-		
+
  		getEnemyUnitsMiniMap(A_MiniMapUnits)
 
 		for index, unit in A_MiniMapUnits
@@ -6441,7 +6441,7 @@ HiWord(number)
 		return (number >> 16)
 	return (number >> 16) & 0xffff	
 }	
-	
+
 OverlayResize_WM_MOUSEWHEEL(wParam) 		;(wParam, lParam) 0x20A =mousewheel
 { local WheelMove, ActiveTitle, newScale, Scale
 	WheelMove := wParam > 0x7FFFFFFF ? HiWord(-(~wParam)-1)/120 :  HiWord(wParam)/120 ;get the higher order word & /120 = number of rotations
@@ -6504,10 +6504,10 @@ DrawIdleWorkersOverlay(ByRef Redraw, UserScale=1,Drag=0, expand=1)
 	obm := SelectObject(hdc, hbm)
 	G := Gdip_GraphicsFromHDC(hdc)
 	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)	
-	
+
 	pBitmap := a_pBitmap[a_LocalPlayer["Race"],"Worker"]
 	SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
-	
+
 	expandOnIdle := 4
 	if expand
 	{
@@ -6612,10 +6612,10 @@ DrawIncomeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,Dr
 				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 				Width *= UserScale *.5, Height *= UserScale *.5	
 			}
-			
+
 			Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)	
 			Gdip_TextToGraphics(G, getPlayerMineralIncome(slot_number), "x"(DestX+Width+5*UserScale) "y"(DestY+(Height//4)) Options, Font)				
-				
+
 			pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"Gas",Background]
 			SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 			Width *= UserScale *.5, Height *= UserScale *.5
@@ -6681,7 +6681,7 @@ DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0
 		IniWrite, %ResourcesOverlayX%, %config_file%, Overlays, ResourcesOverlayX
 		Iniwrite, %ResourcesOverlayY%, %config_file%, Overlays, ResourcesOverlayY		
 	}
-	
+
 	hbm := CreateDIBSection(A_ScreenWidth, A_ScreenHeight)
 	hdc := CreateCompatibleDC()
 	obm := SelectObject(hdc, hbm)
@@ -6692,7 +6692,7 @@ DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0
 	{
 		If ( a_LocalPlayer["Team"] <> a_Player[slot_number, "Team"] )
 		{	DestY := i ? i*Height : 0
-			
+
 			If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 )
 			{	
 				IF (PlayerIdentifier = 2)
@@ -6728,7 +6728,7 @@ DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0
 				SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 				Width *= UserScale *.5, Height *= UserScale *.5	
 			}
-			
+
 			Gdip_DrawImage(G, pBitmap, DestX, DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)	
 			;Gdip_DisposeImage(pBitmap)
 			Gdip_TextToGraphics(G, getPlayerMinerals(slot_number), "x"(DestX+Width+5*UserScale) "y"(DestY+(Height//4)) Options, Font, TextWidthHeight, TextWidthHeight)				
@@ -6738,7 +6738,7 @@ DrawResourcesOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0
 			Gdip_DrawImage(G, pBitmap, DestX + (85*UserScale), DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)	
 			;Gdip_DisposeImage(pBitmap)
 			Gdip_TextToGraphics(G, getPlayerGas(slot_number), "x"(DestX+(85*UserScale)+Width+5*UserScale) "y"(DestY+(Height//4)) Options, Font, TextWidthHeight,TextWidthHeight)				
-				
+
 			pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"Supply",Background]
 			SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 			Width *= UserScale *.5, Height *= UserScale *.5
@@ -6809,7 +6809,7 @@ DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,
 		{	
 		;	DestY := i ? i*Height + 5*UserScale : 0
 			DestY := i ? i*Height : 0
-			
+
 			If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 )
 			{	
 				IF (PlayerIdentifier = 2)
@@ -6855,8 +6855,8 @@ DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,
 			Gdip_DrawImage(G, pBitmap, DestX + (85*UserScale), DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)	
 			;Gdip_DisposeImage(pBitmap)
 			Gdip_TextToGraphics(G, getPlayerArmySizeGas(slot_number), "x"(DestX+(85*UserScale)+Width+5*UserScale) "y"(DestY+(Height//4)) Options, Font)				
-				
-		
+
+
 
 			pBitmap := a_pBitmap[a_Player[slot_number, "Race"],"Army"]
 			SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
@@ -6920,7 +6920,7 @@ DrawWorkerOverlay(ByRef Redraw, UserScale=1,Drag=0)
 	obm := SelectObject(hdc, hbm)
 	G := Gdip_GraphicsFromHDC(hdc)
 	DllCall("gdiplus\GdipGraphicsClear", "UInt", G, "UInt", 0)	
-	
+
 	pBitmap := a_pBitmap[a_LocalPlayer["Race"],"Worker"]
 	SourceWidth := Width := Gdip_GetImageWidth(pBitmap), SourceHeight := Height := Gdip_GetImageHeight(pBitmap)
 	Width *= UserScale *.5, Height *= UserScale *.5
@@ -7013,7 +7013,7 @@ DrawLocalPlayerColour(ByRef Redraw, UserScale=1,Drag=0)
 
 
 
-	
+
 DestroyOverlays()
 {	
 	Try Gui, MiniMapOverlay: Destroy ;destroy minimap when alttabed out
@@ -7138,7 +7138,7 @@ CreateHotkeys()
 		hotkey, %ToggleUnitOverlayKey%, Overlay_Toggle, on
 		hotkey, %CycleOverlayKey%, Overlay_Toggle, on
 
-	
+
 	if race_reading 
 		hotkey, %read_races_key%, find_races, on
 	if manual_inject_timer
@@ -7236,7 +7236,7 @@ ParseEnemyUnits(ByRef a_EnemyUnits, ByRef a_Player)
 
 
 
-	
+
 getCamCenteredUnit(UnitList) ; |delimited ** ; needs a minimum of 70+ ms to update cam location
 {
 	CamX := getPlayerCameraPositionX(), CamY := getPlayerCameraPositionY()
@@ -7353,7 +7353,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 							start_x += xNew - click_x , start_y += yNew - click_y
 						}
 					}					
-	
+
 			}
 		;	if ForceInject
 		;		send % BI_camera_pos_x
@@ -7440,7 +7440,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 				Else send {click Left %click_x%, %click_y%}
 				send % Escape ; (deselects queen larva) (useful on an already injected hatch) this is actually a variable
 			}	
-			
+
 		}
 		send % BI_camera_pos_x
 	}
@@ -7498,7 +7498,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 	groupCount := getControlGroupCount(Group)
 
 	ReadRawMemory(B_CtrlGroupStructure + S_CtrlGroup * (Group - 1), GameIdentifier, MemDump, groupCount * S_CtrlGroup + O_scUnitIndex)
-	
+
 	aControlGroup["UnitCount"]	:= numget(MemDump, 0, "Short")
 	aControlGroup["Types"]	:= numget(MemDump, O_scTypeCount, "Short")
 ;	aControlGroup["HighlightedGroup"]	:= numget(MemDump, O_scTypeHighlighted, "Short")
@@ -7706,10 +7706,10 @@ LoadMemoryAddresses(SC2EXE)
 	P_ChatFocus := SC2EXE + 0x0209C3C8 		;Just when chat box is in focus
 		O1_ChatFocus := 0x3D0 
 		O2_ChatFocus := 0x198
-	
+
 	P_MenuFocus := SC2EXE + 0x03F1211C 		;this is all menus and includes chat box when in focus ; old 0x3F04C04
 		O1_MenuFocus := 0x1A0
-		
+
 
 
 	B_uCount := SC2EXE + 0x2CF9148				; This is the units alive (and includes missiles) ;0x02CF5588			
@@ -7747,15 +7747,15 @@ LoadMemoryAddresses(SC2EXE)
 	P_PlayerColours := SC2EXE + 0x03D28A84 ; 0 when enemies red  1 when player colours
 		O1_PlayerColours := 0x4
 		O2_PlayerColours := 0x17c
-		
+
 	P_SelectionPage := SC2EXE + 0x0209C3C8 ;	0x02097818 ;theres one other 3 lvl pointer
 		O1_SelectionPage := 0x35C			;this is for the currently selected unit portrait page ie 1-6 in game (really starts at 0-5)
 		O2_SelectionPage := 0x180			;might actually be a 2 or 1 byte value....but works fine as 4
 		O3_SelectionPage := 0x170
-		
+
 	DeadFilterFlag := 0x0000000200000000	
 	BuriedFilterFlag :=	0x0000000010000000
-	
+
 	B_MapStruct := SC2EXE + 0X024C9E7C 
 		O_mLeft := B_MapStruct + 0xDC	                                   
 		O_mBottom := B_MapStruct + 0xE0	                                   
@@ -7772,9 +7772,9 @@ LoadMemoryAddresses(SC2EXE)
 	; so that they can be used as bit flags with bit wise &
 
 
-	
 
-	
+
+
 	P_IsUserPerformingAction := SC2EXE + 0x0209C3C8			; This is a 1byte value and return 1  when user is casting or in is rallying a hatch via gather/rally or is in middle of issuing Amove/patrol command but
 		O1_IsUserPerformingAction := 0x254 					; if youre searching for a 4byte value in CE offset will be 254 (but really if using it as 1 byte it is 0x255) - but im lazy and use it as a 4byte with my pointer command
 															; also 1 when placing a structure (after structure is selected) or trying to land rax to make a addon Also gives 1 when trying to burrow spore/spine
@@ -7791,7 +7791,7 @@ LoadMemoryAddresses(SC2EXE)
 	B_MouseButtonState := SC2EXE + 0x1FDF7BC 				;1 byte - MouseButton state 1 for Lbutton,  2 for middle mouse, 4 for rbutton
 															; 
 	B_CameraDragScroll := SC2EXE + 0x1FDF4A8  				; 1 byte Returns 1 when user is moving camera via DragScroll i.e. mmouse button the main map
-															
+
 	B_DirectionalKeysCameraScroll := SC2EXE + 0x1FDF7D0		; 1 byte, but again can read it as 4
 															; 4 = left, 8 = Up, 16 = Right, 32 = Down (these are added if more than 1 key is down) - could do a bitmask on it!
 
@@ -7806,7 +7806,7 @@ LoadMemoryAddresses(SC2EXE)
 
  ; The below offsets are not Currently used but are current for 2.0.8
 
-	
+
 
  	P_IsUserCasting := SC2EXE +	0x0209C3C8					; this is probably something to do with the control card
 		O1_IsUserCasting := 0x364 							; 1 indicates user is casting a spell e.g. fungal, snipe, or is trying to place a structure
@@ -7826,7 +7826,7 @@ LoadMemoryAddresses(SC2EXE)
 
 
 	return	
-	
+
 
 
 /* Not Currently used
@@ -8028,14 +8028,14 @@ ClickUnitPortrait(SelectionIndex=0, byref X=0, byref Y=0, byref Xpage=0, byref Y
 
 	}
 	YpageDistance := (Ypage6 - Ypage1)/5		;because there are 6 pages - 6-1
-	
+
 	if ClickPageTab	;use this to return the selection back to page 1
 	{
 		PageIndex := ClickPageTab - 1
 		Xpage := Xpage1, Ypage := Ypage1 + (PageIndex * YpageDistance)
 		return 1
 	}
-	
+
 	PageIndex := Offset_y := Offset_x := 0
 	while (SelectionIndex > 24 * A_index - 1)
 		PageIndex++
@@ -8051,7 +8051,7 @@ ClickUnitPortrait(SelectionIndex=0, byref X=0, byref Y=0, byref Xpage=0, byref Y
 	}
 	return 0	
 }
-		
+
 FindSelectedUnitsOnXelnaga(byref a_Units)
 {
 	while (A_Index <= getSelectionCount())		;loop thru the units in the selection buffer	
@@ -8074,7 +8074,7 @@ sortSelectedUnitsByDistance(byref a_SelectedUnits, Amount = 3)	;takes a simple a
 	uIndexBase := getSelectedUnitIndex(sIndexBaseUnit)
 	Base_x := getUnitPositionX(uIndexBase), Base_y := getUnitPositionY(uIndexBase)
 	a_SelectedUnits.insert({"Unit": uIndexBase, "Priority": getSubGroupPriority(uIndexBase), "Distance": 0})
-	
+
 	while (A_Index <= getSelectionCount())	
 	{
 		unit := getSelectedUnitIndex(A_Index -1)
@@ -8183,16 +8183,16 @@ SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 		X_offsetbox := y_offsetbox := 0
 		while (boxSpot > floor(sqrt(squareSpots) * A_Index))
 			y_offsetbox ++
-			
+
 		X_offsetbox := (boxSpot - 1) - sqrt(squareSpots) * y_offsetbox
-		
+
 		x := X_offsetbox*uSpacing + botLeftUnitX, Y := y_offsetbox*uSpacing + botLeftUnitY
 		;x := round(x), y := round(y)	;cos mousemove ignores decimal 
 		x := round(x + rand(-.5,.5)), y := round(y + rand(-.5,.5)) 	;cos mousemove ignores decimal 
 		for index, unit in a_SelectedUnits
 			unit.absDistance := Abs(x - unit.mouseX) + Abs(y - unit.mouseY)
 ;		clipboard .= "(" x ", " y ")`n"
-		
+
 		Sort2DArray(a_SelectedUnits, "absDistance", 1)		
 		tmpObject := []
 		tmpObject.insert(a_SelectedUnits[1])
@@ -8227,7 +8227,7 @@ SplitUnitsWorking(SplitctrlgroupStorage_key, SleepSplitUnits)
 	}
 	Sort2DArray(a_SelectedUnits, "Unit", 0) ;clicks highest units first, so dont have to calculate new click positions due to the units moving down one spot in the panel grid	
 	Sort2DArray(a_SelectedUnits, "Priority", 1)	; sort in ascending order so select units lower down 1st	
-		
+
 	for index, unit in a_SelectedUnits
 		xSum += unit.mouseX, ySum += unit.mouseY
 	xAvg := xSum/a_SelectedUnits.MaxIndex(), yAvg := ySum/a_SelectedUnits.MaxIndex()
@@ -8426,7 +8426,7 @@ getEnemyUnitCount(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUn
 	aEnemyUnits := [], aEnemyBuildingConstruction := []
 ;	if !aEnemyUnitPriorities	;because having  GLOBAL aEnemyUnitPriorities := [] results in it getting cleared each function run
 ;		aEnemyUnitPriorities := []
-	
+
 	Unitcount := DumpUnitMemory(MemDump)
 	while (A_Index <= Unitcount)
 	{
@@ -8479,7 +8479,7 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 
 	STATIC aAddConstruction := {"Terran": {BarracksTechLab: "TechLab", BarracksReactor: "Reactor", FactoryTechLab: "TechLab", FactoryReactor: "Reactor", StarportTechLab: "TechLab", StarportReactor: "Reactor"}}
 
-								
+
 	STATIC aUnitOrder := 	{"Terran": ["SCV", "OrbitalCommand", "PlanetaryFortress", "CommandCenter"]
 							, "Protoss": ["Probe", "Nexus"]
 							, "Zerg": ["Drone","Hive","Lair", "Hatchery"]}
@@ -8522,7 +8522,7 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 
 		if (race = "Zerg" && priorityObject[aUnitInfo[aUnitID["Drone"], "Priority"], aUnitID["Drone"]] && aEnemyBuildingConstruction[Owner, "TotalCount"])
 			priorityObject[aUnitInfo[aUnitID["Drone"], "Priority"], aUnitID["Drone"]] -= aEnemyBuildingConstruction[Owner, "TotalCount"] ; as drones morphing are still counted as 'alive' so have to remove them		
-		
+
 		for index, removeUnit in aRemovedUnits[race]
 		{
 			removeUnit := aUnitID[removeUnit]
@@ -8576,7 +8576,7 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 	for owner, priorityObject in aEnemyBuildingConstruction
 	{
 		race := a_Player[owner, "Race"]	
-		
+
 		for subUnit, mainUnit in aAddConstruction[Race]
 		{
 			subunit := aUnitID[subUnit]
@@ -8611,7 +8611,7 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 			 	priorityObject[priority].remove(aUnitID[unit], "")	
 			}	
 
-	
+
 	}
 	return
 }
@@ -8675,7 +8675,7 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 	{
 		DestY := i ? i*Height : 0
 		DestX := 0
-		
+
 		If (PlayerIdentifier = 1 Or PlayerIdentifier = 2 )
 		{	
 			IF (PlayerIdentifier = 2)
