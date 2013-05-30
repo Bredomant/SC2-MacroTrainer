@@ -199,7 +199,10 @@ return
 ; End of execution
 ;-----------------------
 ;2147483647  - highest priority so if i ever give something else a high priority, this key combo will still interupt (if thread isnt critical)
+;#MaxThreadsBuffer on
+;<#Space::
 g_EmergencyRestart:	
+;Thread, Priority, 2147483647 ; doubt this does anything. But due to problem with using the hotkeycommand try it
 		SetMouseDelay, 10	; to ensure release modifiers works
 		SetKeyDelay, 10			
 		releaseAllModifiers() 					;This will be active irrespective of the window
@@ -218,6 +221,7 @@ g_EmergencyRestart:
 		}
 		SoundPlay, %A_Temp%\Windows Ding2.wav
 	return	
+;#MaxThreadsBuffer Off
 
 EmergencyInputCountReset:
 	settimer, EmergencyInputCountReset, off
@@ -620,6 +624,11 @@ clock:
 			doUnitDetection(unit, type, owner, "Resume")	;these first 3 vars are nothing - they wont get Read
 		Else
 			doUnitDetection(unit, type, owner, "Reset") ; clear the variables within the function
+		If (F_Alert_Enable && a_LocalPlayer["Race"] = "Zerg")
+		{
+			zergGetHatcheriesToInject(oHatcheries)
+			settimer, g_ForceInjectSuccessCheck, %FInjectHatchFrequency%	
+		}
 		if	mineralon
 			settimer, money, 500
 		if	gas_on
@@ -912,6 +921,7 @@ Cast_DisableInject:
 	{
 		settimer, Force_Inject, off
 		settimer, Force_Inject_Alert, off
+		settimer, g_ForceInjectSuccessCheck, off
 		DSpeak("Injects Off")
 	}
 	Return
@@ -975,7 +985,7 @@ cast_inject:
 	If (A_ThisLabel = "cast_ForceInject")
 		castInjectLarva(auto_inject, 1, F_Sleep_Time)	
 	else castInjectLarva(auto_inject, 0, auto_inject_sleep) ;ie nomral injectmethod
-
+	
 	If Inject.LMouseState 
 	{
 		If HumanMouse
@@ -1002,15 +1012,19 @@ cast_inject:
 	inject_set := getTime()  ;** Note: Have to use gettime, as for forced ReleaseModifiers (via the iszergcasting) puts thread into critical, and then this thread turns off timers - so can result in the time being out and then having the next inject occuring too soon!
 	if auto_inject_alert
 		settimer, auto_inject, 250
-	If F_Inject_Enable
-	{
-		random, randomForcedInjectDelay, 0, 1.2
-		settimer, Force_Inject, 250	
-		If F_Alert_Enable
-			settimer, Force_Inject_Alert, 250	
-	}
-	If (A_ThisLabel = "cast_ForceInject" && !AttemptCorrectInjection)
-		settimer, g_ForceInjectSuccessCheck, -3000	
+
+;	If F_Inject_Enable
+;	{
+;		random, randomForcedInjectDelay, 0, 1.2
+	;	settimer, Force_Inject, 250	
+	;	If F_Alert_Enable
+	;		settimer, Force_Inject_Alert, 250	
+;	}
+;	If (A_ThisLabel = "cast_ForceInject" && !AttemptCorrectInjection)
+
+
+	If F_Alert_Enable
+		settimer, g_ForceInjectSuccessCheck, %FInjectHatchFrequency%	
 	If (A_ThisLabel = "cast_inject")
 	{
 		ForceCount := 0
@@ -1018,11 +1032,13 @@ cast_inject:
 	}
 Return
 
-
-
-
 g_ForceInjectSuccessCheck:
 
+	if !F_Alert_Enable
+	{
+		settimer, g_ForceInjectSuccessCheck, off	
+		return 
+	}
 	if (getBurrowedQueenCountInControlGroup(MI_Queen_Group, UnburrowedQueenCount) > 1)
 	{
 		TooManyBurrowedQueens := 1
@@ -1043,15 +1059,27 @@ g_ForceInjectSuccessCheck:
 	}
 	else TooManyBurrowedQueens := 0
 
-For Index, CurrentHatch in oHatcheries
-	if (CurrentHatch.NearbyQueen && !isHatchInjected(CurrentHatch.Unit)) ;probably should check if hatch is alive and still a hatch...
-	{
-		AttemptCorrectInjection := 1
-		Gosub, cast_ForceInject
-		AttemptCorrectInjection := 0
-		return
-	}
+;For Index, CurrentHatch in oHatcheries
+;	if (CurrentHatch.NearbyQueen && !isHatchInjected(CurrentHatch.Unit)) ;probably should check if hatch is alive and still a hatch...
+
+	If(getGroupedQueensWhichCanInject(aControlGroup) && ( ForceCount < F_Max_Injects) ) 
+		For Index, CurrentHatch in oHatcheries
+			For Index, Queen in aControlGroup.Queens
+				if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && Queen.Energy >= 25  && !isHatchInjected(CurrentHatch.Unit) && Winactive(GameIdentifier)) 
+				{
+					sleep % rand(0, 1.5)
+					AttemptCorrectInjection := 1
+					Gosub, cast_ForceInject
+					AttemptCorrectInjection := 0
+					return
+				}
 return
+
+ 
+
+
+
+
 
 
 getBurrowedQueenCountInControlGroup(Group, ByRef UnburrowedCount="")
@@ -1598,12 +1626,12 @@ auto_inject:
 	}
 	return
 	
-Force_Inject:
+Force_Inject:  		;not used any more
 	if (time - inject_set >= F_Inject_Delay + randomForcedInjectDelay) AND ( ForceCount < F_Max_Injects) AND WinActive(GameIdentifier)
 		gosub cast_ForceInject
 	Return
 
-Force_Inject_Alert:
+Force_Inject_Alert:  ;not used any more
 	If ( time - inject_set >= F_Inject_Delay + randomForcedInjectDelay - F_Alert_PreTime ) AND ( ForceCount < F_Max_Injects) AND WinActive(GameIdentifier)
 	{
 		settimer, Force_Inject_Alert, off
@@ -2227,6 +2255,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, F_Inject_Delay, %config_file%, %section%, F_Inject_Delay, 15
 	IniRead, F_Max_Injects, %config_file%, %section%, F_Max_Injects, 4
 	IniRead, F_Sleep_Time, %config_file%, %section%, F_Sleep_Time, 5
+	IniRead, FInjectHatchFrequency, %config_file%, %section%, FInjectHatchFrequency, 2500
 	IniRead, F_InjectOff_Key, %config_file%, %section%, F_InjectOff_Key, Lwin & F5
 	
 	
@@ -2677,6 +2706,7 @@ ini_settings_write:
 	IniWrite, %F_Inject_Delay%, %config_file%, %section%, F_Inject_Delay
 	IniWrite, %F_Max_Injects%, %config_file%, %section%, F_Max_Injects
 	IniWrite, %F_Sleep_Time%, %config_file%, %section%, F_Sleep_Time
+	IniWrite, %FInjectHatchFrequency%, %config_file%, %section%, FInjectHatchFrequency
 	IniWrite, %F_InjectOff_Key%, %config_file%, %section%, F_InjectOff_Key
 
 	;[Idle AFK Game Pause]
@@ -3067,20 +3097,20 @@ TV_Add("Volume", 0, "Icon11")
 TV_Add("Report Bug", 0, "Icon12")
 TV_Add("Settings", 0, "Icon13")
 
-Gui, Add, Tab2, w440 h440 ys x+5 vInjects_TAB, Info||Auto|Forced|Alert|Manual
+Gui, Add, Tab2, w440 h440 ys x+5 vInjects_TAB, Info||Basic|Auto|Alert|Manual
 GuiControlGet, MenuTab, Pos, Injects_TAB
-Gui, Tab,  Auto
-	Gui, Add, GroupBox, w200 h240 section vOriginTab, Auto Inject
+Gui, Tab,  Basic
+	Gui, Add, GroupBox, w200 h240 section vOriginTab, One Button Inject
 			GuiControlGet, OriginTab, Pos
 		Gui, Add, Text,xp+10 yp+25, Method:		
 				If (auto_inject = 0 OR auto_inject = "Disabled")
 					droplist_var := 4
 				Else If (auto_inject = "MiniMap")
 					droplist_var := 1
-				Else if (auto_inject = "Backspace Adv") || (auto_inject = "Backspace CtrlGroup")
-					droplist_var := 2
+				;Else if (auto_inject = "Backspace Adv") || (auto_inject = "Backspace CtrlGroup")
+				;	droplist_var := 2   because i disabled backspace ctrlgroup
 				Else droplist_var := 3
-				Gui, Add, DropDownList,x+10 yp-2 w130 vAuto_inject Choose%droplist_var%, MiniMap||Backspace CtrlGroup|Backspace|Disabled
+				Gui, Add, DropDownList,x+10 yp-2 w130 vAuto_inject Choose%droplist_var%, MiniMap||Backspace|Disabled
 				tmp_xvar := OriginTabx + 10
 	
 
@@ -3111,7 +3141,7 @@ Gui, Tab,  Auto
 				Gui, Add, Checkbox, x%XTab2X% y+25 vCanQueenMultiInject checked%CanQueenMultiInject%,
 				Gui, Add, Text, x+0 yp-5, Queen Can Inject`nMultiple Hatcheries ; done as checkbox with 2 lines text is too close to checkbox
 	
-Gui, Add, GroupBox, w200 h180 ys xs+210 section, Backspace && Forced Setup
+Gui, Add, GroupBox, w200 h180 ys xs+210 section, Backspace
 		Gui, Add, Text, xs+10 yp+25, Drag Origin:
 		if (Drag_origin = "Right")
 			droplist_var :=2
@@ -3130,10 +3160,10 @@ Gui, Add, GroupBox, w200 h180 ys xs+210 section, Backspace && Forced Setup
 Gui, Add, GroupBox, w200 h61 y+10 xs,
 		Gui, Add, Checkbox, xs+10 yp+13 vauto_inject_alert checked%auto_inject_alert%, Enable Alert
 		Gui, Add, Text,xs+10 y+12, Time Between Alerts (s):
-		Gui, Add, Edit, Number Right x+25 yp-2 w45 
+		Gui, Add, Edit, Number Right x+25 yp-2 w45 vTT_auto_inject_time
 			Gui, Add, UpDown, Range1-100000 vauto_inject_time, %auto_inject_time% ;these belong to the above edit
 				
-Gui, Add, GroupBox, xs y+20 w200 h140, MiniMap && BackspaceCtrlG Setup
+Gui, Add, GroupBox, xs y+20 w200 h140, MiniMap
 		Gui, Add, Text, xs+10 yp+25, Queen Control Group:
 			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vMI_Queen_Group, %MI_Queen_Group%
 				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#MI_Queen_Group,  Edit			
@@ -3173,39 +3203,45 @@ Gui, Tab,  Manual
 				Gui, Add, Text, x%settings2RX% yp+35 w90, Reset Hotkey:
 				Gui, Add, Edit, Readonly yp x+20 w120  vinject_reset_key center gedit_hotkey, %inject_reset_key%
 				Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#inject_reset_key,  Edit
+				Gui, Add, Text,yp+75 x%settings2RX% w340,  This is a very basic timer. It will simply beep every x seconds
+
 				
-Gui, Tab,  Forced
-	Gui, Add, GroupBox, y+20 w230 h250, Fully Automated Injects
+Gui, Tab,  Auto
+	Gui, Add, GroupBox, y+20 w225 h220, Fully Automated Injects
 		Gui, Add, Checkbox,xp+10 yp+30 vF_Inject_Enable checked%F_Inject_Enable%, Enable
 		Gui, Add, Checkbox,y+10 vF_Inject_ModifierBeep checked%F_Inject_ModifierBeep%, Beep If modifier is held down
 		Gui, Add, Checkbox,y+10 vF_Inject_Beep checked%F_Inject_Beep%, Beep when auto Inject begins
 
 
-		Gui, Add, Text,y+15 x%settings2RX% w165, Time Between Injects (SC2 s): 
-			Gui, Add, Edit, Number Right x+5 yp-2 w45 
-				Gui, Add, UpDown, Range39-100000 vF_Inject_Delay, %F_Inject_Delay%
-		Gui, Add, Text,y+15 x%settings2RX% w165, Max. (sequential) Forced Injects: 
-			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Max_Injects 
-				Gui, Add, UpDown, Range1-100000 vF_Max_Injects, %F_Max_Injects%	
+;		Gui, Add, Text,y+15 x%settings2RX% w165, Time Between Injects (SC2 s): 
+;			Gui, Add, Edit, Number Right x+5 yp-2 w45 
+;				Gui, Add, UpDown, Range39-100000 vF_Inject_Delay, %F_Inject_Delay%
+;		Gui, Add, Text,y+15 x%settings2RX% w165, Max. (sequential) Forced Injects: 
+;			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Max_Injects 
+;				Gui, Add, UpDown, Range1-100000 vF_Max_Injects, %F_Max_Injects%	
 
-		Gui, Add, Text,y+15 x%settings2RX% w165, Sleep time: 
+		Gui, Add, Text,y+15 x%settings2RX% w155, Sleep time (ms): 
 			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Sleep_Time 
 				Gui, Add, UpDown, Range0-100000 vF_Sleep_Time, %F_Sleep_Time%	
 
-		Gui, Add, Text, x%settings2RX% yp+25, Enable/Disable Hotkey:
+		Gui, Add, Text,y+15 x%settings2RX% w140, Check Hatches Every (ms): 
+			Gui, Add, Edit, Number Right x+5 yp-2 w60 vTT_FInjectHatchFrequency
+				Gui, Add, UpDown, Range0-100000 vFInjectHatchFrequency, %FInjectHatchFrequency%					
+
+		Gui, Add, Text, x%settings2RX% yp+30, Enable/Disable Hotkey:
 			Gui, Add, Edit, Readonly y+10 xp+40 w120  vF_InjectOff_Key center gedit_hotkey, %F_InjectOff_Key%
 			Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#F_InjectOff_Key,  Edit				
 			
-	Gui, Add, GroupBox,  w230 h80 x%OriginTabx% yp+40, Pre-Inject Alert
-		Gui, Add, Checkbox,xp+10 yp+25 vF_Alert_Enable checked%F_Alert_Enable%, Enable
-		Gui, Add, Text,y+15 x%settings2RX% w165, Preinject Alert (sc2 s): 
-			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Alert_PreTime
-				Gui, Add, UpDown, Range0-100000 vF_Alert_PreTime, %F_Alert_PreTime%
-	Gui, Add, Text,y40 x430 w160, Note:`n`nForced Injects will become activated after your first auto/F5 inject.`n`nForced injections are performed using the 'MiniMap' macro, but this function is still compatible with the auto inject 'backspace' method. 
+;	Gui, Add, GroupBox,  w230 h80 x%OriginTabx% yp+40, Pre-Inject Alert
+;		Gui, Add, Checkbox,xp+10 yp+25 vF_Alert_Enable checked%F_Alert_Enable%, Enable
+;		Gui, Add, Text,y+15 x%settings2RX% w165, Preinject Alert (sc2 s): 
+;			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Alert_PreTime
+;				Gui, Add, UpDown, Range0-100000 vF_Alert_PreTime, %F_Alert_PreTime%
+	Gui, Add, Text,yp+50 x%settings2RX% w340,  Note:`n`nAuto injects will begin after you control group your queen to the correct (inject) queen control group.`n`nAuto injects are performed using the 'MiniMap' macro.`n`nPlease ensure you have correctly set the settings under the 'basic' inject tab. This includes the 'minimap' settings as well as the 'spawn larva key', 'burrow key' and control group storage settings.
 		
 		
 Gui, Tab,  Alert
-		Gui, Add, GroupBox,  w210 h140, Alert Type
+		Gui, Add, GroupBox,  w210 h140, Basic Inject Alert Type
 		Gui, Add, Checkbox,xp+10 yp+30 vW_inject_ding_on checked%W_inject_ding_on%, Windows Ding
 		Gui, Add, Checkbox,yp+25 vW_inject_speech_on checked%W_inject_speech_on%, Spoken Warning
 		Gui, Add, Text,y+15 w125, Spoken Warning:
@@ -3247,54 +3283,54 @@ Gui, Tab, Supply
 			Gui, font, italic
 			Gui, Add, Text,xs+10 yp+25 w100, Warn When Below:
 			Gui, font, 
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_sub_lowerdelta 
 					Gui, Add, UpDown, Range1-200 Vsub_lowerdelta, %sub_lowerdelta%
 
 			Gui, Add, Text,xs+10 y+15 w100, Low Range Cutoff:
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_supplylower
 					Gui, Add, UpDown, Range1-200 Vsupplylower, %supplylower%
 
 			Gui, font, italic 
 			Gui, Add, Text,xs+10 y+15 w100,  Warn When Below: 
 			Gui, font, 
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_sub_middelta
 					Gui, Add, UpDown, Range1-200 Vsub_middelta, %sub_middelta%
 					
 					
 			Gui, Add, Text,xs+10 y+15 w100, Middle Range Cutoff:
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_supplymid
 					Gui, Add, UpDown, Range1-200 Vsupplymid, %supplymid%
 
 			Gui, font, italic 
 			Gui, Add, Text,xs+10 y+15 w100, Warn When Below: 
 			Gui, font, 
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_sub_upperdelta
 					Gui, Add, UpDown, Range1-200 Vsub_upperdelta, %sub_upperdelta%
 					
 
 			Gui, Add, Text,xs+10 y+15 w100, Upper Range Cutoff:
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_supplyupper
 					Gui, Add, UpDown, Range1-200 Vsupplyupper, %supplyupper%		
 
 			Gui, font, italic 
 			Gui, Add, Text,xs+10 y+15 w100,  Warn When Below:
 			Gui, font, 
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_above_upperdelta
 					Gui, Add, UpDown, Range1-200 Vabove_upperdelta, %above_upperdelta%					
 
 					2XTabX := XTabX -10
 		Gui, Add, GroupBox, ys x+30 w200 h260, Warnings
 		
 			Gui, Add, Text,xp+10 yp+25 w125 section, Silent If Supply Below:
-			Gui, Add, Edit, Number Right x+10 yp-2 w45 
+			Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_minimum_supply
 			Gui, Add, UpDown, Range1-200 Vminimum_supply, %minimum_supply%	
 
 			Gui, Add, Text,xs y+15 w125, Secondary Warnings:
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 Vsec_supply
-					Gui, Add, UpDown, Range0-200, %sec_supply%
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_sec_supply
+					Gui, Add, UpDown, Range0-200 Vsec_supply, %sec_supply%
 
 			Gui, Add, Text,y+15 xs w125, Secondary Delay:
-				Gui, Add, Edit, Number Right x+10 yp-2 w45 
+				Gui, Add, Edit, Number Right x+10 yp-2 w45 vTT_additional_delay_supply
 					Gui, Add, UpDown, Range0-200 Vadditional_delay_supply, %additional_delay_supply%
 		
 			Gui, Add, Text,y+15 xs w125, Spoken Warning:
@@ -3304,15 +3340,15 @@ Gui, Tab, Macro
 	Gui, Add, GroupBox, w185 h175 section, Minerals
 		Gui, Add, Checkbox, xp+10 yp+20  Vmineralon checked%mineralon%, Enable Alert
 		Gui, Add, Text, y+10 section w105, Trigger Amount:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_mineraltrigger
 				Gui, Add, UpDown, Range1-20000 Vmineraltrigger, %mineraltrigger%
 				
 		Gui, Add, Text,xs y+10 w105, Secondary Warnings:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_sec_mineral
 				Gui, Add, UpDown, Range0-20000 Vsec_mineral, %sec_mineral%
 				
 		Gui, Add, Text,xs y+10 w105, Secondary Delay:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_additional_delay_minerals
 				Gui, Add, UpDown, Range1-20000 Vadditional_delay_minerals, %additional_delay_minerals%
 				
 		Gui, Add, Text, X%XTabX% y+5 w125, Spoken Warning:
@@ -3322,15 +3358,15 @@ Gui, Tab, Macro
 		Gui, Add, Checkbox, xp+10 yp+20  Vgas_on checked%gas_on%, Enable Alert
 		
 		Gui, Add, Text, y+10 section w105, Trigger Amount:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_gas_trigger
 				Gui, Add, UpDown, Range1-20000 Vgas_trigger, %gas_trigger%
 
 		Gui, Add, Text,xs y+10 w105, Secondary Warnings:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_sec_gas
 				Gui, Add, UpDown, Range0-20000 Vsec_gas, %sec_gas%
 				
 		Gui, Add, Text,xs y+10 w105, Secondary Delay:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_additional_delay_gas
 				Gui, Add, UpDown, Range1-20000 Vadditional_delay_gas, %additional_delay_gas%
 				
 		Gui, Add, Text, xs y+5 w125, Spoken Warning:
@@ -3341,15 +3377,15 @@ Gui, Tab, Macro
 	
 		Gui, Add, Checkbox, xp+10 yp+20  Vidleon checked%idleon%, Enable Alert
 		Gui, Add, Text, y+10 section w105, Trigger Amount:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_idletrigger
 				Gui, Add, UpDown, Range1-20000 Vidletrigger, %idletrigger%
 				
 		Gui, Add, Text,xs y+10 w105, Secondary Warnings:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_sec_idle
 				Gui, Add, UpDown, Range0-20000 Vsec_idle, %sec_idle%
 				
 		Gui, Add, Text,xs y+10 w105, Secondary Delay:
-			Gui, Add, Edit, Number Right x+5 yp-2 w55 
+			Gui, Add, Edit, Number Right x+5 yp-2 w55 vTT_additional_idle_workers
 				Gui, Add, UpDown, Range1-20000 Vadditional_idle_workers, %additional_idle_workers%
 				
 		Gui, Add, Text, xs y+5 w125, Spoken Warning:
@@ -3391,15 +3427,15 @@ Gui, Add, GroupBox, y+20 w410 h135, Forgotten Gateway/Warpgate Warning
 		Gui, Add, Checkbox,xp+10 yp+25 Vwarpgate_warn_on checked%warpgate_warn_on%, Enable Alert
 		
 		Gui, Add, Text, y+10 section w105, Warning Count:
-			Gui, Add, Edit,  Number Right x+5 yp-2 w55 
+			Gui, Add, Edit,  Number Right x+5 yp-2 w55 vTT_sec_warpgate
 				Gui, Add, UpDown, Range1-20000 Vsec_warpgate, %sec_warpgate%		
 
 		Gui, Add, Text,  x%xtabx% y+10  w105, Warning Delay:
-			Gui, Add, Edit,  Number Right x+5 yp-2 w55 
+			Gui, Add, Edit,  Number Right x+5 yp-2 w55 vTT_delay_warpgate_warn
 				Gui, Add, UpDown, Range1-20000 Vdelay_warpgate_warn, %delay_warpgate_warn%			
 
 		Gui, Add, Text, x%xtabx% y+10  w105, Secondary Delay:
-			Gui, Add, Edit,  Number Right x+5 yp-2 w55 
+			Gui, Add, Edit,  Number Right x+5 yp-2 w55 vTT_delay_warpgate_warn_followup
 				Gui, Add, UpDown, Range1-20000 Vdelay_warpgate_warn_followup, %delay_warpgate_warn_followup%						
 		
 		Gui, Add, Text, x+30 ys section w75, Warning:
@@ -3713,7 +3749,8 @@ Gui, Tab, Spread
 	Gui, Add, Text, Xs yp+35, Sleep time (ms):
 	Gui, Add, Edit, Number Right xp+145 yp-2 w45 vTT_SleepSplitUnits
 	Gui, Add, UpDown,  Range0-100 vSleepSplitUnits, %SleepSplitUnits%
-	Gui, Add, Text, Xs yp+150 w380, Note: This is designed to spread your units BEFORE the engagement - Dont use it while being attacked!`n`n****This is in a very beta stage and will be improved later***
+	Gui, Add, Text, Xs yp+100 w360, This can be used to spread your workers when being attack by hellbats/hellions.
+	Gui, Add, Text, Xs yp+60 w360, Note: When spreading army/attacking units this is designed to spread your units BEFORE the engagement - Dont use it while being attacked!`n`n****This is in a very beta stage and will be improved later***
 
 Gui, Tab, Remove Unit
 	Gui, Add, Checkbox, y+25 x+25 vRemoveUnitEnable Checked%RemoveUnitEnable% , Enable Remove Unit Function	
@@ -4019,11 +4056,11 @@ ZergPic_TT := "The OP race"
 TerranPic_TT := "The artist formerly known as being OP"
 ProtossPic_TT := "The slightly less OP race"
 auto_inject_alert_TT := "This alert will sound X seconds after your last auto inject, prompting you to inject again."
-auto_inject_time_TT := "This is in 'SC2' Seconds."
+auto_inject_time_TT := TT_auto_inject_time_TT :=  "This is in 'SC2' Seconds."
 #cast_inject_key_TT := cast_inject_key_TT := "This Hotkey is ONLY active while playing as zerg!"
 Auto_inject_sleep_TT := "Lower this to make the inject round faster, BUT this will make it more obvious that it is being automated!"
-CanQueenMultiInject_TT := "During minimap injects (and Forced-Injects) a queen may attempt to inject multiple hatcheries providing:`nShe is the only nearby queen and she has enough energy.`n`nThis may increase the chance of having queens go walkabouts (especially during a forced inject) - but so far I have not observed this during testing. "
-HotkeysZergBurrow_TT := #HotkeysZergBurrow_TT := "Please ensure this matches the 'Burrow' hotkey in SC2 & that you only have one active hotkey to burrow units i.e. No alternate burrow key!`n`nThis is used during forced injects to help prevent accidentally burrowing queens due to the way windows/SC2 buffers these repeated keypresses."
+CanQueenMultiInject_TT := "During minimap injects (and auto-Injects) a queen may attempt to inject multiple hatcheries providing:`nShe is the only nearby queen and she has enough energy.`n`nThis may increase the chance of having queens go walkabouts (especially during an auto inject) - but so far I have not observed this during testing. "
+HotkeysZergBurrow_TT := #HotkeysZergBurrow_TT := "Please ensure this matches the 'Burrow' hotkey in SC2 & that you only have one active hotkey to burrow units i.e. No alternate burrow key!`n`nThis is used during auto injects to help prevent accidentally burrowing queens due to the way windows/SC2 buffers these repeated keypresses."
 Simulation_speed_TT := "How fast the mouse moves during inject rounds. 0 = Fastest - try 1,2 or 3 if you're having problems."
 Drag_origin_TT := "This sets the origin of the box drag to the top left or right corners. Hence making it compatible with observer panel hacks."
 manual_inject_time_TT := "The time between alerts."
@@ -4035,22 +4072,50 @@ Alert_List_Editor_TT := "Use this to edit and create alerts for any SC2 unit or 
 create_camera_pos_x_TT := #create_camera_pos_x_TT := "The hotkey used to 'save' a camera location. - Ensure this isn't one you use."
 #camera_pos_x_TT := camera_pos_x_TT := "The hotkey associated with the 'create/save' camera location above."
 spawn_larva_TT := #spawn_larva_TT := Tspawn_larva_TT := "Please set the key or alternate key for ""spawn larvae"" in SC2 to "" e "". - This prevents problems!"
-sub_lowerdelta_TT := "A warning will be heard when the 'free' supply drops below this number. (while your supply is below the 'Low Range Cutoff')."
-sub_middelta_TT := "A warning will be heard when the 'free' supply drops below this number. (While your supply is greater than the 'Low Range Cutoff' but less than the 'Middle Range Cutoff')."
-sub_upperdelta_TT := "A warning will be heard when the 'free' supply drops below this number. (While your supply is greater than the 'Middle Range Cutoff' but less than the 'Upper Range Cutoff')."
-above_upperdelta_TT := "A warning will be heard when the 'free' supply drops below this number. (While your supply is greater than the 'Upper Range Cutoff')."
-minimum_supply_TT := "Alerts are only active while your supply is above this number."
+sub_lowerdelta_TT := TT_sub_lowerdelta_TT := "A warning will be heard when the 'free' supply drops below this number. (while your supply is below the 'Low Range Cutoff')."
+sub_middelta_TT := TT_sub_middelta_TT := "A warning will be heard when the 'free' supply drops below this number. (While your supply is greater than the 'Low Range Cutoff' but less than the 'Middle Range Cutoff')."
+sub_upperdelta_TT := TT_sub_upperdelta_TT := "A warning will be heard when the 'free' supply drops below this number. (While your supply is greater than the 'Middle Range Cutoff' but less than the 'Upper Range Cutoff')."
+above_upperdelta_TT := TT_above_upperdelta_TT := "A warning will be heard when the 'free' supply drops below this number. (While your supply is greater than the 'Upper Range Cutoff')."
+minimum_supply_TT := TT_minimum_supply_TT := "Alerts are only active while your supply is above this number."
 
 w_supply_TT := w_warpgate_TT := w_workerprod_T_TT := w_workerprod_P_TT := w_workerprod_Z_TT := w_gas_TT := w_idle_TT := w_mineral_TT := "This text is spoken during a warning."
-TT_sec_workerprod_TT := sec_warpgate_TT := sec_workerprod_TT := sec_idle_TT := sec_gas_TT := sec_mineral_TT := sec_supply_TT := "Set how many additional warnings are to be given after the first initial warning (assuming the resource does not fall below the inciting value) - the warnings then turn off."
-additional_delay_supply_TT := additional_delay_minerals_TT := additional_delay_gas_TT := additional_idle_workers_TT := "This sets the delay between the initial warning, and the additional/follow-up warnings. (in real seconds)"
+TT_sec_workerprod_TT := sec_warpgate_TT := sec_workerprod_TT := sec_idle_TT := sec_gas_TT := sec_mineral_TT := sec_supply_TT := TT_sec_supply_TT := TT_sec_mineral := TT_sec_gas_TT := TT_sec_idle_TT := TT_sec_warpgate_TT := "Set how many additional warnings are to be given after the first initial warning (assuming the resource does not fall below the inciting value) - the warnings then turn off."
+additional_delay_supply_TT := TT_additional_delay_supply_TT := additional_delay_minerals_TT := additional_delay_gas_TT := additional_idle_workers_TT 
+:= TT_additional_delay_minerals := TT_additional_delay_gas_TT := TT_additional_idle_workers_TT := TT_delay_warpgate_warn_followup_TT := delay_warpgate_warn_followup_TT := "This sets the delay between the initial warning, and the additional/follow-up warnings. (in real seconds)"
 TT_additional_delay_worker_production_TT := additional_delay_worker_production_TT := "This sets the delay between the initial warning, and the additional/follow-up warnings. (in SC2 seconds)"
 TT_workerproduction_time_TT := workerproduction_time_TT := "This only applies to Zerg.`nA warning will be heard if a drone has not been produced in this amount of time (SC2 seconds)."
 delay_warpgate_warn_TT := "If a gateway has been unconverted for this period of time (real seconds) then a warning will be made."
 warpgate_warn_on_TT := "Enables warnings for unconverted gateways. Note: The warnings become active after your first gateway is converted."
-idletrigger_TT := gas_trigger_TT := mineraltrigger_TT := "The required amount to invoke a warning."
-supplylower_TT := supplymid_TT := supplyupper_TT := "Dictactes when the next or previous supply delta/threashold is used."
+idletrigger_TT := gas_trigger_TT := mineraltrigger_TT := TT_mineraltrigger_TT := TT_gas_trigger_TT := TT_idletrigger_TT := "The required amount to invoke a warning."
+supplylower_TT := TT_supplylower_TT := TT_supplymid_TT := supplymid_TT := supplyupper_TT := TT_supplyupper_TT := "Dictactes when the next or previous supply delta/threashold is used."
 TT_workerProductionTPIdle_TT := workerProductionTPIdle_TT := "This only applies to Terran & protoss.`nIf all nexi/CC/Orbitals/PFs are idle for this amount of time (SC2 seconds), a warning will be made.`n`nNote: A main is considered idle if it has no worker in production and is not currently flying or morphing."
+
+delay_warpgate_warn_TT := TT_delay_warpgate_warn_TT := "A warning will be heard when an unconverted gateway exists for this period of time."
+
+DrawSpawningRaces_TT := "Displays a race icon over the enemies spawning location at the start of the match."
+
+DrawAlerts_TT := "While using the 'detection list' function an 'x' will be briefly displayed on the minimap during a unit warning."
+
+UnitHighlightExcludeList_TT := #UnitHighlightExcludeList_TT := "These units will not be displayed on the minimap."
+
+UnitHighlightList1_TT := UnitHighlightList2_TT := UnitHighlightList3_TT
+:= UnitHighlightList4_TT := UnitHighlightList5_TT 
+:= #UnitHighlightList1_TT := #UnitHighlightList2_TT := #UnitHighlightList3_TT
+:= #UnitHighlightList4_TT := #UnitHighlightList5_TT
+:= "Units of this type will be drawn using the specified colour"
+
+DrawWorkerOverlay_TT := "Displays your current harvester count with a worker icon"
+DrawIdleWorkersOverlay_TT := "While idle workers exist, a worker icon will be displayed with the current idle count.`n`nThe size and position can be changed easily so that it grabs your attention."
+DrawUnitOverlay_TT := "Displays the enemies current units.`nThis is similar to the 'observer' panel.`n`nUse the 'unit panel filter' to selectively remove/display units."
+
+Inject_spawn_larva_TT := #Inject_spawn_larva_TT := "This needs to correspond to your SC2 'spawn larva' button."
+
+MI_Queen_Group_TT := #MI_Queen_Group_TT := "The queens in this control are used to inject hatcheries.`n`nHence you must add your injecting queens to this control group!"
+F_InjectOff_Key_TT := #F_InjectOff_Key_TT := "During a match this hotkey will toggle (either disable or enable) automatic injects."
+
+OverlayIdent_TT := "Changes or disables the method of identifying players in the overlays."
+
+Playback_Alert_Key_TT := #Playback_Alert_Key_TT := "Repeats the previous alert"
 
 worker_count_local_key_TT := "This will read aloud your current worker count."
 worker_count_enemy_key_TT := "This will read aloud your enemy's worker count. (only in 1v1)"
@@ -4078,7 +4143,10 @@ exit_hotkey_TT := "Can be used to exit the program while stealth mode is enabled
 TT2_MI_QueenDistance_TT := MI_QueenDistance_TT := "The edge of the hatchery creep is approximately 14`nThis helps prevent queens injecting on remote hatches - It works better with lower numbers"
 TT_F_Max_Injects_TT := F_Max_Injects_TT := "The max. number of 'forced' injects which can occur after a user 'F5'/auto-inject.`nSet this to a high number if you want the program to inject for you."
 TT_F_Alert_PreTime_TT := F_Alert_PreTime_TT := "The alert will sound X seconds before the forced inject."
-TT_F_Sleep_Time_TT := F_Sleep_Time_TT := "The amount of time between injecting each hatch.`nThis should be set as low as reliably possible so that the inject rounds are shorter and there is less chance of it affecting your gameplay."
+TT_F_Sleep_Time_TT := F_Sleep_Time_TT := "The amount of time spent idle after injecting a hatch.`nThis should be set as low as reliably possible so that the inject rounds are shorter and there is less chance of it affecting your gameplay."
+TT_FInjectHatchFrequency_TT := FInjectHatchFrequency_TT := "How often the larva state of the hatcheries are checked.`nAny uninjected hatches will then be injected.`n`nIncreasing this value will delay injects, that is, a hatch will remain uninjected for longer."
+
+
 TT_AM_KeyDelay_TT := AM_KeyDelay_TT := TT_I_KeyDelay_TT := I_KeyDelay_TT := TT_CG_KeyDelay_TT := CG_KeyDelay_TT := "This sets the delay between key/mouse events`nLower numbers are faster, but they may cause problems.`n0-10`n`nWith regards to speed, changing the 'sleep' time will generally have a larger impact."
 TT_Chrono_Gate_Sleep_TT := Chrono_Gate_Sleep_TT  := Auto_inject_sleep_TT := Edit_pos_var_TT := Auto_Mine_Sleep2_TT := TT_Auto_Mine_Sleep2_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'."
 CG_chrono_remainder_TT := TT_CG_chrono_remainder_TT := "This is how many full chronoboosts will remain afterwards between all your nexi.`nA setting of 1 will leave 1 full chronoboost (or 25 energy) on one of your nexi."
@@ -4121,6 +4189,7 @@ l_DeselectArmy_TT := #l_DeselectArmy_TT := "These unit types will be deselected.
 
 F_Inject_ModifierBeep_TT := "If the modifier keys (Shift, Ctrl, or Alt) or Windows Keys are held down when an Inject is attempted, a beep will heard.`nRegardless of this setting, the inject round will not begin until after these keys have been released."
 BlockingStandard_TT := BlockingFunctional_TT := BlockingNumpad_TT := BlockingMouseKeys_TT := BlockingMultimedia_TT := BlockingMultimedia_TT := BlockingModifier_TT := "During certain automations these keys will be buffered or blocked to prevent interruption to the automation and your game play."
+LwinDisable_TT := "Disables the Left Windows Key while in a SC2 match.`n`nMacro Trainer Left windows hotkeys (and non-overridden windows keybinds) will still function."
 
 #UnitHighlightList1Colour_TT := #UnitHighlightList2Colour_TT := #UnitHighlightList3Colour_TT := "Click Me!`n`nUnits of this type will appear this colour."
 Short_Race_List := "Terr|Prot|Zerg"
@@ -4462,9 +4531,9 @@ GuiControlGet, OriginTabRAL, Pos
 	Gui, Add, Text,y+16, ID Code:
 	
 	Gui, Add, Edit, Right ys xs+85 section w135 vEdit_Name	
-	Gui, Add, Edit, Number Right y+11 w135 
+	Gui, Add, Edit, Number Right y+11 w135 vTT_Edit_DWB
 		Gui, Add, UpDown,  Range0-100000 vEdit_DWB, 0
-	Gui, Add, Edit, Number Right y+11 w135
+	Gui, Add, Edit, Number Right y+11 w135 vTT_Edit_DWA
 		Gui, Add, UpDown,  Range1-100000 vEdit_DWA, 54000
 
 	Gui, Add, DropDownList, xs+90  y+8 w45 right VEdit_RON, Yes||No|	
@@ -4493,8 +4562,8 @@ Gui, Show, w490 h455, Alert List Editor  ; Show the window and its TreeView.
 OnMessage(0x200, "WM_MOUSEMOVE")
 
 	Edit_Name_TT := "This text is read aload during the warning"
-	Edit_DWB_TT := "If the unit/building exists before this time, no warning will be made - this is helpful for creating multiple warnings for the same unit"
-	Edit_DWA_TT := "If the unit is made after this time, no warning will be made -  this is helpful for creating multiple warnings for the same unit"
+	Edit_DWB_TT := TT_Edit_DWB_TT := "If the unit/building exists before this time, no warning will be made - this is helpful for creating multiple warnings for the same unit"
+	Edit_DWA_TT := TT_Edit_DWA_TT := "If the unit is made after this time, no warning will be made -  this is helpful for creating multiple warnings for the same unit"
 	Edit_RON_TT := "If ''Yes'' this SPECIFIC warning will be heard for each new unit/building (of this type)."
 	Edit_ID_TT := "This value is used to identify buildings and units within SC2 (the list below can be used)"
 	drop_ID_TT := "Use this list to find a units ID"
@@ -7058,7 +7127,8 @@ CreateHotkeys()
 	}
 	Hotkey, If
 	; Note : I have the emergency hotkey here if the user decides to set a hotkey to <#Space, so it cant get changed
-	hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and give it the highest possible priority		
+	; but i think this could cause issues when the hotkey fails to get rebound somtimes?
+;	hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and give it the highest possible priority		
 	Return
 }
 
@@ -7146,6 +7216,7 @@ getCamCenteredUnit(UnitList) ; |delimited ** ; needs a minimum of 70+ ms to upda
 
 castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlocked("^" CG_control_group)
 {	global
+	LOCAL click_x, click_y
 	LOCAL HighlightedGroup := getSelectionHighlightedGroup()
 ;	Send, ^%Inject_control_group%
 	send % "^" Inject_control_group
@@ -7154,8 +7225,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 
 		local xNew, yNew
 	;	Send, %MI_Queen_Group%
-		if ForceInject
-			send % BI_create_camera_pos_x 	;just incase it stuffs up and moves the camera
+	;	if ForceInject
+	;		send % BI_create_camera_pos_x 	;just incase it stuffs up and moves the camera
 		send % MI_Queen_Group
 
 		oHatcheries := [] ; Global used to check if successfuly without having to iterate again
@@ -7169,6 +7240,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 			For Index, CurrentHatch in oHatcheries
 			{
 				Local := FoundQueen := 0
+				if isHatchInjected(CurrentHatch.Unit)
+					continue
 				For Index, Queen in oSelection.Queens
 				{
 					if SkipUsedQueen[Queen.unit]
@@ -7239,12 +7312,12 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 					}					
 	
 			}
-			if ForceInject
-				send % BI_camera_pos_x
+		;	if ForceInject
+		;		send % BI_camera_pos_x
 
 		}
 	}	
-	else if (Method="Backspace Adv") || (Method = "Backspace CtrlGroup") ;cos i changed the name in an update
+	else if  (1 = 2) ; I.E. I have disabled this feature until i get around to finding the centred hatch better ((Method="Backspace Adv") || (Method = "Backspace CtrlGroup")) ;cos i changed the name in an update
 	{		
 		send % BI_create_camera_pos_x
 		send % MI_Queen_Group
@@ -7283,7 +7356,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 					}
 				}
 			}			
-		send % BI_camera_pos_x
+	;	send % BI_camera_pos_x
 	}
 	else ; if (Method="Backspace")
 	{
@@ -7370,6 +7443,34 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		}
  	}
  	return Object.maxindex()
+ }
+
+
+
+ getGroupedQueensWhichCanInject(ByRef aControlGroup)
+ {	GLOBAL A_unitID, O_scTypeCount, O_scTypeHighlighted, S_CtrlGroup, O_scUnitIndex, GameIdentifier, B_CtrlGroupStructure
+ 	, S_uStructure, GameIdentifier, MI_Queen_Group, S_scStructure
+	aControlGroup := []
+	group := MI_Queen_Group
+	groupCount := getControlGroupCount(Group)
+
+	ReadRawMemory(B_CtrlGroupStructure + S_CtrlGroup * (Group - 1), GameIdentifier, MemDump, groupCount * S_CtrlGroup + O_scUnitIndex)
+	
+	aControlGroup["UnitCount"]	:= numget(MemDump, 0, "Short")
+	aControlGroup["Types"]	:= numget(MemDump, O_scTypeCount, "Short")
+;	aControlGroup["HighlightedGroup"]	:= numget(MemDump, O_scTypeHighlighted, "Short")
+	aControlGroup.Queens := []
+
+	loop % groupCount
+	{
+		unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
+		type := getUnitType(unit)
+		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25))
+			aControlGroup.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aControlGroup.Queens[aControlGroup.Queens.MaxIndex(), "Type"] := Type
+
+	}
+	aControlGroup["QueenCount"] := 	aControlGroup.Queens.maxIndex() ; as "SelectedUnitCount" will contain total selected queens + other units in group
+	return 	aControlGroup.Queens.maxindex()
  }
 
 
@@ -8732,6 +8833,9 @@ msgbox % clipboard := pAbilities := dectohex(		getUnitAbilityPointer(unit)		) ;t
 msgbox % clipboard := pQueueInfoAddress := dectohex(		pAbilities + 0x24	)	;but we want the one at +ox24
 msgbox % clipboard := pQueueInfo := dectohex(	ReadMemory(	pQueueInfoAddress, GameIdentifier)	)	;but we want the one at +ox24
 msgbox %  UnitsInProductionCount :=  ReadMemory( pQueueInfo + 0x28, GameIdentifier ) ; the number in production is here 
+
+return
+
 
 
 

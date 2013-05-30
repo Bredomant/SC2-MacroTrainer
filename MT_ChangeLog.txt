@@ -1,7 +1,7 @@
-V2.98		20/05/13
+V2.971		20/05/13
 New:
 	• Local Player Colour indicator
-		- During team games and while using hostile colours (green, yellow, and red) a small circle is drawn which indiactes your local player colour.
+		- During team games and while using hostile colours (green, yellow, and red) a small circle is drawn which indicates your local player colour.
 		- This is helpful when your allies refer to you by colour.
 	
 	• Hostile Colour Assist
@@ -10,15 +10,22 @@ New:
 
 	Note: These options can be enabled/disabled from within the minimap and overlay options.
 
+Changes:
+	• Renamed the injects to more sensible names. Auto-injects refer to fully automated injects whereas basic or 1-button injects refer to 'semi-automatic' injects.
+	• Auto injects (fully automated):	 
+		- Begin (automatically) after you control group your queen to the inject control group
+		- Constantly monitors hatches to determine when to perform an inject and on which hatch
+		- Monitor frequency can be set within the options menu
+		- Is very usable and works well for me :)
+
 
 Fixes:
 	• Disabled " SetStoreCapslockMode "
 		- 	Users can now have things bound to the CapsLock key in SC2 hotkeys without that function being invoked by this program during a routine
-			(as AHK attempts to corrrect for a difference between the current capslock state and the required send keystrokes).
-	• The GUI check boxes in "Detection List" not saving their specified state.
+			(as AHK attempts to correct for a difference between the current capslock state and the required state while send keystrokes).
+	• The GUI check boxes in "Detection List" (enable & copy to clipboard) not saving their specified states.
 		-	I believe this problem was introduced in the previous version.
-
-	• Boxdrag correctly restored 
+	• Boxdrag correctly restored (although this isn't really used any more)
 
 V2.97		20/05/13
 
