@@ -14,7 +14,7 @@
 
 /*	Things to do
 	Team send warn message after clicking building..maybe
-	disable backspace adv
+	find the bugs in unvonverted gateways warning
 	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
 
 */
@@ -47,7 +47,7 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #UseHook
 #Persistent
 #NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
-SetStoreCapslockMode, off ;neeeded in case a user bind something to the capslock key in sc2 - other AHK always sends capslock to adjust for case.
+SetStoreCapslockMode, off ; needed in case a user bind something to the capslock key in sc2 - other AHK always sends capslock to adjust for case.
 OnExit, ShutdownProcedure
 
 Menu, Tray, Icon 
@@ -607,8 +607,8 @@ clock:
 	}
 	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)    OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
 	{
-		game_status := "game", warpgate_status := "not researched"	
-		MiniMapWarning := [], a_BaseList := [], aUnitModel := []
+		game_status := "game", warpgate_status := "not researched", gateway_count := warpgate_warning_set := 0
+		MiniMapWarning := [], a_BaseList := [], aUnitModel := [], aGatewayWarnings := []
 		if WinActive(GameIdentifier)
 			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := ReDrawIdleWorkers := ReDrawLocalPlayerColour := 1
 		if idle_enable	;this is the idle AFK
@@ -667,8 +667,6 @@ clock:
 		SetTimer, g_unitPanelOverlay_timer, %UnitOverlayRefresh%, -11	;lowest priority
 
 		EnemyBaseList := GetEBases()		
-;		If Auto_Mine
-;			settimer, Auto_mine, 100
 		UserSavedAppliedSettings := 0		
 	}
 return
@@ -1492,6 +1490,7 @@ worker:
 		 OldWorker_i := NewWorker_i
 	}
 	return
+
 WorkerInProduction(a_BaseList, maxIdleTime, maxWarnings, folloupWarningDelay, MaxWorkerCount)	;add secondary delay and max workers
 {	global a_LocalPlayer, w_workerprod_T, w_workerprod_P, w_workerprod_Z
 	static lastWorkerInProduction, warningCount, lastwarning
@@ -1711,27 +1710,67 @@ return
 ;--------------------
 ;	WarpGate Warning
 ;--------------------
+
+;	I think the problem here is if a user converts a warpate while the timer isnt running and then another warpgate finishes
+;	it will rewarn the user even though it hasn't really waited the correct amount of time
+;  also remeber that it only updates gateway/warpgate count after doing a unit bank read /iteration
+
+; note: wargate warning only drawn for a set amount of time as the 'time' is only read in once in the unit bank section - so if user has a long follow up delay, that wont be accompanied by a minimap alert
+
 warpgate_warn:
-	if (gateway_count AND !warpgate_warning_set) ;  AND warpgate_status must = "researched" 
+	if  (warpgate_status != "researched")
+		return
+	if gateway_count  ; this prvents the minmap warning showing converted gateways until they naturally time out in the drawing section
+		for index, object in aGatewayWarnings
+			if ( getUnitType(object.unit) != a_unitID["Gateway"] || isUnitDead(object.unit) || !isUnitLocallyOwned(object.unit) ) ;doing this in case unit dies or becomes other players gateway as this list onyl gets cleared when gateway count = 0
+			{
+				for minimapIndex, minimapObject in MiniMapWarning
+					if (minimapObject.unit = object.unit)
+					{
+						MiniMapWarning.remove(minimapIndex, "") 
+						break
+					}
+				aGatewayWarnings.remove(index, "") ; "" so deleting doesnt stuff up for loop		
+			}
+
+	if (gateway_count AND !warpgate_warning_set)
 	{
-		settimer warpgate_warn, % delay_warpgate_warn *1000
+		warpgateGiveWarningAt := getTime() + delay_warpgate_warn
 		warpgate_warning_set := 1
 	}
 	else if ( !gateway_count  )
 	{
-		settimer warpgate_warn, 1000 ;reset timer back to fast
 		warpgate_warn_count := 0
 		warpgate_warning_set := 0
+
+		for index, object in aGatewayWarnings
+			for minimapIndex, minimapObject in MiniMapWarning
+				if (minimapObject.unit = object.unit)
+					minimapObject.remove(minimapIndex, "")        ;lets clear the list of old gateway warnings. This gets rid of the x as soon as the gateway becomes a warpgate
+		aGatewayWarnings := []
+
 	}
-	else if ( warpgate_warn_count <= sec_warpgate) 
+	else if ( warpgate_warn_count <= sec_warpgate && time > warpgateGiveWarningAt) 
 	{
 		warpgate_warn_count ++
-		settimer warpgate_warn, % delay_warpgate_warn_followup *1000
-		DSpeak(w_warpgate)	
+		warpgateGiveWarningAt := getTime() + delay_warpgate_warn_followup
+		
+		for index, object in aGatewayWarnings
+		{
+			object.time := time ; so this will display an x even with long  follow up delay
+			MiniMapWarning.insert(object)
+		}
+
+		if aGatewayWarnings.maxindex()
+			DSpeak(w_warpgate)	
 	}
-	else
-		settimer warpgate_warn, 1000	;this is required to speed up the timer if they dont convert the gateways
+
 return
+
+isUnitDead(unit)
+{ 	global 
+	return	getUnitTargetFilterFast(unit) & DeadFilterFlag
+}
 
 ;------------------
 ;	Unit Bank Read	; I wrote this when I was first startings. I should really clean it up, but I cant be fucked.
@@ -1767,21 +1806,21 @@ while (A_Index <= UnitBankCount)
 				if warpgate_warning_set
 				{
 					isinlist := 0
-					For index in MiniMapWarning
+					For index in aGatewayWarnings
 					{
-						if MiniMapWarning[index,"Unit"] = u_iteration
+						if aGatewayWarnings[index,"Unit"] = u_iteration
 						{	isinlist := 1
 							Break
 						}		
 					}
 					if !isinlist
-						MiniMapWarning.insert({"Unit": u_iteration, "Time": Time})
+						aGatewayWarnings.insert({"Unit": u_iteration, "Time": Time})
 				} 
 			}
 			Else if (unit_type = A_unitID["WarpGate"] && warpgate_status <> "researched") ; as unit_type must = warpgate_id
 			{
 				warpgate_status := "researched"
-				settimer warpgate_warn, 1000
+			;	settimer warpgate_warn, 1000
 			}
 		}
 		if (unit_type = A_unitID["Nexus"] || unit_type = A_unitID["CommandCenter"] 
@@ -1792,6 +1831,8 @@ while (A_Index <= UnitBankCount)
 	else if (alert_array[GameType, "Enabled"] && a_Player[unit_owner, "Team"] <> a_LocalPlayer["Team"])	
 		doUnitDetection(u_iteration, unit_type, unit_owner)
 } ; While ((UnitRead_i + EndCount) / getUnitCount() < 1.1)
+if warpgate_warn_on
+	gosub warpgate_warn
 SupplyInProduction := SupplyInProductionCount
 a_BaseList := a_BaseListTmp
 return
@@ -4079,7 +4120,7 @@ above_upperdelta_TT := TT_above_upperdelta_TT := "A warning will be heard when t
 minimum_supply_TT := TT_minimum_supply_TT := "Alerts are only active while your supply is above this number."
 
 w_supply_TT := w_warpgate_TT := w_workerprod_T_TT := w_workerprod_P_TT := w_workerprod_Z_TT := w_gas_TT := w_idle_TT := w_mineral_TT := "This text is spoken during a warning."
-TT_sec_workerprod_TT := sec_warpgate_TT := sec_workerprod_TT := sec_idle_TT := sec_gas_TT := sec_mineral_TT := sec_supply_TT := TT_sec_supply_TT := TT_sec_mineral := TT_sec_gas_TT := TT_sec_idle_TT := TT_sec_warpgate_TT := "Set how many additional warnings are to be given after the first initial warning (assuming the resource does not fall below the inciting value) - the warnings then turn off."
+TT_sec_workerprod_TT := sec_workerprod_TT := sec_idle_TT := sec_gas_TT := sec_mineral_TT := sec_supply_TT := TT_sec_supply_TT := TT_sec_mineral := TT_sec_gas_TT := TT_sec_idle_TT := TT_sec_warpgate_TT := sec_warpgate_TT := "Set how many additional warnings are to be given after the first initial warning (assuming the resource does not fall below the inciting value) - the warnings then turn off."
 additional_delay_supply_TT := TT_additional_delay_supply_TT := additional_delay_minerals_TT := additional_delay_gas_TT := additional_idle_workers_TT 
 := TT_additional_delay_minerals := TT_additional_delay_gas_TT := TT_additional_idle_workers_TT := TT_delay_warpgate_warn_followup_TT := delay_warpgate_warn_followup_TT := "This sets the delay between the initial warning, and the additional/follow-up warnings. (in real seconds)"
 TT_additional_delay_worker_production_TT := additional_delay_worker_production_TT := "This sets the delay between the initial warning, and the additional/follow-up warnings. (in SC2 seconds)"
@@ -4090,11 +4131,13 @@ idletrigger_TT := gas_trigger_TT := mineraltrigger_TT := TT_mineraltrigger_TT :=
 supplylower_TT := TT_supplylower_TT := TT_supplymid_TT := supplymid_TT := supplyupper_TT := TT_supplyupper_TT := "Dictactes when the next or previous supply delta/threashold is used."
 TT_workerProductionTPIdle_TT := workerProductionTPIdle_TT := "This only applies to Terran & protoss.`nIf all nexi/CC/Orbitals/PFs are idle for this amount of time (SC2 seconds), a warning will be made.`n`nNote: A main is considered idle if it has no worker in production and is not currently flying or morphing."
 
-delay_warpgate_warn_TT := TT_delay_warpgate_warn_TT := "A warning will be heard when an unconverted gateway exists for this period of time."
+delay_warpgate_warn_TT := TT_delay_warpgate_warn_TT := "A warning will be heard when an unconverted gateway exists for this period of time.`nThis is in SC/in-game seconds.`n`nNote: An additional delay of up to three (real) seconds can be expected"
+
+ TT_delay_warpgate_warn_followup_TT := delay_warpgate_warn_followup_TT := "This sets the delay between the initial warning and the additional/follow-up warnings.`n`nNote: This is in SC2 (in game) seconds."
 
 DrawSpawningRaces_TT := "Displays a race icon over the enemies spawning location at the start of the match."
 
-DrawAlerts_TT := "While using the 'detection list' function an 'x' will be briefly displayed on the minimap during a unit warning."
+DrawAlerts_TT := "While using the 'detection list' function an 'x' will be briefly displayed on the minimap during a unit warning.`n`nUnconverted gateways will also be marked (if that macro is enabled)."
 
 UnitHighlightExcludeList_TT := #UnitHighlightExcludeList_TT := "These units will not be displayed on the minimap."
 

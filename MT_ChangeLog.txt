@@ -17,7 +17,8 @@ Changes:
 		- Constantly monitors hatches to determine when to perform an inject and on which hatch
 		- Monitor frequency can be set within the options menu
 		- Is very usable and works well for me :)
-
+	• Modified the implementation of the unconverted gateway warning.
+			
 
 Fixes:
 	• Disabled " SetStoreCapslockMode "
