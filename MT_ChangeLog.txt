@@ -1,32 +1,40 @@
-V2.971		20/05/13
+V2.971                  1/06/13
+
 New:
-	• Local Player Colour indicator
+
+    • Program website:
+    	- http://www.users.on.net/~jb10/MTSite/overview.html
+    • Local Player Colour indicator
 		- During team games and while using hostile colours (green, yellow, and red) a small circle is drawn which indicates your local player colour.
 		- This is helpful when your allies refer to you by colour.
-	
-	• Hostile Colour Assist
-		- During team games and while using hostile colours (green, yellow, and red) enemy bases will still be displayed using player colours.
-		- This helps when co-ordinating attacks e.g. Let's attack yellow!
-
-	Note: These options can be enabled/disabled from within the minimap and overlay options.
-
+    • Hostile Colour Assist
+        - During team games and while using hostile colours (green, yellow, and red) enemy bases will still be displayed using player colours.
+        -This helps when co-ordinating attacks e.g. Let's attack yellow!
+     Note: These options can be enabled/disabled from within the minimap and overlay options.
+ 
 Changes:
-	• Renamed the injects to more sensible names. Auto-injects refer to fully automated injects whereas basic or 1-button injects refer to 'semi-automatic' injects.
-	• Auto injects (fully automated):	 
-		- Begin (automatically) after you control group your queen to the inject control group
-		- Constantly monitors hatches to determine when to perform an inject and on which hatch
-		- Monitor frequency can be set within the options menu
-		- Is very usable and works well for me :)
-	• Modified the implementation of the unconverted gateway warning.
-			
 
+    • Renamed the injects to more sensible names. Auto-injects refer to fully automated injects whereas basic or 1-button injects refer to 'semi-automatic' injects.
+    • Auto injects (fully automated):         
+	    - Begin (automatically) after you control group your queen to the inject control group
+	    - Constantly monitors hatches to determine when to perform an inject and on which hatch
+	    - Monitor frequency can be set within the options menu
+	    - Is very usable and works well for me :)
+    •        Modified the implementation of the unconverted gateway warnings.
+    •        Spread/Split unit function
+        -  When 30% or more of the selected units are workers, the units will be spread across a larger area.
+        -  This is very helpful against hellions and hellbat drops.
+    •  Added more information to various tooltips and expanded the area which can invoke them.
+ 
 Fixes:
-	• Disabled " SetStoreCapslockMode "
-		- 	Users can now have things bound to the CapsLock key in SC2 hotkeys without that function being invoked by this program during a routine
-			(as AHK attempts to correct for a difference between the current capslock state and the required state while send keystrokes).
-	• The GUI check boxes in "Detection List" (enable & copy to clipboard) not saving their specified states.
-		-	I believe this problem was introduced in the previous version.
-	• Boxdrag correctly restored (although this isn't really used any more)
+
+    • Disabled " SetStoreCapslockMode "
+        - Users can now have things bound to the CapsLock key in SC2 hotkeys without that function being invoked by this program during a routine
+          (as AHK attempts to correct for a difference between the current capslock state and the required state while send keystrokes).
+    • The GUI check boxes in "Detection List" (enable & copy to clipboard) not saving their specified states.
+        - I believe this problem was introduced in the previous version.
+    • Boxdrag correctly restored (although this isn't really used any more)
+-----------------------------------------------
 
 V2.97		20/05/13
 
@@ -63,7 +71,7 @@ Fixes:
 
 
 Changes:
-	• Disabled the use of modifiers with select army function
+	• Disabled the use of modifiers with with select army function
 		- As this function works much much better when these are not used!!
 	• Added an additional two Minimap Unit Colour Highlight categories/lists
 	• Double tapping the Select Army Button will result in the camera focusing on the army.

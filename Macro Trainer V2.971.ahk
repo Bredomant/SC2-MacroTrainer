@@ -1,4 +1,4 @@
-;-----------------------
+﻿;-----------------------
 ;	For updates:
 ;	Change version number in exe and config file
 ;	Upload the changelog, file version  and new exe files to the ftp server
@@ -14,7 +14,6 @@
 
 /*	Things to do
 	Team send warn message after clicking building..maybe
-	find the bugs in unvonverted gateways warning
 	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
 
 */
@@ -77,15 +76,16 @@ config_file := "MT_Config.ini"
 old_backup_DIR := "Old Macro Trainers"
 url := []
 url.vr := "http://www.users.on.net/~jb10/macro_trainer_version.txt"
-url.changelog := "http://www.users.on.net/~jb10/MT_ChangeLog.txt"
-url.HelpFile := "http://www.users.on.net/~jb10/Macro Trainer Help File.htm"
-url.Homepage := "http://www.users.on.net/~jb10/"
+url.changelog := "http://www.users.on.net/~jb10/MT_ChangeLog.html"
+url.HelpFile := "http://www.users.on.net/~jb10/MTSite/helpfulAdvice.html"
+url.Homepage := "http://www.users.on.net/~jb10/MTSite/overview.html"
+url.buyBeer := "http://www.users.on.net/~jb10/MTSite/buyBeer.html"
 url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 
 program := []
 program.info := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
 
-version := 2.97
+version := 2.971
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -128,7 +128,7 @@ a_pBrush := []
 
 If (auto_update AND A_IsCompiled AND HideTrayIcon <> 1 AND CheckForUpdates(version, url.vr ))
 {
-	changelog_text := Url2Var(url.changelog)
+;	changelog_text := Url2Var(url.changelog)
 	Gui, New
 	Gui +Toolwindow	+LabelAUpdate_On
 	Gui, Add, Picture, x12 y10 w90 h90 , %A_ScriptName%
@@ -144,8 +144,11 @@ If (auto_update AND A_IsCompiled AND HideTrayIcon <> 1 AND CheckForUpdates(versi
 	Gui, Add, Text, x112 y+10, You're currently running version %version%
 	Gui, Font, S8 CDefault Bold, Verdana
 	Gui, Add, Text, x10 y+5 w80, Changelog:
-	Gui, Font, Norm 
-	Gui, Add, Edit, x12 y+10 w560 h220 readonly -E0x200, % LTrim(changelog_text)
+	Gui, Font, Norm
+
+;	Gui, Add, Edit, x12 y+10 w560 h220 readonly -E0x200, % LTrim(changelog_text)
+	Gui Add, ActiveX, x12  w560 h220  vWB, Shell.Explorer
+	WB.Navigate(url.changelog)
 	Gui, Font, S8 CDefault Bold, Verdana
 	Gui, Add, Button, Default x50 y+20 w100 h30 gUpdate, &Update
 	Gui, Font, Norm 
@@ -583,7 +586,7 @@ mt_pause_resume:
 	if (mt_on := !mt_on)	; 1st run mt_on blank so considered false and does else	
 	{
 		game_status := "lobby" ; with this clock = 0 when not in game 
-		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer")
+		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer")
 		inject_timer := 0	;ie so know inject timer is off
 		DSpeak("Macro Trainer Paused")
 	}	
@@ -601,7 +604,7 @@ clock:
 	if (!time AND game_status = "game") OR (UpdateTimers) ; time=0 outside game
 	{	
 		game_status := "lobby" ; with this clock = 0 when not in game (while in game at 0s clock = 44)	
-		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer")
+		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer")
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
@@ -714,7 +717,7 @@ Loop, 8	;doing it this way allows for custom games with blank slots ;can get wei
 		a_LocalPlayer :=  new c_Player(A_Index)
 }
 IF (IsInList(a_LocalPlayer.Type, 5, 6) OR (A_IsCompiled AND a_LocalPlayer.Type = 16))
-	timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "warpgate_warn", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer") ;Pause all warnings. Clock still going so will resume next game
+	timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer") ;Pause all warnings. Clock still going so will resume next game
 GameType := GetGameType(a_Player)
 return
 ;-------------------------
@@ -2127,6 +2130,10 @@ Homepage:
 	run % url.homepage
 	return
 
+g_buyBeer:
+	run % url.buyBeer
+	return
+
 ;------------
 ;	Exit
 ;------------
@@ -2191,7 +2198,7 @@ TrayUpdate:
 	}
 	IF (CheckForUpdates(version, url.vr ))
 	{
-		changelog_text := Url2Var(url.changelog)
+;		changelog_text := Url2Var(url.changelog)
 		Gui, New
 		Gui +Toolwindow	
 		Gui, Add, Picture, x12 y10 w90 h90 , %A_ScriptName%
@@ -2203,7 +2210,11 @@ TrayUpdate:
 		Gui, Font, S8 CDefault Bold, Verdana
 		Gui, Add, Text, x112 y+5 w80, Changelog:
 		Gui, Font, Norm 
-		Gui, Add, Edit, x12 y+10 w560 h220 readonly -E0x200, % LTrim(changelog_text)
+
+	;	Gui, Add, Edit, x12 y+10 w560 h220 readonly -E0x200, % LTrim(changelog_text)
+		Gui Add, ActiveX, x12 y+10 w560 h220  vWB, Shell.Explorer
+		WB.Navigate(url.changelog)
+		
 		Gui, Font, S8 CDefault Bold, Verdana
 		Gui, Add, Button, Default x122 y330 w100 h30 gUpdate, &Update
 		Gui, Font, Norm 
@@ -3732,7 +3743,7 @@ loop, parse, Short_Race_List, |
 }				
 Gui, Tab, Info
 	Gui, Font, s10
-	Gui, add, text, x+25 y+15 w380,Auto Unit Grouping:`n`nThis function will add (shift + control group) selected units to their preselected control groups, providing:`n`n One of the selected units in not in said control group.`n All of the selected units 'belong'  in this (preselected) control group.`nUnits are added after the control, shift, alt, && windows keys are released.
+	Gui, add, text, x+25 y+15 w380,Auto Unit Grouping:`n`nThis function will add (shift + control group) selected units to their preselected control groups, providing:`n`n• One of the selected units in not in said control group.`n• All of the selected units 'belong'  in this (preselected) control group.`nUnits are added after the control, shift, alt, && windows keys are released.
 	Gui, add, text, y+20 w380,Restrict Unit Grouping:`n`nIf units have been specified for a particular control group, only these preselected units can be added to that control group.`n`nThis prevents users erroneously adding units to control groups.`n`n Any unit can be added to a blank control group.
 	Gui, Font, s10 BOLD
 	Gui, add, text, X%XTabX% y+8 cRED , Note:
@@ -3890,15 +3901,24 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vHome_TAB, Home||Emergency
 
 Gui, Tab, Home
 		Gui, Add, Button, y+30 gTrayUpdate w150, Check For Updates
-		Gui, Add, Button, y+20 gB_HelpFile w150, Read The Help File
+		Gui, Add, Button, y+20 gB_HelpFile w150 vSillyGUIControlIdentVariable2, Read The Help File
 		Gui, Add, Button, y+20 gB_ChangeLog w150, Read The ChangeLog
 		Gui, Add, Checkbox,y+30 Vlaunch_settings checked%launch_settings%, Show this menu on startup	
+
 
 		if ( input_method <> "input" )
 		{
 			Gui, Add, Text, y+25 cRED, Note:
 			Gui, Add, Text, x+10 yp+0, It is highly recommended that you set the method of artificial input to "Input".`n(providing this is compatible with your system)`nThis setting can be found under " Settings --> Input Method "
 		}
+
+		GuiControlGet, HomeButtonLocation, Pos, SillyGUIControlIdentVariable2 ;
+
+
+		Gui, Add, Button, X360 y%HomeButtonLocationY% gHomepage w150, Homepage
+		Gui, Add, Button, y+20 gG_buyBeer w150, Buy Me a Beer
+
+
 		Gui, Add, Picture, x170 y320 h90 w90 gP_Protoss_Joke vProtossPic, %A_Temp%\Protoss90.png
 		Gui, Add, Picture, x+50 yp-20 h128 w128 gP_Terran_Joke vTerranPic , %A_Temp%\Terran90.png
 		Gui, Add, Picture, x+50  yp+20 h90 w90 gP_zerg_Joke vZergPic, %A_Temp%\Zerg90.png
@@ -4331,14 +4351,7 @@ P_zerg_Joke:
 	return	
 
 B_HelpFile:
-	IfWinExist, MT Help File
-	{	WinActivate
-		Return 					
-	}
-	Gui, New 
-	Gui Add, ActiveX, xm w980 h640 vWB, Shell.Explorer
-	WB.Navigate(url.HelpFile)
-	Gui, Show,, MT Help File
+	run % url.HelpFile
 	Return
 
 
@@ -8150,20 +8163,37 @@ debugData()
 }
 
 SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
-{
+{ 	GLOBAL a_LocalPlayer, A_UnitID
 	uSpacing := 4
+
+
 	sleep, % SleepSplitUnits
 	send ^%SplitctrlgroupStorage_key%
 	BlockInput, MouseMove
 	mousegetpos, Xorigin, Yorigin
 	a_SelectedUnits := []
 	xSum := ySum := 0
-	while (A_Index <= getSelectionCount())	
+
+ 	If (a_LocalPlayer["Race"] = "Terran")
+		worker := "SCV"	
+	Else If (a_LocalPlayer["Race"] = "Protoss")
+		worker := "Probe"
+	Else Worker := "Drone"	
+	selectionCount := getSelectionCount()
+	
+	while (A_Index <= selectionCount)	
 	{
 		unit := getSelectedUnitIndex(A_Index -1)
 		getMiniMapMousePos(unit, mX, mY)
 		a_SelectedUnits.insert({"Unit": unit, "mouseX": mX, "mouseY": mY, absDistance: ""})
+
+		if (getUnitType(unit) = A_UnitID[Worker])
+			workerCount++
 	}
+
+	if (workerCount / selectionCount >= .3 ) ; i.e. 20% of the selected units are workers
+		uSpacing := 10 ; for hellbat and hellion spread
+	Else uSpacing := 4
 
 	for index, unit in a_SelectedUnits
 		xSum += unit.mouseX, ySum += unit.mouseY
@@ -8870,16 +8900,15 @@ SetPlayerGas(amount=99999)
 
 return
 
-unit := getSelectedUnitIndex()
 
-msgbox % clipboard := pAbilities := dectohex(		getUnitAbilityPointer(unit)		) ;this contains a few pointers ()
-msgbox % clipboard := pQueueInfoAddress := dectohex(		pAbilities + 0x24	)	;but we want the one at +ox24
-msgbox % clipboard := pQueueInfo := dectohex(	ReadMemory(	pQueueInfoAddress, GameIdentifier)	)	;but we want the one at +ox24
-msgbox %  UnitsInProductionCount :=  ReadMemory( pQueueInfo + 0x28, GameIdentifier ) ; the number in production is here 
+;unit := getSelectedUnitIndex()
 
-return
+;msgbox % clipboard := pAbilities := dectohex(		getUnitAbilityPointer(unit)		) ;this contains a few pointers ()
+;msgbox % clipboard := pQueueInfoAddress := dectohex(		pAbilities + 0x24	)	;but we want the one at +ox24
+;msgbox % clipboard := pQueueInfo := dectohex(	ReadMemory(	pQueueInfoAddress, GameIdentifier)	)	;but we want the one at +ox24
+;msgbox %  UnitsInProductionCount :=  ReadMemory( pQueueInfo + 0x28, GameIdentifier ) ; the number in production is here 
 
-
+;return
 
 
 ;	O_P_uAbilityPointer := 0xD8 (+4)
