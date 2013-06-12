@@ -16,6 +16,8 @@
 	Team send warn message after clicking building..maybe
 	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
 
+	change EnableAutoWorkerTerran, 1 to 0 in iniread
+
 */
 
 
@@ -66,7 +68,7 @@ If A_IsCompiled
 Else
 {
 	Menu Tray, Icon, Starcraft-2.ico
-	debug := 1
+	debug := 0
 	debug_name := "Kalamity"
 	hotkey, ^+!F12, g_GiveLocalPalyerResources
 }
@@ -85,7 +87,7 @@ url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 program := []
 program.info := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
 
-version := 2.971
+version := 2.972
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -328,31 +330,34 @@ return
 ; 	I have added the AdditionalKeys which is mainly used for zerg burrow
 ;	and i have provided an additional 15 ms sleep time if burrow is being held down
 
-ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "")
+ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "", timeout := "") ;timout in ms
 {
 	GLOBAL HotkeysZergBurrow
-	startReleaseModifiers:
-	count := 0
-	firstRun++
+	startTime := A_Tickcount
+
+	startReleaseModifiers:	
 	while getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
 	||  AdditionalKeys && (ExtraKeysDown := isaKeyPhysicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
 	|| (isPerformingAction := CheckIfUserPerformingAction && isUserPerformingAction()) ; have this function last as it can take the longest if lots of units selected
 	{
-		count++
-		if (count = 1 && Beep) && !isPerformingAction && !ExtraKeysDown && firstRun = 1	;wont beep if casting or burrow AKA 'extra key' is down
+		loopCount++
+		ModifierDown := 1
+		if (timeout && A_Tickcount - startTime >= timeout)
+			return 1 ; was taking too long
+		if (loopCount = 1 && Beep && !isPerformingAction && !ExtraKeysDown)	;wont beep if casting or burrow AKA 'extra key' is down
 			SoundPlay, %A_Temp%\ModifierDown.wav	
 		if ExtraKeysDown
 			LastExtraKeyHeldDown := ExtraKeysDown ; as ExtraKeysDown will get blanked in the loop preventing detection in the below if
 		else LastExtraKeyHeldDown := ""
 		sleep, 5
 	}
-
-	if count
+	if ModifierDown
 	{
+		ModifierDown := 0
 		if (LastExtraKeyHeldDown = HotkeysZergBurrow)
 			sleep 50 ;as burrow can 'buffer' within sc2
-		else sleep, 35	;give time for sc2 to update keystate - it can be a slower! 
+		else sleep, 35	;give time for sc2 to update keystate - it can be a slower than AHK (or it buffers)! 
 		Goto, startReleaseModifiers
 	}
 	return
@@ -586,7 +591,7 @@ mt_pause_resume:
 	if (mt_on := !mt_on)	; 1st run mt_on blank so considered false and does else	
 	{
 		game_status := "lobby" ; with this clock = 0 when not in game 
-		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer")
+		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck")
 		inject_timer := 0	;ie so know inject timer is off
 		DSpeak("Macro Trainer Paused")
 	}	
@@ -604,13 +609,14 @@ clock:
 	if (!time AND game_status = "game") OR (UpdateTimers) ; time=0 outside game
 	{	
 		game_status := "lobby" ; with this clock = 0 when not in game (while in game at 0s clock = 44)	
-		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer")
+		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck")
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
-	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)    OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
+	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16) OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
 	{
 		game_status := "game", warpgate_status := "not researched", gateway_count := warpgate_warning_set := 0
+		AW_MaxWorkersReaded := TmpDisableAutoWorker := 0
 		MiniMapWarning := [], a_BaseList := [], aUnitModel := [], aGatewayWarnings := []
 		if WinActive(GameIdentifier)
 			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := ReDrawIdleWorkers := ReDrawLocalPlayerColour := 1
@@ -642,6 +648,9 @@ clock:
 			settimer, supply, 200
 		if workeron
 			settimer, worker, 1000
+		LocalPlayerRace := a_LocalPlayer["Race"] ; another messy lazy veriable
+		if (EnableAutoWorker%LocalPlayerRace% && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss") )
+			SetTimer, g_autoWorkerProductionCheck, 200
 		if ( Auto_Read_Races AND race_reading ) && 	!((ResumeWarnings || UserSavedAppliedSettings) && time > 12)
 			SetTimer, find_races_timer, 1000
 		If (a_LocalPlayer["Race"] = "Terran")
@@ -917,7 +926,11 @@ inject_reset:
 
 Cast_DisableInject:	
 	If (F_Inject_Enable := !F_Inject_Enable)
+	{
 		DSpeak("Injects On")
+		zergGetHatcheriesToInject(oHatcheries)
+		settimer, g_ForceInjectSuccessCheck, %FInjectHatchFrequency%	
+	}
 	Else
 	{
 		settimer, Force_Inject, off
@@ -1116,7 +1129,7 @@ getCurrentlyHighlightedUnitType(ByRef SampleTargetFilter="")
 				previousType := unit.type
 				if (CurrentGroup = oSelection.HighlightedGroup)
 				{
-					SampleTargetFilter := getUnitTargetFilterFast(unit.Index) ; so can be used as a basic test of unit type eg is it a structure
+					SampleTargetFilter := getUnitTargetFilterFast(unit.UnitIndex) ; so can be used as a basic test of unit type eg is it a structure
 					Critical %PreviousCritical%
 					return Unit.Type
 				}
@@ -1125,6 +1138,43 @@ getCurrentlyHighlightedUnitType(ByRef SampleTargetFilter="")
 	Critical %PreviousCritical%
 	Return 0 ;either error or no units selected
 }
+
+;not sure if this works
+findunitTypeTabPosition(l_searchType, ByRef SampleTargetFilter="") ; l_searchType a commo delimited list
+{
+	PreviousCritical := A_IsCritical
+	critical, on ;otherwise takes too long! still takes a long time for lots of selected units! 733ms for 118 selected units when sorting them
+
+	if (getSelectionHighlightedGroup() = 0 && getSelectionCount()) ; this is a trick to speed it up so if heaps of units are selected but only first highlighted, it wont sort them
+	{
+		Critical %PreviousCritical%
+		return getUnitType( getSelectedUnitIndex(0) )
+	}
+
+	CurrentGroup := -1 ; so 1st timein for loop != ++ will be 0
+	if numGetUnitSelectionObject(oSelection, "Sort") ; returns selection count
+		for index, Unit in oSelection.Units
+		{
+			if (unit.type != previousType)
+			{
+				CurrentGroup++	
+				previousType := unit.type
+				type := unit.type
+				if type in %l_searchType%
+				{
+					SampleTargetFilter := getUnitTargetFilterFast(unit.UnitIndex) ; so can be used as a basic test of unit type eg is it a structure
+					Critical %PreviousCritical%
+					return CurrentGroup
+				}
+			}
+		}
+	Critical %PreviousCritical%
+	Return 0 ;either error or no units selected
+}
+
+
+
+
 
 isUserPerformingAction()
 {	Local Type, worker
@@ -1254,8 +1304,10 @@ SelectHomeMain(LocalBase)
 	else return 0
 }
 
-MakeWorker(Race)
-{ global
+MakeWorker(Race = "")
+{ 	global
+	if !Race
+		Race := a_LocalPlayer["Race"]
 	If ( Race = "Terran" )
 		Send, %Make_Worker_T_Key%
 	Else If ( Race = "Protoss" )
@@ -1465,7 +1517,7 @@ return
 ;--------------------------------------------
 worker:	
 	If (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")
-		WorkerInProduction(a_BaseList, workerProductionTPIdle, 1 + sec_workerprod, additional_delay_worker_production, 120)
+		WorkerInProductionWarning(a_BaseList, workerProductionTPIdle, 1 + sec_workerprod, additional_delay_worker_production, 120)
 	else
 	{
 		if ( OldWorker_i <> NewWorker_i := getPlayerWorkerCount())
@@ -1494,7 +1546,7 @@ worker:
 	}
 	return
 
-WorkerInProduction(a_BaseList, maxIdleTime, maxWarnings, folloupWarningDelay, MaxWorkerCount)	;add secondary delay and max workers
+WorkerInProductionWarning(a_BaseList, maxIdleTime, maxWarnings, folloupWarningDelay, MaxWorkerCount)	;add secondary delay and max workers
 {	global a_LocalPlayer, w_workerprod_T, w_workerprod_P, w_workerprod_Z
 	static lastWorkerInProduction, warningCount, lastwarning
 
@@ -2214,7 +2266,7 @@ TrayUpdate:
 	;	Gui, Add, Edit, x12 y+10 w560 h220 readonly -E0x200, % LTrim(changelog_text)
 		Gui Add, ActiveX, x12 y+10 w560 h220  vWB, Shell.Explorer
 		WB.Navigate(url.changelog)
-		
+
 		Gui, Font, S8 CDefault Bold, Verdana
 		Gui, Add, Button, Default x122 y330 w100 h30 gUpdate, &Update
 		Gui, Font, Norm 
@@ -2506,14 +2558,27 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, AM_MiniMap_PixelVariance, %config_file%, %section%, AM_MiniMap_PixelVariance, 0
 	IniRead, Start_Mine_Time, %config_file%, %section%, Start_Mine_Time, 1
 	IniRead, AM_KeyDelay, %config_file%, %section%, AM_KeyDelay, 2
-
 	IniRead, Idle_Worker_Key, %config_file%, %section%, Idle_Worker_Key, {F1}
 	IniRead, Gather_Minerals_key, %config_file%, %section%, Gather_Minerals_key, g
-	IniRead, Base_Control_Group_Key, %config_file%, %section%, Base_Control_Group_Key, 4
-	IniRead, Make_Worker_T_Key, %config_file%, %section%, Make_Worker_T_Key, s
-	IniRead, Make_Worker_P_Key, %config_file%, %section%, Make_Worker_P_Key, e
-	IniRead, Make_Worker_Z1_Key, %config_file%, %section%, Make_Worker_Z1_Key, s
-	IniRead, Make_Worker_Z2_Key, %config_file%, %section%, Make_Worker_Z2_Key, d 
+
+
+	;[Misc Automation]
+	section := "AutoWorkerProduction"	
+	IniRead, EnableAutoWorkerTerran, %config_file%, %section%, EnableAutoWorkerTerran, 1 
+	IniRead, EnableAutoWorkerProtoss, %config_file%, %section%, EnableAutoWorkerProtoss, 1 
+	IniRead, ToggleAutoWorkerState_Key, %config_file%, %section%, ToggleAutoWorkerState_Key, +f2
+	IniRead, AutoWorkerStorage_T_Key, %config_file%, %section%, AutoWorkerStorage_T_Key, 3
+	IniRead, AutoWorkerStorage_P_Key, %config_file%, %section%, AutoWorkerStorage_P_Key, 3
+	IniRead, Base_Control_Group_T_Key, %config_file%, %section%, Base_Control_Group_T_Key, 4
+	IniRead, Base_Control_Group_P_Key, %config_file%, %section%, Base_Control_Group_P_Key, 4
+	IniRead, AutoWorkerMakeWorker_T_Key, %config_file%, %section%, AutoWorkerMakeWorker_T_Key, s
+	IniRead, AutoWorkerMakeWorker_P_Key, %config_file%, %section%, AutoWorkerMakeWorker_P_Key, e
+
+	IniRead, AutoWorkerMaxWorkerTerran, %config_file%, %section%, AutoWorkerMaxWorkerTerran, 80
+	IniRead, AutoWorkerMaxWorkerPerBaseTerran, %config_file%, %section%, AutoWorkerMaxWorkerPerBaseTerran, 30
+	IniRead, AutoWorkerMaxWorkerProtoss, %config_file%, %section%, AutoWorkerMaxWorkerProtoss, 80
+	IniRead, AutoWorkerMaxWorkerPerBaseProtoss, %config_file%, %section%, AutoWorkerMaxWorkerPerBaseProtoss, 30
+
 	
 	;[Misc Automation]
 	section := "Misc Automation"
@@ -2705,6 +2770,8 @@ ini_settings_write:
 			hotkey, %F_InjectOff_Key%, Cast_DisableInject, on	
 			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
 			hotkey, %Cast_ChronoGate_Key%, off
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Protoss"])  && time	
+			hotkey, %ToggleAutoWorkerState_Key%, off		
 			Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
 			Hotkey, %ping_key%, off		
 			while (10 > i := A_index - 1)
@@ -2939,6 +3006,23 @@ ini_settings_write:
 	IniWrite, %Make_Worker_P_Key%, %config_file%, %section%, Make_Worker_P_Key
 	IniWrite, %Make_Worker_Z1_Key%, %config_file%, %section%, Make_Worker_Z1_Key
 	IniWrite, %Make_Worker_Z2_Key%, %config_file%, %section%, Make_Worker_Z2_Key
+
+
+	;[Misc Automation]
+	section := "AutoWorkerProduction"	
+	IniWrite, %EnableAutoWorkerTerran%, %config_file%, %section%, EnableAutoWorkerTerran
+	IniWrite, %EnableAutoWorkerProtoss%, %config_file%, %section%, EnableAutoWorkerProtoss
+	IniWrite, %ToggleAutoWorkerState_Key%, %config_file%, %section%, ToggleAutoWorkerState_Key
+	IniWrite, %AutoWorkerStorage_T_Key%, %config_file%, %section%, AutoWorkerStorage_T_Key
+	IniWrite, %AutoWorkerStorage_P_Key%, %config_file%, %section%, AutoWorkerStorage_P_Key
+	IniWrite, %Base_Control_Group_T_Key%, %config_file%, %section%, Base_Control_Group_T_Key
+	IniWrite, %Base_Control_Group_P_Key%, %config_file%, %section%, Base_Control_Group_P_Key
+	IniWrite, %AutoWorkerMakeWorker_T_Key%, %config_file%, %section%, AutoWorkerMakeWorker_T_Key
+	IniWrite, %AutoWorkerMakeWorker_P_Key%, %config_file%, %section%, AutoWorkerMakeWorker_P_Key
+	IniWrite, %AutoWorkerMaxWorkerTerran%, %config_file%, %section%, AutoWorkerMaxWorkerTerran
+	IniWrite, %AutoWorkerMaxWorkerPerBaseTerran%, %config_file%, %section%, AutoWorkerMaxWorkerPerBaseTerran
+	IniWrite, %AutoWorkerMaxWorkerProtoss%, %config_file%, %section%, AutoWorkerMaxWorkerProtoss
+	IniWrite, %AutoWorkerMaxWorkerPerBaseProtoss%, %config_file%, %section%, AutoWorkerMaxWorkerPerBaseProtoss
 	
 	;[Misc Automation]
 	section := "Misc Automation"
@@ -3125,7 +3209,8 @@ IfWinExist, Macro Trainer V%version% Settings
 Gui, Options:New
 gui, font, norm s9	;here so if windows user has +/- font size this standardises it. But need to do other menus one day
 ;Gui, +ToolWindow  +E0x40000 ; E0x40000 gives it a icon on taskbar
-options_menu := "home32.png|radarB32.png|map32.png|Inject32.png|Group32.png|reticule32.png|Robot32.png|key.png|warning32.ico|miscB32.png|speakerB32.png|bug32.png|settings.ico"
+options_menu := "home32.png|radarB32.png|map32.png|Inject32.png|Group32.png|Worker32.png|reticule32.png|Robot32.png|key.png|warning32.ico|miscB32.png|speakerB32.png|bug32.png|settings.ico"
+optionsMenuTitles := "Home|Detection List|MiniMap/Overlays|Injects|Unit Grouping|Auto Worker|Chrono Boost|Misc Automation|SC2 Keys|Warnings|Misc Abilities|Volume|Report Bug|Settings"
 Gosub, g_CreateUnitListsAndObjects ; used for some menu items, and for the custom unit filter gui
 
 ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity for 10 icons, grows it by 5 if need be, and 1=large icons
@@ -3133,23 +3218,14 @@ ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity 
 loop, parse, options_menu, | ; | = delimter
 	IL_Add(ImageListID, A_Temp "\" A_LoopField) 
 
-Gui, Add, TreeView, -Lines ReadOnly ImageList%ImageListID% h440 w150 gOptionsTree
+guiMenuHeight := 460
 
-TV_Add("Home", 0, "Icon1")  
-TV_Add("Detection List", 0, "Icon2")  
-TV_Add("MiniMap/Overlays", 0, "Icon3")  
-TV_Add("Injects", 0, "Icon4")  
-TV_Add("Unit Grouping", 0, "Icon5")  
-TV_Add("Chrono Boost", 0, "Icon6") 
-TV_Add("Misc Automation", 0, "Icon7") 
-TV_Add("SC2 Keys", 0, "Icon8")  
-TV_Add("Warnings", 0, "Icon9")
-TV_Add("Misc Abilities", 0, "Icon10")
-TV_Add("Volume", 0, "Icon11")
-TV_Add("Report Bug", 0, "Icon12")
-TV_Add("Settings", 0, "Icon13")
+Gui, Add, TreeView, -Lines ReadOnly ImageList%ImageListID% h%guiMenuHeight% w150 gOptionsTree vGUIListViewIdentifyingVariableForRedraw
+loop, parse, optionsMenuTitles, |
+	TV_Add(A_LoopField, 0, "Icon" A_Index)  
 
-Gui, Add, Tab2, w440 h440 ys x+5 vInjects_TAB, Info||Basic|Auto|Alert|Manual
+
+Gui, Add, Tab2, w440 h%guiMenuHeight% ys x+5 vInjects_TAB, Info||Basic|Auto|Alert|Manual
 GuiControlGet, MenuTab, Pos, Injects_TAB
 Gui, Tab,  Basic
 	Gui, Add, GroupBox, w200 h240 section vOriginTab, One Button Inject
@@ -3303,7 +3379,7 @@ Gui, Tab,  Alert
 		Gui, Font	
 
 
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vKeys_TAB, SC2 Keys				
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vKeys_TAB, SC2 Keys				
 	Gui, Add, GroupBox, w280 h135, Starcraft Settings && Keys
 		Gui, Add, Text, xp+10 yp+30 w90, Pause Game: 
 			Gui, Add, Edit, Readonly yp-2 x+10 w120  center vpause_game , %pause_game%
@@ -3324,7 +3400,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vKeys_TAB, SC2 Keys
 		gui, font, 		
 
 
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vWarnings_TAB, Supply||Macro|Macro2|Warpgates
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vWarnings_TAB, Supply||Macro|Macro2|Warpgates
 Gui, Tab, Supply	
 ; Gui, Add, GroupBox, w420 h335, Supply				
 	Gui, Add, Checkbox, X%XTabX% y+30 Vsupplyon checked%supplyon%, Enable Alert
@@ -3494,7 +3570,7 @@ Gui, Add, GroupBox, y+20 w410 h135, Forgotten Gateway/Warpgate Warning
 			Gui, Add, Edit, yp-2 x+10 w110 Vw_warpgate center, %w_warpgate%		
 
 
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Abilities
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Abilities
 	Gui, Add, GroupBox, w240 h150 section, Misc Hotkeys
 
 		Gui, Add, Text, xp+10 yp+30 w80, Worker Count:
@@ -3556,7 +3632,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Abilities
 			Gui, Add, UpDown,  Range1-300 vHumanMouseTimeHi, %HumanMouseTimeHi%, ;these belong to the above edit
 
 
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vVolume_TAB, Volume
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vVolume_TAB, Volume
 	Gui, Add, GroupBox, w265 h310 section, Volume
 
 		Gui, Add, Text,X%XTabX% yp+30 w90, Speech:
@@ -3593,7 +3669,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vVolume_TAB, Volume
 
 
 
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings				
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings				
 	Gui, Add, GroupBox, xs ys+5 w161 h110 section, Misc. Settings
 
 		Gui, Add, Text, xp+10 yp+30 w80, Input Method:
@@ -3637,7 +3713,7 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings
 		Gui, Add, Button, xp+10 yp+30  Gg_ListVars w75 h25,  List Variables
 		Gui, Add, Button, xp yp+30  Gg_GetDebugData w75 h25,  Debug Data
 
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vDetection_TAB, Detection List
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vDetection_TAB, Detection List
 	loop, parse, l_GameType, `,
 	{
 		BAS_on_%A_LoopField% := alert_array[A_LoopField, "Enabled"]
@@ -3667,14 +3743,14 @@ Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vDetection_TAB, Detection List
 	Gui, Add, Button, center xs-145 yp+50 w275 h60 gAlert_List_Editor vAlert_List_Editor, Launch Alert List Editor
 	Gui, Font,
 
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vBug_TAB, Report Bug
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vBug_TAB, Report Bug
 	Gui, Add, Text, y+30 section w100 , Your Email Address:`n%A_Space%%A_Space%%A_Space%%A_Space%%A_Space%(optional) 
 	Gui, Add, Edit, x+20 yp w250 vReport_Email,
 	Gui, Add, Text, xs ys+40 w100, Problem Description:
 	Gui, Add, Edit, x+20 yp w250 h200 vReport_TXT,
 	Gui, Add, Button, vB_Report gB_Report xp+80 y+20 w80 h50, Report
 
-Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
+Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
 	Gui, Add, GroupBox, w200 h190 section, Settings
 		Gui, Add, Checkbox, xp+10 yp+25 vCG_Enable checked%CG_Enable%, Enable
 		Gui, Add, Text, yp+35 w40,Hotkey:
@@ -3703,7 +3779,7 @@ Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
 		Gui, Add, Text, x+10 yp+0, If gateways exist, they will be chrono boosted after the warpgates. 
 
 
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY% vAutoGroup_TAB, Terran||Protoss|Zerg|Delay|Info	
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoGroup_TAB, Terran||Protoss|Zerg|Delay|Info	
 Short_Race_List := "Terr|Prot|Zerg"
 loop, parse, Short_Race_List, |
 {
@@ -3757,10 +3833,66 @@ Gui, Tab, Info
 Gui, Tab, Delay
 	Gui, Add, Text, x+25 y+35, Delay (ms):
 	Gui, Add, Edit, Number Right x+20 yp-2 w45 vTT_AGDelay 
-	Gui, Add, UpDown,  Range0-1500 vAG_Delay, %AG_Delay%	
+	Gui, Add, UpDown,  Range0-1500 vAG_Delay, %AG_Delay%
 
 
-Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiscAutomation_TAB, Select Army||Spread|Remove Unit|
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoWorker_TAB, Auto		
+
+	Gui, Add, Text, x+25 y+35 section, Toggle State:
+
+		Gui, Add, Edit, Readonly yp-2 x+10 center w65 vToggleAutoWorkerState_Key gedit_hotkey, %ToggleAutoWorkerState_Key%
+	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleAutoWorkerState_Key,  Edit ;have to use a trick eg '#' as cant write directly to above edit var, or it will activate its own label!
+
+	thisXTabX := XTabX + 12
+	Gui, Add, GroupBox, xs Y+25 w370 h150 section, Terran 
+		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerTerran Checked%EnableAutoWorkerTerran%, Enable
+
+		Gui, Add, Text, X%thisXTabX% y+15 w100, Base Ctrl Group:
+		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vBase_Control_Group_T_Key, %Base_Control_Group_T_Key%
+			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#Base_Control_Group_T_Key,  Edit
+		
+		Gui, Add, Text, X%thisXTabX% yp+35 w100, Storage Ctrl Group:
+		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vAutoWorkerStorage_T_Key, %AutoWorkerStorage_T_Key%
+			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#AutoWorkerStorage_T_Key,  Edit
+		
+		Gui, Add, Text, X%thisXTabX% yp+35 w100, Make SCV Key:
+		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vAutoWorkerMakeWorker_T_Key, %AutoWorkerMakeWorker_T_Key%
+			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#AutoWorkerMakeWorker_T_Key,  Edit
+
+		Gui, Add, Text, xs+240 ys+55, Max SCVs:
+			Gui, Add, Edit, Number Right x+15 yp-2 w45 vTT_AutoWorkerMaxWorkerTerran
+					Gui, Add, UpDown,  Range1-100000 vAutoWorkerMaxWorkerTerran, %AutoWorkerMaxWorkerTerran%		
+
+		Gui, Add, Text, xs+240 yp+35, Max SCVs:`n(Per Base)
+			Gui, Add, Edit, Number Right x+15 yp w45 vTT_AutoWorkerMaxWorkerPerBaseTerran
+					Gui, Add, UpDown,  Range1-100000 vAutoWorkerMaxWorkerPerBaseTerran, %AutoWorkerMaxWorkerPerBaseTerran%	
+
+
+	Gui, Add, GroupBox, xs ys+170 w370 h150 section, Protoss 
+		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerProtoss Checked%EnableAutoWorkerProtoss%, Enable
+
+		Gui, Add, Text, X%thisXTabX% y+15 w100, Base Ctrl Group:
+		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vBase_Control_Group_P_Key, %Base_Control_Group_P_Key%
+			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#Base_Control_Group_P_Key,  Edit
+		
+		Gui, Add, Text, X%thisXTabX% yp+35 w100, Storage Ctrl Group:
+		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vAutoWorkerStorage_P_Key, %AutoWorkerStorage_P_Key%
+			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#AutoWorkerStorage_P_Key,  Edit
+		
+		Gui, Add, Text, X%thisXTabX% yp+35 w100, Make Probe Key:
+		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vAutoWorkerMakeWorker_P_Key, %AutoWorkerMakeWorker_P_Key%
+			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#AutoWorkerMakeWorker_P_Key,  Edit
+
+		Gui, Add, Text, xs+240 ys+55, Max Probes:
+			Gui, Add, Edit, Number Right x+15 yp-2 w45 vTT_AutoWorkerMaxWorkerProtoss
+					Gui, Add, UpDown,  Range1-100000 vAutoWorkerMaxWorkerProtoss, %AutoWorkerMaxWorkerProtoss%		
+
+		Gui, Add, Text, xs+240 yp+35, Max Probes:`n(Per Base)
+			Gui, Add, Edit, Number Right x+15 yp w45 vTT_AutoWorkerMaxWorkerPerBaseProtoss
+					Gui, Add, UpDown,  Range1-100000 vAutoWorkerMaxWorkerPerBaseProtoss, %AutoWorkerMaxWorkerPerBaseProtoss%	
+
+
+Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMiscAutomation_TAB, Select Army||Spread|Remove Unit|
 Gui, Tab, Select Army
 	Gui, Add, Checkbox, y+25 x+15 vSelectArmyEnable Checked%SelectArmyEnable% , Enable Select Army Function		
 	Gui, Add, Checkbox, yp+25 xp+15 section vModifierBeepSelectArmy Checked%ModifierBeepSelectArmy%, Beep if modifier is held down		
@@ -3811,7 +3943,7 @@ Gui, Tab, Remove Unit
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#castRemoveUnit_key,  Edit
 	Gui, Add, Text, Xs yp+70 w380, This removes the first unit (top left of selection card) from the selected units.`n`nThis is very usefuly for 'cloning' workers to geisers or sending 1 ling towards a group of banelings etc.
 
-Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vAutoMine_TAB, Settings||Hotkeys|
+Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoMine_TAB, Settings||Hotkeys|
 Gui, Tab, Settings	
 	Gui, Add, GroupBox, y+20 w195 h300 section, Settings
 		Gui, Add, Checkbox, xp+10 yp+30 vAuto_mine checked%auto_mine%, Enable
@@ -3897,7 +4029,7 @@ Gui, Add, GroupBox, xs y+20 w235 h210 section, SC2 HotKeys
 		Gui, Add, Text, xp+40  w340, Ensure the correct ('backspace') base camera key is set in the "SC2 Keys Section" (below Auto Mine - on the left).
 		Gui, Font, s10
 		Gui, Font,
-Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vHome_TAB, Home||Emergency
+Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vHome_TAB, Home||Emergency
 
 Gui, Tab, Home
 		Gui, Add, Button, y+30 gTrayUpdate w150, Check For Updates
@@ -3933,7 +4065,7 @@ Gui, Tab, Emergency
 	Gui, Font, norm 
 	Gui, Font,
 
-Gui, Add, Tab2, w440 h440 X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||Overlays|Hotkeys|Info
+Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||Overlays|Hotkeys|Info
 
 Gui, Tab, MiniMap
 
@@ -4087,9 +4219,10 @@ You will hear a beep indicating that the new positions have been saved.
 
 
 		Gui, Font, S18 ;needs to be here for save spacing Im so very lazy!
-Gui, Add, Tab2,w440 h440 X%MenuTabX%  Y%MenuTabY%, %A_Space% ;This is never hidden and helps slightly prevent blink on menu change (v. minor thing! lol)
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY%, %A_Space% ;This is never hidden and helps slightly prevent blink on menu change (v. minor thing! lol)
 		Gui, Font, s10
-		Gui, Add, Button, x+249 y+410 w50 h25 gIni_settings_write, Save
+		GUIButtonPosition := guiMenuHeight - 30
+		Gui, Add, Button, x+249 y+%GUIButtonPosition% w50 h25 gIni_settings_write, Save
 		Gui, Add, Button, x+20 w50 h25 gOptionsGuiClose, Canel
 		Gui, Add, Button, x+20 w50 h25 gIni_settings_write, Apply
 		Gui, Font, 
@@ -4101,6 +4234,7 @@ unhidden_menu := "Home_TAB"
 GuiControl, Hide, Home_TAB 
 GuiControl, Hide, Injects_TAB 
 GuiControl, Hide, AutoGroup_TAB 
+GuiControl, Hide, AutoWorker_TAB 
 GuiControl, Hide, Chrono_Gate_TAB 
 GuiControl, Hide, AutoMine_TAB 
 GuiControl, Hide, MiscAutomation_TAB 
@@ -4170,6 +4304,22 @@ UnitHighlightList1_TT := UnitHighlightList2_TT := UnitHighlightList3_TT
 DrawWorkerOverlay_TT := "Displays your current harvester count with a worker icon"
 DrawIdleWorkersOverlay_TT := "While idle workers exist, a worker icon will be displayed with the current idle count.`n`nThe size and position can be changed easily so that it grabs your attention."
 DrawUnitOverlay_TT := "Displays the enemies current units.`nThis is similar to the 'observer' panel.`n`nUse the 'unit panel filter' to selectively remove/display units."
+
+ToggleAutoWorkerState_Key_TT := #ToggleAutoWorkerState_Key_TT := "While in game this toggles (enables/disables) this function for your CURRENT race."
+EnableAutoWorkerTerran_TT := EnableAutoWorkerProtoss_TT := "Enables/Disables this function"
+AutoWorkerStorage_T_Key_TT := #AutoWorkerStorage_T_Key_TT := AutoWorkerStorage_P_Key_TT := #AutoWorkerStorage_P_Key_TT := "During an automation cycle your selected units will be temporarily stored in this control group.`n`nSpecify a control group that you do NOT use in game."
+
+#Base_Control_Group_T_Key_TT := Base_Control_Group_T_Key_TT := Base_Control_Group_P_Key_TT := #Base_Control_Group_P_Key_TT := "The control group used to store your command centres/orbitals/planetary-fortresses/nexi.`n`n"
+						. "Note: Other buildings can also be stored in this control group e.g. engineering bays/forges,`n"
+						. "but the first displayed unit in the selection card must be a main base - 99% of the time this will be the case."
+
+AutoWorkerMakeWorker_T_Key_TT := #AutoWorkerMakeWorker_T_Key_TT := "The keyboard hotkey used to build an SCV.`nUsually 'S'."
+AutoWorkerMakeWorker_P_Key_TT := #AutoWorkerMakeWorker_P_Key_TT := "The keyboard hotkey used to build a probe.`nUsually 'E'."
+
+TT_AutoWorkerMaxWorkerTerran_TT := TT_AutoWorkerMaxWorkerProtoss_TT := AutoWorkerMaxWorkerTerran_TT := AutoWorkerMaxWorkerProtoss_TT := "Worker production will stop for the remainder of the game when this number of workers exist.`n"
+				. "Workers can then be 'sacked' and the function will remain off!`n`nIf you wish to turn it back on, simply use the 'toggle hotkey' twice."
+AutoWorkerMaxWorkerPerBaseTerran_TT := TT_AutoWorkerMaxWorkerPerBaseProtoss_TT := AutoWorkerMaxWorkerPerBaseTerran_TT := AutoWorkerMaxWorkerPerBaseProtoss_TT :=  "Worker production will stop when this number is exceeded by`n"
+			. "the current worker count per the number of fully constructed (and control grouped) main-bases."
 
 Inject_spawn_larva_TT := #Inject_spawn_larva_TT := "This needs to correspond to your SC2 'spawn larva' button."
 
@@ -4265,7 +4415,7 @@ loop, parse, l_races, `,
 
 
 OnMessage(0x200, "WM_MOUSEMOVE")
-GuI, Options:Show, w615 h485, Macro Trainer V%version% Settings
+GuI, Options:Show, w615 h505, Macro Trainer V%version% Settings
 Return
 
 HumanMouseWarning:
@@ -4414,6 +4564,11 @@ OptionsTree:
 	{
 		GUIcontrol, Show, AutoGroup_TAB
 		unhidden_menu := "AutoGroup_TAB"
+	}	
+	ELSE IF ( Menu_TXT = "Auto Worker" )
+	{
+		GUIcontrol, Show, AutoWorker_TAB
+		unhidden_menu := "AutoWorker_TAB"
 	}
 	ELSE IF ( Menu_TXT = "Chrono Boost" )
 	{
@@ -4461,7 +4616,11 @@ OptionsTree:
 		unhidden_menu := "Bug_TAB"
 	}
 	Else	RETURN
- 	Return
+	;WinSet, Redraw,, Macro Trainer V%version% Settings
+ 	GUIControl, MoveDraw, GUIListViewIdentifyingVariableForRedraw 	; this is the same as redraw (but just for a control? - although it still seems to flicker the entire thing)
+ 	Return															; this prevents the problem where some of the icons would remain selected
+ 																	; so multiple categories would have the blue background
+ 	
  	
 
 Test_VOL:
@@ -5661,23 +5820,290 @@ SetupColourArrays(ByRef HexColour, Byref MatrixColour)
 	Return
 }
 
+; this is a buffer which is only written to when issuing ctrl/shift grouping actions
+; therefore the units it refers to may change as units die
+; and their index reused. 
+; have to check if unit is alive  and control group buffer isn't updated
+; unit dies and is replaced with own local unit
+; when a unit dies and is replaced by a local unit of same type it obviously wont respond or be 'ctrl grouped'
+; so dont have to worry about that scenario
 
 numGetControlGroupnObject(Byref oControlGroup, Group)
 {	GLOBAL
 	oControlGroup := []
 	LOCAL GroupSize := getControlGroupCount(Group)
-	local MemDump
+	local MemDump, typeList
+	
 	ReadRawMemory(B_CtrlGroupStructure + S_CtrlGroup * (group - 1), GameIdentifier, MemDump, GroupSize * S_scStructure + O_scUnitIndex)
-	oControlGroup["Count"]	:= numget(MemDump, 0, "Short")
-	oControlGroup["Types"]	:= numget(MemDump, O_scTypeCount, "Short")
+;	oControlGroup["Count"]	:= numget(MemDump, 0, "Short")
+;	oControlGroup["Types"]	:= numget(MemDump, O_scTypeCount, "Short") ;this will get whats actually in the memory
+	oControlGroup["Count"]	:= oControlGroup["Types"] := 0
 	oControlGroup.units := []
-	loop % oControlGroup["Count"]
+	loop % numget(MemDump, 0, "Short")
 	{
 		Local unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
-		Local Type := getUnitType(unit)
-		oControlGroup.units.insert({ "UnitIndex": unit, "Type": Type}) ;note the object is unitS not unit!!!
+		if (!isUnitDead(unit) && isUnitLocallyOwned(unit))
+		{
+			Local Type := getUnitType(unit)
+			oControlGroup.units.insert({ "UnitIndex": unit, "Type": Type}) ;note the object is unitS not unit!!!
+			oControlGroup["Count"]++
+			if Type not in %typeList%
+			{
+				typeList .= "," Type 
+				oControlGroup["Types"]++
+			}
+
+		}
 	}
-	return aSelection["Count"]
+	return oControlGroup["Count"]
+}
+
+
+; So will turn off autoworker for 5 seconds only if user presses esc and only that main is selected
+g_temporarilyDisableAutoWorkerProduction:
+if EnableAutoWorker%LocalPlayerRace% ; dont check TmpDisableAutoWorker so if cancels another builder a few seconds later it will still update it 
+	temporarilyDisableAutoWorkerProduction()
+return 
+
+g_UserToggleAutoWorkerState: 		; this launched via the user hotkey combination
+	if (EnableAutoWorker%LocalPlayerRace% := !EnableAutoWorker%LocalPlayerRace%)
+	{
+		AW_MaxWorkersReaded := TmpDisableAutoWorker := 0 		; just incase the timers bug out and this gets stuck in enabled state
+		SetTimer, g_autoWorkerProductionCheck, -1   ; so it starts immediately - cant use gosub as that negates
+		dspeak("On")											; the sleep/timer linearity and causes double workers to be made when first turned on
+		SetTimer, g_autoWorkerProductionCheck, 200
+	}
+	else 
+	{
+		SetTimer, g_autoWorkerProductionCheck, off
+		dspeak("Off")
+	}
+
+return 
+
+g_RenableAutoWorkerState:	; this is via the auto cancel in the below function (when user cancels last building worker)
+	TmpDisableAutoWorker := 0
+return 
+
+
+
+temporarilyDisableAutoWorkerProduction()
+{ 	LOCAL unitIndex, selectedUnit, QueueSize
+	if (getSelectionCount() = 1)
+	{
+		unitIndex := getSelectedUnitIndex()
+		selectedUnit := getUnitType(unitIndex)
+		if (selectedUnit = a_unitID["PlanetaryFortress"] || selectedUnit = a_unitID["CommandCenter"] 
+		|| selectedUnit = a_unitID["OrbitalCommand"] || selectedUnit = a_unitID["Nexus"])
+		&& !isUnderConstruction(unitIndex) ; so wont toggle when cancelling a main which is being built
+		{
+			getBuildStats(unitIndex, QueueSize)
+			if (QueueSize <= 2) ; so wont toggle timer if cancelling extra queued workers
+			{
+				TmpDisableAutoWorker := 1
+				SetTimer, g_RenableAutoWorkerState, -4000 ; give time for user to morph/lift base ; use timer so dont have this function queueing up
+
+			}
+		}
+	}
+	return 
+}
+
+
+g_autoWorkerProductionCheck:
+if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !TmpDisableAutoWorker && !AW_MaxWorkersReaded)
+	autoWorkerProductionCheck()
+return
+
+
+autoWorkerProductionCheck()
+{	GLOBAl A_unitID, a_LocalPlayer, Base_Control_Group_T_Key, AutoWorkerStorage_P_Key, AutoWorkerStorage_T_Key, Base_Control_Group_P_Key
+	, AutoWorkerMakeWorker_T_Key, AutoWorkerMakeWorker_P_Key, AutoWorkerMaxWorkerTerran, AutoWorkerMaxWorkerPerBaseTerran
+	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReaded
+
+	if (a_LocalPlayer["Race"] = "Terran") 
+	{
+		mainControlGroup := Base_Control_Group_T_Key
+		controlstorageGroup := AutoWorkerStorage_T_Key
+		makeWorkerKey := AutoWorkerMakeWorker_T_Key
+		maxWorkers := AutoWorkerMaxWorkerTerran
+		maxWorkersPerBase := AutoWorkerMaxWorkerPerBaseTerran
+	}
+	else if (a_LocalPlayer["Race"] = "Protoss") 
+	{
+		mainControlGroup := Base_Control_Group_P_Key
+		controlstorageGroup := AutoWorkerStorage_P_Key
+		makeWorkerKey := AutoWorkerMakeWorker_P_Key
+		maxWorkers := AutoWorkerMaxWorkerProtoss
+		maxWorkersPerBase := AutoWorkerMaxWorkerPerBaseProtoss
+	}
+	else return
+
+	workers := getPlayerWorkerCount()
+
+	if (workers >= maxWorkers)
+	{ 
+		AW_MaxWorkersReaded := 1
+		return 
+	}
+	if ( isMenuOpen() & !(ChatStatus := isChatOpen()) ) ;chat is 0 when  menu is in focus
+		return ;as let the timer continue to check
+
+	numGetControlGroupnObject(oMainbaseControlGroup, mainControlGroup)
+	workersInProduction := Basecount := almostComplete := idleBases := halfcomplete := nearHalfComplete := 0 ; in case there are no idle bases
+
+	for index, object in oMainbaseControlGroup.units
+	{
+
+		if ( object.type = A_unitID["CommandCenter"] || object.type = A_unitID["OrbitalCommand"]
+		|| object.type = A_unitID["PlanetaryFortress"] || object.type = A_unitID["Nexus"] )
+		&& !isUnderConstruction(object.unitIndex) 
+		{
+			Basecount++
+			if !isWorkerInProduction(object.unitIndex) ; also accounts for if morphing 
+				idleBases++
+			else 
+			{
+				 progress := getBuildStats(object.unitIndex, QueueSize) ; returns build percentage
+				 if (QueueSize = 1)
+				 {
+				 	rand := rand(-.05, .05)
+				 	if (progress >= .95)
+				 		almostComplete++
+				 	else if (progress + rand >= .65)
+				 		halfcomplete++
+				 	else if (progress >= .35)
+				 		nearHalfComplete++
+				 }
+				 workersInProduction += QueueSize
+			}
+				}
+		else if ( object.type = A_unitID["CommandCenterFlying"] || object.type = A_unitID["OrbitalCommandFlying"] )
+		&& !isUnderConstruction(object.unitIndex) 
+			Basecount++ 	; so it will (account for flying base) and keep making workers at other bases if already at max worker/base	 	
+		L_ctrlGroupIndexes .= "," object.unitIndex ; this is just used as a means to check the selection
+	}
+
+	if (workers / Basecount >= maxWorkersPerBase)
+		return
+
+	MaxWokersTobeMade := howManyUnitsCanBeProduced(50, 0, 1)
+
+
+	if (MaxWokersTobeMade > idleBases + almostComplete + halfcomplete)
+		MaxWokersTobeMade := idleBases + almostComplete + halfcomplete
+
+	if (MaxWokersTobeMade + workersInProduction + workers >= maxWorkers)
+		MaxWokersTobeMade := maxWorkers - workers - workersInProduction
+
+	currentWorkersPerBase := (workers + workersInProduction)  / Basecount
+	if ( (MaxWokersTobeMade / Basecount) + currentWorkersPerBase >= maxWorkersPerBase )
+		MaxWokersTobeMade := round((maxWorkersPerBase - currentWorkersPerBase) * Basecount)
+
+	; this attempts to minimise the number of 'auto productions' per worker production cycle.
+	; to reduce the chances of interfering with user input
+	; it will make workers if a worker is >= 95% complete (and only 1 in queue) or there are idle bases
+	; when it does this it will also make workers for bases where the worker is >= 65% complete  (and only 1 in queue)
+	; no workers will be made there are workers between 45% and 65% and no idle bases or almost completed queues
+
+	if (MaxWokersTobeMade >= 1) && (idleBases || almostComplete || (halfcomplete && !nearHalfComplete)  ) ; i have >= 1 in case i stuffed the math and end up with a negative number or a fraction
+	{
+	;	aKeysTochck := ["b", "p", "m"]
+		if ReleaseModifiers(0, 1, 60) ;times out after 60ms
+			return ;as it timed out 
+		Critical
+		SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
+		SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
+		BufferInput(aButtons.List, "Block", 0)
+
+		If (ChatStatus := isChatOpen())
+		{
+			Xscentre := A_ScreenWidth/2, Yscentre := A_ScreenHeight/2
+			send {click Left %Xscentre% %Yscentre%}
+		}
+
+
+		HighlightedGroup := getSelectionHighlightedGroup()
+		numGetUnitSelectionObject(oSelection)
+
+		for index, object in oSelection.units
+			L_SelectionIndexes .= "," object.unitIndex
+
+		if (L_SelectionIndexes != L_ctrlGroupIndexes) ; hence if the 'main base' control group is already selected, it wont bother control grouping them (and later restoring them)
+		{
+			send % "^" controlstorageGroup
+			send % mainControlGroup
+		}
+		Else If HighlightedGroup ; != 0
+		{
+			tabrepreat := oSelection["Types"]  - HighlightedGroup
+			loop % tabrepreat ;get tab selection back to 0 ;too hard and too many things can go wrong and slow it down if i try to tab to all user possible locations
+				send {tab}  ; as there are still building / priority rules i dont understand e.g. planetary fortress is last even though it has higher Unitindex than ebay
+		}					; and its much faster as dont have to double sort an array
+
+		while (A_Index <= MaxWokersTobeMade)
+			send % makeWorkerKey
+		if (L_SelectionIndexes != L_ctrlGroupIndexes)		
+			send % controlstorageGroup
+
+		while (A_Index <= HighlightedGroup)
+			send {Tab}
+
+		If ChatStatus
+			send {Enter}
+		BufferInput(aButtons.List, "Send")
+
+		Critical Off	
+		sleep 400 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
+					; so will send another build event and queueing more workers
+	}
+	return
+}
+
+
+
+
+
+
+
+howManyUnitsCanBeProduced(mineralCost, gasCost, supplyUsage)
+{
+	mineralLimit := floor(getPlayerMinerals() / mineralCost)
+	gasLimit := floor(getPlayerGas() / gasCost)
+	supplyLimit := floor(getPlayerFreeSupply() / supplyUsage)
+
+	if gasCost
+		return lowestValue(mineralLimit, gasLimit, supplyLimit)
+	else 
+		return lowestValue(mineralLimit, supplyLimit)
+}
+
+lowestValue(aValues*)
+{
+	smallest := aValues[1]
+	for index, value in aValues 
+		if (value < smallest)
+			smallest := value 
+	return smallest
+}
+
+largestValue(aValues*)
+{
+	largest := aValues[1]
+	for index, value in aValues 
+		if (value > largest)
+			largest := value 
+	return largest
+}
+
+getPlayerFreeSupply(player="")
+{ 	global a_LocalPlayer
+	If (player = "")
+		player := a_LocalPlayer["Slot"]
+	freeSupply := getPlayerSupplyCap(player) - getPlayerSupply(player)
+	if (freeSupply >= 0)
+		return freeSupply 
+	else return 0 ; as a negative value counts as true and would prevent using this in 'if freesupply() do' scenario
 }
 
 
@@ -5833,7 +6259,9 @@ getTime()
 }
 
 
-numGetUnitSelectionObject(ByRef aSelection, Sort = 0)
+
+
+numGetUnitSelectionObject(ByRef aSelection, mode = 0)
 {	GLOBAL O_scTypeCount, O_scTypeHighlighted, S_scStructure, O_scUnitIndex, GameIdentifier, B_SelectionStructure
 	aSelection := []
 	selectionCount := getSelectionCount()
@@ -5844,16 +6272,22 @@ numGetUnitSelectionObject(ByRef aSelection, Sort = 0)
 	aSelection["HighlightedGroup"]	:= numget(MemDump, O_scTypeHighlighted, "Short")
 
 	aSelection.units := []
-	if Sort 		
+	if (mode = "Sort")		
 	{
 		loop % aSelection["Count"]
 		{
 			unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
-			aSelection.units.insert({"Type": getUnitType(unit), "Index": unit, "Priority": getSubGroupPriority(unit)})	;NOTE this object will be accessed differently than the one below
-			Sort2DArray(aSelection.units, "Index") ; sort in ascending order
-			Sort2DArray(aSelection.units, "Priority", 0)	; sort in descending order
+			aSelection.units.insert({ "Type": getUnitType(unit), "UnitIndex": unit, "Priority": getSubGroupPriority(unit)})	;NOTE this object will be accessed differently than the one below
 		}
+		Sort2DArray(aSelection.units, "UnitIndex", 1) ; sort in ascending order
+		Sort2DArray(aSelection.units, "Priority", 0)	; sort in descending order
 	}
+	else if (mode = "UnSortedWithPriority")		
+		loop % aSelection["Count"]
+		{
+			unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
+			aSelection.units.insert({ "Type": getUnitType(unit), "UnitIndex": unit, "Priority": getSubGroupPriority(unit)})
+		}	
 	else
 		loop % aSelection["Count"]
 		{
@@ -5996,6 +6430,7 @@ getUnitCount()
 {	global
 	return ReadMemory(B_uCount, GameIdentifier)
 }
+
 getHighestUnitIndex() 	; this is the highest alive units index - note its out by 1 - ie it starts at 1
 {	global				; if 1 unit is alive it will return 1 (NOT 0)
 	Return ReadMemory(B_uHighestIndex, GameIdentifier)	
@@ -6103,7 +6538,7 @@ getPlayerCameraPositionY(Player="")
 isUnderConstruction(building) ; starts @ 0 and only for BUILDINGS!
 { 	global  ; 0 means its completed
 ;	Return ReadMemory(B_uStructure + (building * S_uStructure) + O_uBuildStatus, GameIdentifier) ;- worked fine
-	return getunittargetfilter(building) & a_UnitTargetFilter.UnderConstruction
+	return getUnitTargetFilterFast(building) & a_UnitTargetFilter.UnderConstruction
 }
 
 getUnitEnergy(unit)
@@ -7116,6 +7551,8 @@ CreateHotkeys()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && !isMenuOpen() && time 
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time  
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Protoss"])  && time
+	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace%
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable
@@ -7170,7 +7607,11 @@ CreateHotkeys()
 		hotkey, %cast_inject_key%, cast_inject, on	
 		hotkey, %F_InjectOff_Key%, Cast_DisableInject, on			
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
-		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoGates, on		
+		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoGates, on	
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Protoss"])  && time	
+		hotkey, %ToggleAutoWorkerState_Key%, g_UserToggleAutoWorkerState, on	
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace%
+		hotkey, *~Esc, g_temporarilyDisableAutoWorkerProduction, on	
 	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
 	while (10 > i := A_index - 1)
 	{
@@ -7690,6 +8131,7 @@ ParseWarningArrays() ;synchs the warning arrays from the config file after a rel
 }
 LoadMemoryAddresses(SC2EXE)
 {	global
+	mA := []
 	;	[Memory Addresses]
 	B_LocalPlayerSlot := SC2EXE + 0x10EB938 ; note 1byte and has a second copy just after +1byte eg LS =16d=10h, hex 1010 (2bytes) & LS =01d = hex 0101
 	B_pStructure := SC2EXE + 0x257CA88			 
@@ -7785,8 +8227,8 @@ LoadMemoryAddresses(SC2EXE)
 	; so that they can be used as bit flags with bit wise &
 
 
-
-
+	P_BaseCameraIndex := SC2EXE + 0x0209C3C8
+		O1_BaseCameraIndex := 0x26
 
 	P_IsUserPerformingAction := SC2EXE + 0x0209C3C8			; This is a 1byte value and return 1  when user is casting or in is rallying a hatch via gather/rally or is in middle of issuing Amove/patrol command but
 		O1_IsUserPerformingAction := 0x254 					; if youre searching for a 4byte value in CE offset will be 254 (but really if using it as 1 byte it is 0x255) - but im lazy and use it as a 4byte with my pointer command
@@ -8344,7 +8786,7 @@ getWarpGateCooldown(WarpGate) ; unitIndex
 		return cooldown
 	else return 0
 }
-getUnitAbilityPointer(unit)
+getUnitAbilityPointer(unit) ;returns a pointer which still needs to be read. The pointer will be different for every unit, but for units of same type when read point to same address
 {	global
 	return ReadMemory(B_uStructure + unit * S_uStructure + O_P_uAbilityPointer, GameIdentifier) & 0xFFFFFFFC
 }
@@ -8748,7 +9190,7 @@ DrawUnitOverlay(ByRef Redraw, UserScale = 1, PlayerIdentifier = 0, Drag = 0)
 				if (unitCount >= 10)
 					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .3*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
 				Else
-						gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
+					gdip_TextToGraphics(G, unitCount, "x"(DestX + .5*Width + .4*Width/2) "y"(DestY + .5*Height + .35*Height/2)  " Bold cFFFFFFFF r4 s" 9*UserScale, Font)
 
 				if (unitCount := aEnemyBuildingConstruction[slot_number, priority, unit])	; so there are some of this unit being built lets draw the count on top of the completed units
 				{
@@ -8901,14 +9343,83 @@ SetPlayerGas(amount=99999)
 return
 
 
-;unit := getSelectedUnitIndex()
 
-;msgbox % clipboard := pAbilities := dectohex(		getUnitAbilityPointer(unit)		) ;this contains a few pointers ()
-;msgbox % clipboard := pQueueInfoAddress := dectohex(		pAbilities + 0x24	)	;but we want the one at +ox24
-;msgbox % clipboard := pQueueInfo := dectohex(	ReadMemory(	pQueueInfoAddress, GameIdentifier)	)	;but we want the one at +ox24
-;msgbox %  UnitsInProductionCount :=  ReadMemory( pQueueInfo + 0x28, GameIdentifier ) ; the number in production is here 
+getBuildStats(building, byref QueueSize := "")
+{
+	pAbilities := getUnitAbilityPointer(building)
+	AbilitiesCount := getAbilitiesCount(pAbilities)
+	CAbilQueueIndex := getCAbilQueueIndex(pAbilities, AbilitiesCount)
+	B_QueueInfo := getPointerToQueueInfo(pAbilities, CAbilQueueIndex, localQueSize)
+	if IsByRef(QueueSize)
+		QueueSize := localQueSize
+	if localQueSize
+		return getPercentageUnitCompleted(B_QueueInfo)
+	else return 0
+}
 
-;return
+
+getPercentageUnitCompleted(B_QueueInfo)
+{	GLOBAL GameIdentifier
+	STATIC O_TotalTime := 0x68, O_TimeRemaining := 0x6C
+	
+	TotalTime := ReadMemory(B_QueueInfo + O_TotalTime, GameIdentifier)
+	RemainingTime := ReadMemory(B_QueueInfo + O_TimeRemaining, GameIdentifier)
+
+	return round( (TotalTime - RemainingTime) / TotalTime, 2) ;return .47 (ie 47%)
+}
+
+
+getPointerToQueueInfo(pAbilities, CAbilQueueIndex, byref QueueSize := "", QueuePosition := 0)
+{	GLOBAL GameIdentifier
+	STATIC O_pQueueArray := 0x34, O_IndexParentTypes := 0x18, O_unitsQueued := 0x28
+
+	CAbilQueue := readmemory(pAbilities + O_IndexParentTypes + 4 * CAbilQueueIndex, GameIdentifier)
+
+	if IsByRef(QueueSize) 
+		QueueSize := readmemory(CAbilQueue + O_unitsQueued, GameIdentifier)
+
+	queuedArray := readmemory(CAbilQueue + O_pQueueArray, GameIdentifier)
+	return B_QueueInfo := readmemory(queuedArray + 4 * QueuePosition, GameIdentifier)
+}
+
+getAbilitiesCount(pAbilities)
+{	GLOBAL GameIdentifier
+	return ReadMemory(pAbilities + 0x16, GameIdentifier, 1)
+}
+
+getCAbilQueueIndex(pAbilities, AbilitiesCount)
+{	GLOBAL GameIdentifier
+	STATIC CAbilQueue := 0x19
+	ByteArrayAddress := ReadMemory(pAbilities, GameIdentifier) + 0x3 
+	ReadRawMemory(ByteArrayAddress, GameIdentifier, MemDump, AbilitiesCount)
+	
+	loop % AbilitiesCount
+		if (CAbilQueue = result := numget(MemDump, A_Index-1, "Char"))
+			return A_Index - 1
+	return -1 ;error
+}
+
+
+
+f2::
+
+unit := getSelectedUnitIndex()
+
+msgbox % isWorkerInProduction(unit)
+msgbox % isUnderConstruction(unit) 
+
+RETURN 
+QueueTime := getBuildStats(unit, QueueSize)
+msgbox % QueueTime "`n| " QueueSize
+
+dec := dectohex(B_uStructure + unit * S_uStructure)
+msgbox % clipboard := SubStr(dec, 3)
+return
+
+; nexus
+;queueSize Offset for nexus is +0xA4 (from pQueueInfo)
+; pQueTimerBase := 0xB0 + pQueueInfo  ; there is more infor here like number of probes in production, number of queues probes (mothership doeant affect these)
+
 
 
 ;	O_P_uAbilityPointer := 0xD8 (+4)
@@ -8934,6 +9445,9 @@ Note: Will give a fail if a the warpgate is virgin i.e. not warpged in a unit
 /*
 ;creep tumours hatches larva broodlings
 
+
+
+
 f2::
 
 clipboard := dectohex((getSelectedUnitIndex()*S_uStructure) + B_uStructure)
@@ -8958,7 +9472,7 @@ msgbox % getLarvaCount()
 ;clipboard := dectohex(B_hStructure + O_hLarvaCount)
 
 return
-
+; there seems to be a creeptable thing
 getLarvaCount(player="")
 { 	global A_unitID
 	count := 0

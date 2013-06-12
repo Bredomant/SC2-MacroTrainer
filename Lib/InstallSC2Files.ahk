@@ -49,6 +49,7 @@ InstallSC2Files()
 	FileInstall, Included Files\Used_Icons\Worker_0Protoss.png, %A_Temp%\Worker_0Protoss.png, 1
 	FileInstall, Included Files\Used_Icons\Worker_0Terran.png, %A_Temp%\Worker_0Terran.png, 1
 	FileInstall, Included Files\Used_Icons\Worker_0Zerg.png, %A_Temp%\Worker_0Zerg.png, 1
+	FileInstall, Included Files\Used_Icons\Worker32.png, %A_Temp%\Worker32.png, 1
 	FileInstall, Included Files\Used_Icons\Army_Protoss.png, %A_Temp%\Army_Protoss.png, 1
 	FileInstall, Included Files\Used_Icons\Army_Terran.png, %A_Temp%\Army_Terran.png, 1
 	FileInstall, Included Files\Used_Icons\Army_Zerg.png, %A_Temp%\Army_Zerg.png, 1
