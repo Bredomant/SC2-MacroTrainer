@@ -3836,8 +3836,8 @@ Gui, Tab, Delay
 	Gui, Add, UpDown,  Range0-1500 vAG_Delay, %AG_Delay%
 
 
-Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoWorker_TAB, Auto		
-
+Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoWorker_TAB, Auto||Info		
+Gui, Tab, Auto
 	Gui, Add, Text, x+25 y+35 section, Toggle State:
 
 		Gui, Add, Edit, Readonly yp-2 x+10 center w65 vToggleAutoWorkerState_Key gedit_hotkey, %ToggleAutoWorkerState_Key%
@@ -3891,6 +3891,22 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoWorker_TAB, A
 			Gui, Add, Edit, Number Right x+15 yp w45 vTT_AutoWorkerMaxWorkerPerBaseProtoss
 					Gui, Add, UpDown,  Range1-100000 vAutoWorkerMaxWorkerPerBaseProtoss, %AutoWorkerMaxWorkerPerBaseProtoss%	
 
+Gui, Tab, Info
+		gui, font, norm bold s10
+		Gui, Add, Text, X%OriginTabX% y+15 cFF0000, Note:
+		gui, font, norm s11
+
+		gui, Add, Text, w410 y+20, When trying to a lift a Command Centre or Orbital, or convert a Command Centre into an orbital, an SCV will likely already be queued.
+		gui, Add, Text, w410 y+15, There's no need to toggle (turn off) this function, simply  select the building/base (so that only ONE unit is selected i.e. the orbital) and press the 'ESCAPE' button to cancel the queued worker.
+		gui, Add, Text, w410 y+15, This will temporarily disable the function for four seconds - providing adequate time to convert or lift the Command Centre.
+		
+		gui, Add, Text, w410 y+35, Although you will most likely not notice this, workers will not be produced while:
+		gui, Add, Text, w410 y+5, • The control, alt, shift, or windows keys are held down.
+		gui, Add, Text, w410 y+5, • The user is casting a spell.
+		gui, Add, Text, w410 y+5, • The construction card i.e. the basic or advanced building card is displayed.
+
+		gui, font, norm s10
+		gui, font, 		
 
 Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMiscAutomation_TAB, Select Army||Spread|Remove Unit|
 Gui, Tab, Select Army
