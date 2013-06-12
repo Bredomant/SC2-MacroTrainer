@@ -15,9 +15,6 @@
 /*	Things to do
 	Team send warn message after clicking building..maybe
 	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
-
-	change EnableAutoWorkerTerran, 1 to 0 in iniread
-
 */
 
 
@@ -613,10 +610,10 @@ clock:
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
-	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16) OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
+	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16) ; OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
 	{
 		game_status := "game", warpgate_status := "not researched", gateway_count := warpgate_warning_set := 0
-		AW_MaxWorkersReaded := TmpDisableAutoWorker := 0
+		AW_MaxWorkersReached := TmpDisableAutoWorker := 0
 		MiniMapWarning := [], a_BaseList := [], aUnitModel := [], aGatewayWarnings := []
 		if WinActive(GameIdentifier)
 			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := ReDrawIdleWorkers := ReDrawLocalPlayerColour := 1
@@ -649,8 +646,13 @@ clock:
 		if workeron
 			settimer, worker, 1000
 		LocalPlayerRace := a_LocalPlayer["Race"] ; another messy lazy veriable
-		if (EnableAutoWorker%LocalPlayerRace% && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss") )
+		if (EnableAutoWorker%LocalPlayerRace%Start && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss") )
+		{
 			SetTimer, g_autoWorkerProductionCheck, 200
+			EnableAutoWorker%LocalPlayerRace% := 1
+		}
+		else SetTimer, g_autoWorkerProductionCheck, off ; this has to be here incase user changes state via options during game
+
 		if ( Auto_Read_Races AND race_reading ) && 	!((ResumeWarnings || UserSavedAppliedSettings) && time > 12)
 			SetTimer, find_races_timer, 1000
 		If (a_LocalPlayer["Race"] = "Terran")
@@ -2564,8 +2566,8 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 
 	;[Misc Automation]
 	section := "AutoWorkerProduction"	
-	IniRead, EnableAutoWorkerTerran, %config_file%, %section%, EnableAutoWorkerTerran, 1 
-	IniRead, EnableAutoWorkerProtoss, %config_file%, %section%, EnableAutoWorkerProtoss, 1 
+	IniRead, EnableAutoWorkerTerranStart, %config_file%, %section%, EnableAutoWorkerTerranStart, 0 
+	IniRead, EnableAutoWorkerProtossStart, %config_file%, %section%, EnableAutoWorkerProtossStart, 0 
 	IniRead, ToggleAutoWorkerState_Key, %config_file%, %section%, ToggleAutoWorkerState_Key, +f2
 	IniRead, AutoWorkerStorage_T_Key, %config_file%, %section%, AutoWorkerStorage_T_Key, 3
 	IniRead, AutoWorkerStorage_P_Key, %config_file%, %section%, AutoWorkerStorage_P_Key, 3
@@ -2770,7 +2772,7 @@ ini_settings_write:
 			hotkey, %F_InjectOff_Key%, Cast_DisableInject, on	
 			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
 			hotkey, %Cast_ChronoGate_Key%, off
-			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Protoss"])  && time	
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time	
 			hotkey, %ToggleAutoWorkerState_Key%, off		
 			Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
 			Hotkey, %ping_key%, off		
@@ -3010,8 +3012,8 @@ ini_settings_write:
 
 	;[Misc Automation]
 	section := "AutoWorkerProduction"	
-	IniWrite, %EnableAutoWorkerTerran%, %config_file%, %section%, EnableAutoWorkerTerran
-	IniWrite, %EnableAutoWorkerProtoss%, %config_file%, %section%, EnableAutoWorkerProtoss
+	IniWrite, %EnableAutoWorkerTerranStart%, %config_file%, %section%, EnableAutoWorkerTerranStart
+	IniWrite, %EnableAutoWorkerProtossStart%, %config_file%, %section%, EnableAutoWorkerProtossStart
 	IniWrite, %ToggleAutoWorkerState_Key%, %config_file%, %section%, ToggleAutoWorkerState_Key
 	IniWrite, %AutoWorkerStorage_T_Key%, %config_file%, %section%, AutoWorkerStorage_T_Key
 	IniWrite, %AutoWorkerStorage_P_Key%, %config_file%, %section%, AutoWorkerStorage_P_Key
@@ -3845,7 +3847,7 @@ Gui, Tab, Auto
 
 	thisXTabX := XTabX + 12
 	Gui, Add, GroupBox, xs Y+25 w370 h150 section, Terran 
-		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerTerran Checked%EnableAutoWorkerTerran%, Enable
+		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerTerranStart Checked%EnableAutoWorkerTerranStart%, Enable
 
 		Gui, Add, Text, X%thisXTabX% y+15 w100, Base Ctrl Group:
 		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vBase_Control_Group_T_Key, %Base_Control_Group_T_Key%
@@ -3869,7 +3871,7 @@ Gui, Tab, Auto
 
 
 	Gui, Add, GroupBox, xs ys+170 w370 h150 section, Protoss 
-		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerProtoss Checked%EnableAutoWorkerProtoss%, Enable
+		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerProtossStart Checked%EnableAutoWorkerProtossStart%, Enable
 
 		Gui, Add, Text, X%thisXTabX% y+15 w100, Base Ctrl Group:
 		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vBase_Control_Group_P_Key, %Base_Control_Group_P_Key%
@@ -3949,7 +3951,7 @@ Gui, Tab, Spread
 	Gui, Add, Text, Xs yp+35, Sleep time (ms):
 	Gui, Add, Edit, Number Right xp+145 yp-2 w45 vTT_SleepSplitUnits
 	Gui, Add, UpDown,  Range0-100 vSleepSplitUnits, %SleepSplitUnits%
-	Gui, Add, Text, Xs yp+100 w360, This can be used to spread your workers when being attack by hellbats/hellions.
+	Gui, Add, Text, Xs yp+100 w360, This can be used to spread your workers when being attack by hellbats/hellions.`n`nWhen 30`% of the selected units are worksers, the units will be spread over a much larger area
 	Gui, Add, Text, Xs yp+60 w360, Note: When spreading army/attacking units this is designed to spread your units BEFORE the engagement - Dont use it while being attacked!`n`n****This is in a very beta stage and will be improved later***
 
 Gui, Tab, Remove Unit
@@ -4321,8 +4323,8 @@ DrawWorkerOverlay_TT := "Displays your current harvester count with a worker ico
 DrawIdleWorkersOverlay_TT := "While idle workers exist, a worker icon will be displayed with the current idle count.`n`nThe size and position can be changed easily so that it grabs your attention."
 DrawUnitOverlay_TT := "Displays the enemies current units.`nThis is similar to the 'observer' panel.`n`nUse the 'unit panel filter' to selectively remove/display units."
 
-ToggleAutoWorkerState_Key_TT := #ToggleAutoWorkerState_Key_TT := "While in game this toggles (enables/disables) this function for your CURRENT race."
-EnableAutoWorkerTerran_TT := EnableAutoWorkerProtoss_TT := "Enables/Disables this function"
+ToggleAutoWorkerState_Key_TT := #ToggleAutoWorkerState_Key_TT := "Toggles (enables/disables) this function for the CURRENT match.`n`nWill only work during a match"
+EnableAutoWorkerTerranStart_TT := EnableAutoWorkerProtossStart_TT := "Enables/Disables this function."
 AutoWorkerStorage_T_Key_TT := #AutoWorkerStorage_T_Key_TT := AutoWorkerStorage_P_Key_TT := #AutoWorkerStorage_P_Key_TT := "During an automation cycle your selected units will be temporarily stored in this control group.`n`nSpecify a control group that you do NOT use in game."
 
 #Base_Control_Group_T_Key_TT := Base_Control_Group_T_Key_TT := Base_Control_Group_P_Key_TT := #Base_Control_Group_P_Key_TT := "The control group used to store your command centres/orbitals/planetary-fortresses/nexi.`n`n"
@@ -5884,7 +5886,7 @@ return
 g_UserToggleAutoWorkerState: 		; this launched via the user hotkey combination
 	if (EnableAutoWorker%LocalPlayerRace% := !EnableAutoWorker%LocalPlayerRace%)
 	{
-		AW_MaxWorkersReaded := TmpDisableAutoWorker := 0 		; just incase the timers bug out and this gets stuck in enabled state
+		AW_MaxWorkersReached := TmpDisableAutoWorker := 0 		; just incase the timers bug out and this gets stuck in enabled state
 		SetTimer, g_autoWorkerProductionCheck, -1   ; so it starts immediately - cant use gosub as that negates
 		dspeak("On")											; the sleep/timer linearity and causes double workers to be made when first turned on
 		SetTimer, g_autoWorkerProductionCheck, 200
@@ -5925,9 +5927,8 @@ temporarilyDisableAutoWorkerProduction()
 	return 
 }
 
-
 g_autoWorkerProductionCheck:
-if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !TmpDisableAutoWorker && !AW_MaxWorkersReaded)
+if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !TmpDisableAutoWorker && !AW_MaxWorkersReached)
 	autoWorkerProductionCheck()
 return
 
@@ -5935,7 +5936,7 @@ return
 autoWorkerProductionCheck()
 {	GLOBAl A_unitID, a_LocalPlayer, Base_Control_Group_T_Key, AutoWorkerStorage_P_Key, AutoWorkerStorage_T_Key, Base_Control_Group_P_Key
 	, AutoWorkerMakeWorker_T_Key, AutoWorkerMakeWorker_P_Key, AutoWorkerMaxWorkerTerran, AutoWorkerMaxWorkerPerBaseTerran
-	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReaded
+	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached
 
 	if (a_LocalPlayer["Race"] = "Terran") 
 	{
@@ -5959,10 +5960,10 @@ autoWorkerProductionCheck()
 
 	if (workers >= maxWorkers)
 	{ 
-		AW_MaxWorkersReaded := 1
+		AW_MaxWorkersReached := 1
 		return 
 	}
-	if ( isMenuOpen() & !(ChatStatus := isChatOpen()) ) ;chat is 0 when  menu is in focus
+	if isGamePaused() || ( isMenuOpen() && !(ChatStatus := isChatOpen()) ) ;chat is 0 when  menu is in focus
 		return ;as let the timer continue to check
 
 	numGetControlGroupnObject(oMainbaseControlGroup, mainControlGroup)
@@ -6571,6 +6572,7 @@ getUnitPositionY(unit)
 	Return ReadMemory(B_uStructure + (unit * S_uStructure) + O_uY, GameIdentifier) /4096
 }
 
+
 getUnitPositionZ(unit)
 {	global
 	Return ReadMemory(B_uStructure + (unit * S_uStructure) + O_uZ, GameIdentifier) /4096
@@ -6597,6 +6599,12 @@ arePlayerColoursEnabled()
 {	global
 	Return pointer(GameIdentifier, P_PlayerColours, O1_PlayerColours, O2_PlayerColours)
 }
+
+isGamePaused()
+{	global
+	Return ReadMemory(B_IsGamePaused, GameIdentifier)
+}
+
 
 isMenuOpen()
 { 	global
@@ -7567,7 +7575,7 @@ CreateHotkeys()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && !isMenuOpen() && time 
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time  
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
-	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Protoss"])  && time
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time	
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace%
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
@@ -7624,7 +7632,7 @@ CreateHotkeys()
 		hotkey, %F_InjectOff_Key%, Cast_DisableInject, on			
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
 		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoGates, on	
-	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Protoss"])  && time	
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time	
 		hotkey, %ToggleAutoWorkerState_Key%, g_UserToggleAutoWorkerState, on	
 	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace%
 		hotkey, *~Esc, g_temporarilyDisableAutoWorkerProduction, on	
@@ -8273,7 +8281,7 @@ LoadMemoryAddresses(SC2EXE)
 																	; 7 = Bottom Edge 			 	8 = Diagonal Right/Bot
 
 
-									
+	B_IsGamePaused := SC2EXE + 0x2186548 						
 
  ; The below offsets are not Currently used but are current for 2.0.8
 
@@ -9416,22 +9424,7 @@ getCAbilQueueIndex(pAbilities, AbilitiesCount)
 }
 
 
-
-f2::
-
-unit := getSelectedUnitIndex()
-
-msgbox % isWorkerInProduction(unit)
-msgbox % isUnderConstruction(unit) 
-
-RETURN 
-QueueTime := getBuildStats(unit, QueueSize)
-msgbox % QueueTime "`n| " QueueSize
-
-dec := dectohex(B_uStructure + unit * S_uStructure)
-msgbox % clipboard := SubStr(dec, 3)
 return
-
 ; nexus
 ;queueSize Offset for nexus is +0xA4 (from pQueueInfo)
 ; pQueTimerBase := 0xB0 + pQueueInfo  ; there is more infor here like number of probes in production, number of queues probes (mothership doeant affect these)
@@ -9439,7 +9432,7 @@ return
 
 
 ;	O_P_uAbilityPointer := 0xD8 (+4)
-return
+
 
 ; //fold
 ; unit + 0xE2 ; 1 byte = 18h chrono for protoss structures 10h normal
@@ -9464,10 +9457,6 @@ Note: Will give a fail if a the warpgate is virgin i.e. not warpged in a unit
 
 
 
-f2::
-
-clipboard := dectohex((getSelectedUnitIndex()*S_uStructure) + B_uStructure)
-		
 	
 
 return
