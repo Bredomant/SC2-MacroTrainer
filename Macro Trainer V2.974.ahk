@@ -13,10 +13,26 @@
 ; compiled using AHK 1.1.09.03 - the later version have changed how soundset works. Cant be bothered working it out and nothing beneficial in the updates 
 
 /*	Things to do
+	Fix Changeling colour
 	Team send warn message after clicking building..maybe
 	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
 */
 
+/*	
+	Known Problems:
+		Pressing Esc to cancel chat while having one base selected will cancel auto production for 4.5 seconds
+
+*/
+
+/*
+	For Updates: 
+	Disable Auto-Inject
+	Disable Auto Grouping
+	Change ToggleWorkerState to #F2
+	Disable Spread and RemoveUnit
+
+
+*/
 
 /*
 		MEMORY BENCHMARKS  	- 	NUMGET VS NORMAL METHOD
@@ -65,7 +81,7 @@ If A_IsCompiled
 Else
 {
 	Menu Tray, Icon, Starcraft-2.ico
-	debug := 0
+	debug := 1
 	debug_name := "Kalamity"
 	hotkey, ^+!F12, g_GiveLocalPalyerResources
 }
@@ -84,7 +100,7 @@ url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 program := []
 program.info := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
 
-version := 2.972
+version := 2.974
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -194,6 +210,9 @@ LoadMemoryAddresses(B_SC2Process)
 settimer, clock, 200
 settimer, timer_exit, 5000
 SetTimer, OverlayKeepOnTop, 1000, -10	;better here, as since WOL 2.0.4 having it in the "clock" section isn't reliable 	
+
+l_Changeling := A_unitID["ChangelingZealot"] "," A_unitID["ChangelingMarineShield"] ","  A_unitID["ChangelingMarine"] 
+				. ","  A_unitID["ChangelingZerglingWings"] "," A_unitID["ChangelingZergling"]
 
 return
 
@@ -588,7 +607,7 @@ mt_pause_resume:
 	if (mt_on := !mt_on)	; 1st run mt_on blank so considered false and does else	
 	{
 		game_status := "lobby" ; with this clock = 0 when not in game 
-		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck")
+		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck")
 		inject_timer := 0	;ie so know inject timer is off
 		DSpeak("Macro Trainer Paused")
 	}	
@@ -606,11 +625,11 @@ clock:
 	if (!time AND game_status = "game") OR (UpdateTimers) ; time=0 outside game
 	{	
 		game_status := "lobby" ; with this clock = 0 when not in game (while in game at 0s clock = 44)	
-		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck")
+		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck")
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
-	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16) ; OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
+	Else if (time AND game_status <> "game" AND getLocalPlayerNumber() <> 16)  OR (debug AND time AND game_status <> "game") ; Local slot = 16 while in lobby - this will stop replay announcements
 	{
 		game_status := "game", warpgate_status := "not researched", gateway_count := warpgate_warning_set := 0
 		AW_MaxWorkersReached := TmpDisableAutoWorker := 0
@@ -728,7 +747,7 @@ Loop, 8	;doing it this way allows for custom games with blank slots ;can get wei
 		a_LocalPlayer :=  new c_Player(A_Index)
 }
 IF (IsInList(a_LocalPlayer.Type, 5, 6) OR (A_IsCompiled AND a_LocalPlayer.Type = 16))
-	timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "Force_Inject", "Force_Inject_Alert", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer") ;Pause all warnings. Clock still going so will resume next game
+	timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer") ;Pause all warnings. Clock still going so will resume next game
 GameType := GetGameType(a_Player)
 return
 ;-------------------------
@@ -935,8 +954,6 @@ Cast_DisableInject:
 	}
 	Else
 	{
-		settimer, Force_Inject, off
-		settimer, Force_Inject_Alert, off
 		settimer, g_ForceInjectSuccessCheck, off
 		DSpeak("Injects Off")
 	}
@@ -973,11 +990,9 @@ cast_inject:
 	Inject := []
 	If (A_ThisLabel = "cast_ForceInject")
 	{
-			if !isMenuOpen()		;menu is always 1 regardless if chat is up
-				settimer, Force_Inject, off
-			else if isMenuOpen() & !isChatOpen()	;chat is 0 when  menu is in focus
+						;menu is always 1 regardless if chat is up
+			if isMenuOpen() & !isChatOpen()	;chat is 0 when  menu is in focus
 				return ;as let the timer continue to check
-			ForceCount++
 			if F_Inject_Beep
 				SoundPlay, %A_Temp%\Windows Ding3.wav 
 	}
@@ -1002,7 +1017,7 @@ cast_inject:
 		castInjectLarva(auto_inject, 1, F_Sleep_Time)	
 	else castInjectLarva(auto_inject, 0, auto_inject_sleep) ;ie nomral injectmethod
 
-	If Inject.LMouseState 
+	If Inject.LMouseState ; probably dont need this now as when check for autocast it checks if mouse button is down
 	{
 		If HumanMouse
 			MouseMoveHumanSC2("x" MLDownX "y" MLDownY "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
@@ -1013,9 +1028,6 @@ cast_inject:
 	Else		
 		send {click  %start_x%, %start_y%, 0}
 	
-	; its acutally having the lbutton down and having it drag the camera across the minimap as its returing to its start location which can cause the camera to move while the lbutton is held down at start of inject 
-	; hence restore camera need to come afterwards but only half works as soon as user moves 1 pixel camera get thrown to closest minimap edge
-
 	If ChatStatus
 		send {Enter}
 	BufferInput(aButtons.List, "Send")
@@ -1029,24 +1041,14 @@ cast_inject:
 	if auto_inject_alert
 		settimer, auto_inject, 250
 
-;	If F_Inject_Enable
-;	{
-;		random, randomForcedInjectDelay, 0, 1.2
-	;	settimer, Force_Inject, 250	
-	;	If F_Alert_Enable
-	;		settimer, Force_Inject_Alert, 250	
-;	}
-;	If (A_ThisLabel = "cast_ForceInject" && !AttemptCorrectInjection)
-
 
 	If F_Alert_Enable
 		settimer, g_ForceInjectSuccessCheck, %FInjectHatchFrequency%	
 	If (A_ThisLabel = "cast_inject")
-	{
-		ForceCount := 0
 		KeyWait, %cast_inject_key%, T4	
-	}
 Return
+
+	;should probably add a blockinput for the burrow check
 
 g_ForceInjectSuccessCheck:
 
@@ -1078,12 +1080,18 @@ g_ForceInjectSuccessCheck:
 ;For Index, CurrentHatch in oHatcheries
 ;	if (CurrentHatch.NearbyQueen && !isHatchInjected(CurrentHatch.Unit)) ;probably should check if hatch is alive and still a hatch...
 
-	If(getGroupedQueensWhichCanInject(aControlGroup) && ( ForceCount < F_Max_Injects) ) 
+	If getGroupedQueensWhichCanInject(aControlGroup)
 		For Index, CurrentHatch in oHatcheries
 			For Index, Queen in aControlGroup.Queens
 				if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && Queen.Energy >= 25  && !isHatchInjected(CurrentHatch.Unit) && Winactive(GameIdentifier)) 
 				{
 					sleep % rand(0, 1.5)
+					while (getPlayerCurrentAPM() > FInjectAPMProtection)
+					{
+						sleep 10
+						if (A_index > 1500) ; so its been longer then 15 seconds
+							return 
+					}
 					AttemptCorrectInjection := 1
 					Gosub, cast_ForceInject
 					AttemptCorrectInjection := 0
@@ -1558,8 +1566,8 @@ WorkerInProductionWarning(a_BaseList, maxIdleTime, maxWarnings, folloupWarningDe
 	time := getTime()
 	for index, Base in a_BaseList
 	{
-		state := isWorkerInProduction(Base) 
-		if (state > 0) ;gives true if working in production > 0, or -1 if making orbital or mothership or flying etc hence >0
+		
+		if (state := isWorkerInProduction(Base))
 		{
 			warningCount := 0
 			lastWorkerInProduction := time
@@ -1668,7 +1676,7 @@ inject:
 	return
 
 auto_inject:
-	if ( time - inject_set >= auto_inject_time ) && (!F_Inject_Enable ||  ForceCount >= F_Max_Injects)
+	if ( time - inject_set >= auto_inject_time ) && (!F_Inject_Enable)
 	{
 		settimer, auto_inject, off
 		If W_inject_ding_on
@@ -1681,19 +1689,6 @@ auto_inject:
 			DSpeak(w_inject_spoken)
 	}
 	return
-
-Force_Inject:  		;not used any more
-	if (time - inject_set >= F_Inject_Delay + randomForcedInjectDelay) AND ( ForceCount < F_Max_Injects) AND WinActive(GameIdentifier)
-		gosub cast_ForceInject
-	Return
-
-Force_Inject_Alert:  ;not used any more
-	If ( time - inject_set >= F_Inject_Delay + randomForcedInjectDelay - F_Alert_PreTime ) AND ( ForceCount < F_Max_Injects) AND WinActive(GameIdentifier)
-	{
-		settimer, Force_Inject_Alert, off
-		SoundPlay, %A_Temp%\Windows Ding2.wav  ;SoundPlay *-1
-	}
-	Return
 
 Return
 	
@@ -2362,6 +2357,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, F_Max_Injects, %config_file%, %section%, F_Max_Injects, 4
 	IniRead, F_Sleep_Time, %config_file%, %section%, F_Sleep_Time, 5
 	IniRead, FInjectHatchFrequency, %config_file%, %section%, FInjectHatchFrequency, 2500
+	IniRead, FInjectAPMProtection, %config_file%, %section%, FInjectAPMProtection, 160
 	IniRead, F_InjectOff_Key, %config_file%, %section%, F_InjectOff_Key, Lwin & F5
 	
 	
@@ -2568,7 +2564,9 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	section := "AutoWorkerProduction"	
 	IniRead, EnableAutoWorkerTerranStart, %config_file%, %section%, EnableAutoWorkerTerranStart, 0 
 	IniRead, EnableAutoWorkerProtossStart, %config_file%, %section%, EnableAutoWorkerProtossStart, 0 
-	IniRead, ToggleAutoWorkerState_Key, %config_file%, %section%, ToggleAutoWorkerState_Key, +f2
+	IniRead, ToggleAutoWorkerState_Key, %config_file%, %section%, ToggleAutoWorkerState_Key, #F2
+	IniRead, AutoWorkerProtectionDelay, %config_file%, %section%, AutoWorkerProtectionDelay, 800
+	IniRead, AutoWorkerAPMProtection, %config_file%, %section%, AutoWorkerAPMProtection, 160
 	IniRead, AutoWorkerStorage_T_Key, %config_file%, %section%, AutoWorkerStorage_T_Key, 3
 	IniRead, AutoWorkerStorage_P_Key, %config_file%, %section%, AutoWorkerStorage_P_Key, 3
 	IniRead, Base_Control_Group_T_Key, %config_file%, %section%, Base_Control_Group_T_Key, 4
@@ -2828,6 +2826,7 @@ ini_settings_write:
 	IniWrite, %F_Max_Injects%, %config_file%, %section%, F_Max_Injects
 	IniWrite, %F_Sleep_Time%, %config_file%, %section%, F_Sleep_Time
 	IniWrite, %FInjectHatchFrequency%, %config_file%, %section%, FInjectHatchFrequency
+	IniWrite, %FInjectAPMProtection%, %config_file%, %section%, FInjectAPMProtection
 	IniWrite, %F_InjectOff_Key%, %config_file%, %section%, F_InjectOff_Key
 
 	;[Idle AFK Game Pause]
@@ -3015,6 +3014,8 @@ ini_settings_write:
 	IniWrite, %EnableAutoWorkerTerranStart%, %config_file%, %section%, EnableAutoWorkerTerranStart
 	IniWrite, %EnableAutoWorkerProtossStart%, %config_file%, %section%, EnableAutoWorkerProtossStart
 	IniWrite, %ToggleAutoWorkerState_Key%, %config_file%, %section%, ToggleAutoWorkerState_Key
+	IniWrite, %AutoWorkerProtectionDelay%, %config_file%, %section%, AutoWorkerProtectionDelay
+	IniWrite, %AutoWorkerAPMProtection%, %config_file%, %section%, AutoWorkerAPMProtection
 	IniWrite, %AutoWorkerStorage_T_Key%, %config_file%, %section%, AutoWorkerStorage_T_Key
 	IniWrite, %AutoWorkerStorage_P_Key%, %config_file%, %section%, AutoWorkerStorage_P_Key
 	IniWrite, %Base_Control_Group_T_Key%, %config_file%, %section%, Base_Control_Group_T_Key
@@ -3337,18 +3338,10 @@ Gui, Tab,  Manual
 
 
 Gui, Tab,  Auto
-	Gui, Add, GroupBox, y+20 w225 h220, Fully Automated Injects
+	Gui, Add, GroupBox, y+20 w225 h255, Fully Automated Injects
 		Gui, Add, Checkbox,xp+10 yp+30 vF_Inject_Enable checked%F_Inject_Enable%, Enable
 		Gui, Add, Checkbox,y+10 vF_Inject_ModifierBeep checked%F_Inject_ModifierBeep%, Beep If modifier is held down
 		Gui, Add, Checkbox,y+10 vF_Inject_Beep checked%F_Inject_Beep%, Beep when auto Inject begins
-
-
-;		Gui, Add, Text,y+15 x%settings2RX% w165, Time Between Injects (SC2 s): 
-;			Gui, Add, Edit, Number Right x+5 yp-2 w45 
-;				Gui, Add, UpDown, Range39-100000 vF_Inject_Delay, %F_Inject_Delay%
-;		Gui, Add, Text,y+15 x%settings2RX% w165, Max. (sequential) Forced Injects: 
-;			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Max_Injects 
-;				Gui, Add, UpDown, Range1-100000 vF_Max_Injects, %F_Max_Injects%	
 
 		Gui, Add, Text,y+15 x%settings2RX% w155, Sleep time (ms): 
 			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Sleep_Time 
@@ -3358,16 +3351,15 @@ Gui, Tab,  Auto
 			Gui, Add, Edit, Number Right x+5 yp-2 w60 vTT_FInjectHatchFrequency
 				Gui, Add, UpDown, Range0-100000 vFInjectHatchFrequency, %FInjectHatchFrequency%					
 
+		Gui, Add, Text, y+15 x%settings2RX% w140, APM Protection:
+			Gui, Add, Edit, Number Right x+5 yp-2 w60 vTT_FInjectAPMProtection
+				Gui, Add, UpDown,  Range0-100000 vFInjectAPMProtection, %FInjectAPMProtection%		
+
 		Gui, Add, Text, x%settings2RX% yp+30, Enable/Disable Hotkey:
 			Gui, Add, Edit, Readonly y+10 xp+40 w120  vF_InjectOff_Key center gedit_hotkey, %F_InjectOff_Key%
 			Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#F_InjectOff_Key,  Edit				
 			
-;	Gui, Add, GroupBox,  w230 h80 x%OriginTabx% yp+40, Pre-Inject Alert
-;		Gui, Add, Checkbox,xp+10 yp+25 vF_Alert_Enable checked%F_Alert_Enable%, Enable
-;		Gui, Add, Text,y+15 x%settings2RX% w165, Preinject Alert (sc2 s): 
-;			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Alert_PreTime
-;				Gui, Add, UpDown, Range0-100000 vF_Alert_PreTime, %F_Alert_PreTime%
-	Gui, Add, Text,yp+50 x%settings2RX% w340,  Note:`n`nAuto injects will begin after you control group your queen to the correct (inject) queen control group.`n`nAuto injects are performed using the 'MiniMap' macro.`n`nPlease ensure you have correctly set the settings under the 'basic' inject tab. This includes the 'minimap' settings as well as the 'spawn larva key', 'burrow key' and control group storage settings.
+	Gui, Add, Text,yp+42 x%settings2RX% w340,  Note:`n`nAuto injects will begin after you control group your queen to the correct (inject) queen control group.`n`nAuto injects are performed using the 'MiniMap' macro.`n`nPlease ensure you have correctly set the settings under the 'basic' inject tab. This includes the 'minimap' settings as well as the 'spawn larva key', 'burrow key' and control group storage settings.
 
 
 Gui, Tab,  Alert
@@ -3840,13 +3832,21 @@ Gui, Tab, Delay
 
 Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoWorker_TAB, Auto||Info		
 Gui, Tab, Auto
-	Gui, Add, Text, x+25 y+35 section, Toggle State:
+	Gui, Add, Text, x+25 y+55 section, Toggle State:
 
 		Gui, Add, Edit, Readonly yp-2 x+10 center w65 vToggleAutoWorkerState_Key gedit_hotkey, %ToggleAutoWorkerState_Key%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleAutoWorkerState_Key,  Edit ;have to use a trick eg '#' as cant write directly to above edit var, or it will activate its own label!
 
+	Gui, Add, Text, xs+220 ys-35 w85, Delay Protection:
+		Gui, Add, Edit, Number Right x+15 yp-2 w50 vTT_AutoWorkerProtectionDelay
+				Gui, Add, UpDown,  Range400-100000 vAutoWorkerProtectionDelay, %AutoWorkerProtectionDelay%		
+	
+	Gui, Add, Text, xs+220 ys w85, APM Protection:
+		Gui, Add, Edit, Number Right x+15 yp-2 w50 vTT_AutoWorkerAPMProtection
+				Gui, Add, UpDown,  Range0-100000 vAutoWorkerAPMProtection, %AutoWorkerAPMProtection%		
+
 	thisXTabX := XTabX + 12
-	Gui, Add, GroupBox, xs Y+25 w370 h150 section, Terran 
+	Gui, Add, GroupBox, xs Y+20 w370 h150 section, Terran 
 		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerTerranStart Checked%EnableAutoWorkerTerranStart%, Enable
 
 		Gui, Add, Text, X%thisXTabX% y+15 w100, Base Ctrl Group:
@@ -3898,14 +3898,15 @@ Gui, Tab, Info
 		Gui, Add, Text, X%OriginTabX% y+15 cFF0000, Note:
 		gui, font, norm s11
 
-		gui, Add, Text, w410 y+20, When trying to a lift a Command Centre or Orbital, or convert a Command Centre into an orbital, an SCV will likely already be queued.
-		gui, Add, Text, w410 y+15, There's no need to toggle (turn off) this function, simply  select the building/base (so that only ONE unit is selected i.e. the orbital) and press the 'ESCAPE' button to cancel the queued worker.
-		gui, Add, Text, w410 y+15, This will temporarily disable the function for four seconds - providing adequate time to convert or lift the Command Centre.
+		gui, Add, Text, w400 y+20, When trying to a lift a Command Centre or Orbital, or convert a Command Centre into an orbital, an SCV will likely already be queued.
+		gui, Add, Text, w400 y+15, There's no need to toggle (turn off) this function, simply  select the building/base (so that only ONE unit is selected e.g. the CC) and press the 'ESCAPE' button to cancel the queued worker.
+		gui, Add, Text, w400 y+15, This will temporarily disable the function for four seconds - providing adequate time to convert or lift the Command Centre.
+		gui, Add, Text, w400 y+15, This also works if you need to cancel a probe to make a mumma ship core.
 		
-		gui, Add, Text, w410 y+35, Although you will most likely not notice this, workers will not be produced while:
-		gui, Add, Text, w410 y+5, • The control, alt, shift, or windows keys are held down.
-		gui, Add, Text, w410 y+5, • The user is casting a spell.
-		gui, Add, Text, w410 y+5, • The construction card i.e. the basic or advanced building card is displayed.
+		gui, Add, Text, w400 y+25, Although you will most likely not notice this, workers will not be produced while:
+		gui, Add, Text, w400 y+5, • The control, alt, shift, or windows keys are held down.
+		gui, Add, Text, w400 y+5, • The user is casting a spell.
+		gui, Add, Text, w400 y+5, • The construction card i.e. the basic or advanced building card is displayed.
 
 		gui, font, norm s10
 		gui, font, 		
@@ -3952,7 +3953,7 @@ Gui, Tab, Spread
 	Gui, Add, Edit, Number Right xp+145 yp-2 w45 vTT_SleepSplitUnits
 	Gui, Add, UpDown,  Range0-100 vSleepSplitUnits, %SleepSplitUnits%
 	Gui, Add, Text, Xs yp+100 w360, This can be used to spread your workers when being attack by hellbats/hellions.`n`nWhen 30`% of the selected units are worksers, the units will be spread over a much larger area
-	Gui, Add, Text, Xs yp+60 w360, Note: When spreading army/attacking units this is designed to spread your units BEFORE the engagement - Dont use it while being attacked!`n`n****This is in a very beta stage and will be improved later***
+	Gui, Add, Text, Xs yp+80 w360, Note: When spreading army/attacking units this is designed to spread your units BEFORE the engagement - Dont use it while being attacked!`n`n****This is in a very beta stage and will be improved later***
 
 Gui, Tab, Remove Unit
 	Gui, Add, Checkbox, y+25 x+25 vRemoveUnitEnable Checked%RemoveUnitEnable% , Enable Remove Unit Function	
@@ -4138,7 +4139,7 @@ Gui, Tab, MiniMap
 
 
 	Gui, Add, Text, Y50 x367, Refresh Rate (ms):
-		Gui, Add, Edit, Number Right x+20 yp-2 w55 vTT_MiniMapRefresh
+		Gui, Add, Edit, Number Right x+25 yp-2 w55 vTT_MiniMapRefresh
 			Gui, Add, UpDown,  Range1-1500 vMiniMapRefresh, %MiniMapRefresh%	
 	Gui, Add, Text, x367 yp+30, Hide MiniMap:
 	Gui, Add, Edit, Readonly yp-2 xp+80 center w90 vTempHideMiniMapKey gedit_hotkey, %TempHideMiniMapKey%
@@ -4270,7 +4271,7 @@ TerranPic_TT := "The artist formerly known as being OP"
 ProtossPic_TT := "The slightly less OP race"
 auto_inject_alert_TT := "This alert will sound X seconds after your last auto inject, prompting you to inject again."
 auto_inject_time_TT := TT_auto_inject_time_TT :=  "This is in 'SC2' Seconds."
-#cast_inject_key_TT := cast_inject_key_TT := "This Hotkey is ONLY active while playing as zerg!"
+#cast_inject_key_TT := cast_inject_key_TT := "When pressed the program will inject all of your hatcheries.`n`nThis Hotkey is ONLY active while playing as zerg!"
 Auto_inject_sleep_TT := "Lower this to make the inject round faster, BUT this will make it more obvious that it is being automated!"
 CanQueenMultiInject_TT := "During minimap injects (and auto-Injects) a queen may attempt to inject multiple hatcheries providing:`nShe is the only nearby queen and she has enough energy.`n`nThis may increase the chance of having queens go walkabouts (especially during an auto inject) - but so far I have not observed this during testing. "
 HotkeysZergBurrow_TT := #HotkeysZergBurrow_TT := "Please ensure this matches the 'Burrow' hotkey in SC2 & that you only have one active hotkey to burrow units i.e. No alternate burrow key!`n`nThis is used during auto injects to help prevent accidentally burrowing queens due to the way windows/SC2 buffers these repeated keypresses."
@@ -4324,6 +4325,15 @@ DrawIdleWorkersOverlay_TT := "While idle workers exist, a worker icon will be di
 DrawUnitOverlay_TT := "Displays the enemies current units.`nThis is similar to the 'observer' panel.`n`nUse the 'unit panel filter' to selectively remove/display units."
 
 ToggleAutoWorkerState_Key_TT := #ToggleAutoWorkerState_Key_TT := "Toggles (enables/disables) this function for the CURRENT match.`n`nWill only work during a match"
+AutoWorkerProtectionDelay_TT := TT_AutoWorkerProtectionDelay_TT := "After a round a of workers has been made the function will sleep for this period of time (ms).`nThis helps prevent queueing too many workers.`n`n"
+							. "If more than one worker is commonly being queued-up and/or you have a laggy connection perhaps try increasing this value."
+
+TT_AutoWorkerAPMProtection_TT := AutoWorkerAPMProtection_TT
+:= TT_FInjectAPMProtection_TT := FInjectAPMProtection_TT := "Automations will be delayed while your INSTANTANEOUS APM is greater than this value.`n"
+		. "This helps reduce the likelihood of interfering with your game play.`n`nNote: If you're a chronic key spammer who constantly has high APM you may need to increase this value,`n"
+		. "otherwise actions may be delayed for too long."
+
+
 EnableAutoWorkerTerranStart_TT := EnableAutoWorkerProtossStart_TT := "Enables/Disables this function."
 AutoWorkerStorage_T_Key_TT := #AutoWorkerStorage_T_Key_TT := AutoWorkerStorage_P_Key_TT := #AutoWorkerStorage_P_Key_TT := "During an automation cycle your selected units will be temporarily stored in this control group.`n`nSpecify a control group that you do NOT use in game."
 
@@ -4339,7 +4349,7 @@ TT_AutoWorkerMaxWorkerTerran_TT := TT_AutoWorkerMaxWorkerProtoss_TT := AutoWorke
 AutoWorkerMaxWorkerPerBaseTerran_TT := TT_AutoWorkerMaxWorkerPerBaseProtoss_TT := AutoWorkerMaxWorkerPerBaseTerran_TT := AutoWorkerMaxWorkerPerBaseProtoss_TT :=  "Worker production will stop when this number is exceeded by`n"
 			. "the current worker count per the number of fully constructed (and control grouped) main-bases."
 
-Inject_spawn_larva_TT := #Inject_spawn_larva_TT := "This needs to correspond to your SC2 'spawn larva' button."
+Inject_spawn_larva_TT := #Inject_spawn_larva_TT := "This needs to correspond to your SC2 'spawn larva' button.`n`nThis key is sent during an inject to invoke Zerg's 'spawn larva' ability."
 
 MI_Queen_Group_TT := #MI_Queen_Group_TT := "The queens in this control are used to inject hatcheries.`n`nHence you must add your injecting queens to this control group!"
 F_InjectOff_Key_TT := #F_InjectOff_Key_TT := "During a match this hotkey will toggle (either disable or enable) automatic injects."
@@ -4375,7 +4385,7 @@ TT2_MI_QueenDistance_TT := MI_QueenDistance_TT := "The edge of the hatchery cree
 TT_F_Max_Injects_TT := F_Max_Injects_TT := "The max. number of 'forced' injects which can occur after a user 'F5'/auto-inject.`nSet this to a high number if you want the program to inject for you."
 TT_F_Alert_PreTime_TT := F_Alert_PreTime_TT := "The alert will sound X seconds before the forced inject."
 TT_F_Sleep_Time_TT := F_Sleep_Time_TT := "The amount of time spent idle after injecting a hatch.`nThis should be set as low as reliably possible so that the inject rounds are shorter and there is less chance of it affecting your gameplay."
-TT_FInjectHatchFrequency_TT := FInjectHatchFrequency_TT := "How often the larva state of the hatcheries are checked.`nAny uninjected hatches will then be injected.`n`nIncreasing this value will delay injects, that is, a hatch will remain uninjected for longer."
+TT_FInjectHatchFrequency_TT := FInjectHatchFrequency_TT := "How often the larva state of the hatcheries are checked. (In ms/real-time)`nAny uninjected hatches will then be injected.`n`nIncreasing this value will delay injects, that is, a hatch will remain uninjected for longer."
 
 
 TT_AM_KeyDelay_TT := AM_KeyDelay_TT := TT_I_KeyDelay_TT := I_KeyDelay_TT := TT_CG_KeyDelay_TT := CG_KeyDelay_TT := "This sets the delay between key/mouse events`nLower numbers are faster, but they may cause problems.`n0-10`n`nWith regards to speed, changing the 'sleep' time will generally have a larger impact."
@@ -5903,7 +5913,7 @@ g_RenableAutoWorkerState:	; this is via the auto cancel in the below function (w
 	TmpDisableAutoWorker := 0
 return 
 
-
+; note use can accidentally delay production by pressing esc to cancel chat
 
 temporarilyDisableAutoWorkerProduction()
 { 	LOCAL unitIndex, selectedUnit, QueueSize
@@ -5919,7 +5929,7 @@ temporarilyDisableAutoWorkerProduction()
 			if (QueueSize <= 2) ; so wont toggle timer if cancelling extra queued workers
 			{
 				TmpDisableAutoWorker := 1
-				SetTimer, g_RenableAutoWorkerState, -4000 ; give time for user to morph/lift base ; use timer so dont have this function queueing up
+				SetTimer, g_RenableAutoWorkerState, -4500 ; give time for user to morph/lift base ; use timer so dont have this function queueing up
 
 			}
 		}
@@ -5928,15 +5938,15 @@ temporarilyDisableAutoWorkerProduction()
 }
 
 g_autoWorkerProductionCheck:
-if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !TmpDisableAutoWorker && !AW_MaxWorkersReached)
+if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !TmpDisableAutoWorker && !AW_MaxWorkersReached && getPlayerCurrentAPM() < AutoWorkerAPMProtection)
 	autoWorkerProductionCheck()
 return
-
 
 autoWorkerProductionCheck()
 {	GLOBAl A_unitID, a_LocalPlayer, Base_Control_Group_T_Key, AutoWorkerStorage_P_Key, AutoWorkerStorage_T_Key, Base_Control_Group_P_Key
 	, AutoWorkerMakeWorker_T_Key, AutoWorkerMakeWorker_P_Key, AutoWorkerMaxWorkerTerran, AutoWorkerMaxWorkerPerBaseTerran
-	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached
+	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached, AutoWorkerProtectionDelay
+	static TickCountRandomSet := 0, randPercent
 
 	if (a_LocalPlayer["Race"] = "Terran") 
 	{
@@ -5969,6 +5979,15 @@ autoWorkerProductionCheck()
 	numGetControlGroupnObject(oMainbaseControlGroup, mainControlGroup)
 	workersInProduction := Basecount := almostComplete := idleBases := halfcomplete := nearHalfComplete := 0 ; in case there are no idle bases
 
+
+	; This will change the random percent every 14 seconds - otherwise
+	; 200ms timer kind of negates the +/- variance on the progress meter
+	if (A_TickCount - TickCountRandomSet > 14 * 1000) 
+	{
+		TickCountRandomSet := A_TickCount
+		randPercent := rand(-0.04, .15)
+	}
+
 	for index, object in oMainbaseControlGroup.units
 	{
 
@@ -5981,13 +6000,15 @@ autoWorkerProductionCheck()
 				idleBases++
 			else 
 			{
-				 progress := getBuildStats(object.unitIndex, QueueSize) ; returns build percentage
+				if (object.type = A_unitID["PlanetaryFortress"])
+					progress :=  getBuildStatsPF(object.unitIndex, QueueSize)
+				else
+					 progress := getBuildStats(object.unitIndex, QueueSize) ; returns build percentage
 				 if (QueueSize = 1)
 				 {
-				 	rand := rand(-.05, .05)
 				 	if (progress >= .95)
 				 		almostComplete++
-				 	else if (progress + rand >= .65)
+				 	else if (progress - randPercent >= .65)
 				 		halfcomplete++
 				 	else if (progress >= .35)
 				 		nearHalfComplete++
@@ -6006,6 +6027,8 @@ autoWorkerProductionCheck()
 
 	MaxWokersTobeMade := howManyUnitsCanBeProduced(50, 0, 1)
 
+	if (MaxWokersTobeMade > Basecount) 	;this shouldn't really be needed - just trying to stop the extra queued workers
+		MaxWokersTobeMade := Basecount
 
 	if (MaxWokersTobeMade > idleBases + almostComplete + halfcomplete)
 		MaxWokersTobeMade := idleBases + almostComplete + halfcomplete
@@ -6017,6 +6040,8 @@ autoWorkerProductionCheck()
 	if ( (MaxWokersTobeMade / Basecount) + currentWorkersPerBase >= maxWorkersPerBase )
 		MaxWokersTobeMade := round((maxWorkersPerBase - currentWorkersPerBase) * Basecount)
 
+
+
 	; this attempts to minimise the number of 'auto productions' per worker production cycle.
 	; to reduce the chances of interfering with user input
 	; it will make workers if a worker is >= 95% complete (and only 1 in queue) or there are idle bases
@@ -6025,8 +6050,7 @@ autoWorkerProductionCheck()
 
 	if (MaxWokersTobeMade >= 1) && (idleBases || almostComplete || (halfcomplete && !nearHalfComplete)  ) ; i have >= 1 in case i stuffed the math and end up with a negative number or a fraction
 	{
-	;	aKeysTochck := ["b", "p", "m"]
-		if ReleaseModifiers(0, 1, 60) ;times out after 60ms
+		if ReleaseModifiers(0, 1, makeWorkerKey, 60) ;times out after 60ms
 			return ;as it timed out 
 		Critical
 		SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
@@ -6071,8 +6095,9 @@ autoWorkerProductionCheck()
 		BufferInput(aButtons.List, "Send")
 
 		Critical Off	
-		sleep 400 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
-					; so will send another build event and queueing more workers
+
+		sleep %AutoWorkerProtectionDelay% 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
+											; so will send another build event and queueing more workers
 	}
 	return
 }
@@ -6275,7 +6300,10 @@ getTime()
 	Return Round(ReadMemory(B_Timer, GameIdentifier)/4096, 1)
 }
 
-
+getGameTickCount()
+{	global 
+	Return ReadMemory(B_Timer, GameIdentifier)
+}
 
 
 numGetUnitSelectionObject(ByRef aSelection, mode = 0)
@@ -6376,6 +6404,7 @@ getPlayerWorkerCount(player="")
 		player := a_LocalPlayer["Slot"]
 	Return ReadMemory(((B_pStructure + O_pWorkerCount) + (player-1)*S_pStructure), GameIdentifier)
 }
+
 getUnitType(Unit) ;starts @ 0 i.e. first unit at 0
 { global 
 
@@ -6550,6 +6579,12 @@ getPlayerCameraPositionY(Player="")
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
 	Return ReadMemory(B_pStructure + (Player - 1)*S_pStructure + O_pYcam, GameIdentifier) / 4096
+}
+getPlayerCurrentAPM(Player="")
+{	global
+	If (player = "")
+		player := a_LocalPlayer["Slot"]	
+	Return ReadMemory(B_pStructure + (Player - 1)*S_pStructure + O_pCurrentAPM, GameIdentifier)
 }
 
 isUnderConstruction(building) ; starts @ 0 and only for BUILDINGS!
@@ -6794,7 +6829,8 @@ getEnemyUnitsMiniMap(byref A_MiniMapUnits)
      owner := numget(MemDump, UnitAddress + O_uOwner, "Char")     
      If type in %ActiveUnitHighlightExcludeList% ; cant use or/expressions with type in
            Continue
-     if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] && Owner && type >= A_unitID["Colossus"])
+     if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] && Owner && type >= A_unitID["Colossus"] && !ifTypeInList(type, l_Changeling)) 
+     || (ifTypeInList(type, l_Changeling) && a_Player[Owner, "Team"] = a_LocalPlayer["Team"] ) ; as a changeling owner becomes whoever it is mimicking - its team also becomes theirs
      {
            if (!Radius := aUnitInfo[Type, "Radius"])
               Radius := aUnitInfo[Type, "Radius"] := numgetUnitModelMiniMapRadius(pUnitModel)
@@ -6833,6 +6869,14 @@ getEnemyUnitsMiniMap(byref A_MiniMapUnits)
   }
   Return
 }
+
+ifTypeInList(type, byref list)
+{
+	if type in %list%
+		return 1
+	return 0
+}
+
 
 DumpUnitMemory(BYREF MemDump)
 {   
@@ -7634,7 +7678,7 @@ CreateHotkeys()
 		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoGates, on	
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time	
 		hotkey, %ToggleAutoWorkerState_Key%, g_UserToggleAutoWorkerState, on	
-	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace%
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace% ; cant use !ischatopen() - as esc will close chat before memory reads value so wont see chat was open
 		hotkey, *~Esc, g_temporarilyDisableAutoWorkerProduction, on	
 	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
 	while (10 > i := A_index - 1)
@@ -8173,6 +8217,8 @@ LoadMemoryAddresses(SC2EXE)
 		O_pXcam := 0x8
 		O_pYcam := 0xC
 		O_pRacePointer := 0x150
+		O_pCurrentAPM := 0x580
+		O_pAverageAPM := 0x588
 		O_pMineralIncome := 0x900, O_pGasIncome := 0x908
 		O_pArmyMineralSize := 0xB68, O_pArmyGasSize := 0xB88
 	P_IdleWorker := SC2EXE + 0x0209C3C8 		
@@ -8657,7 +8703,7 @@ SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 			workerCount++
 	}
 
-	if (workerCount / selectionCount >= .3 ) ; i.e. 20% of the selected units are workers
+	if (workerCount / selectionCount >= .3 ) ; i.e. 30% of the selected units are workers
 		uSpacing := 10 ; for hellbat and hellion spread
 	Else uSpacing := 4
 
@@ -8830,13 +8876,13 @@ isHatchInjected(Hatch)
 		return 1
 	else return 0
 }
-isWorkerInProduction(unit) ; units can only be t or P, no Z
+isWorkerInProductionOld(unit) ; units can only be t or P, no Z
 {										;state = 1 in prod, 0 not, -1 if doing something else eg flying
 	local state
 	local type := getUnitType(unit)
 	if (type = A_unitID["CommandCenterFlying"] || type = A_unitID["OrbitalCommandFlying"])
 		state := -1
-	else if ( type = A_unitID["Nexus"]) 	
+	else if ( type = A_unitID["Nexus"]) 	; this stuffs up
 	{
 		local p2 := ReadMemory(getUnitAbilityPointer(unit) + 0x24, GameIdentifier)
 		state := ReadMemory(p2 + 0x88, GameIdentifier, 1)
@@ -8857,11 +8903,8 @@ isWorkerInProduction(unit) ; units can only be t or P, no Z
 	}
 	Else if  (type =  A_unitID["PlanetaryFortress"])
 	{
-		local p1 := ReadMemory(getUnitAbilityPointer(unit) + 0x34, GameIdentifier)
-		state := ReadMemory(p1 + 0x4E4, GameIdentifier, 1) ; wrong - 0x180
-		if (state = 0x43)
-			state := 1
-		else state := 0 ; 0x3
+		local p1 := ReadMemory(getUnitAbilityPointer(unit) + 0x5C, GameIdentifier)
+		state := ReadMemory(p1 + 0x28, GameIdentifier, 1) ; This is acutally the queue size
 	}
 	else if (type =  A_unitID["OrbitalCommand"])
 	{
@@ -8873,6 +8916,25 @@ isWorkerInProduction(unit) ; units can only be t or P, no Z
 	return state
 }
 
+ ; returns state which is really the queue size
+isWorkerInProduction(unit) ; units can only be t or P, no Z
+{										;state = 1 in prod, 0 not, -1 if doing something else eg flying
+	GLOBAL A_unitID
+	type := getUnitType(unit)
+	if (type = A_unitID["CommandCenterFlying"] || type = A_unitID["OrbitalCommandFlying"])
+		state := 0
+	Else if (type = A_unitID["CommandCenter"] && isCommandCenterMorphing(unit))
+		state := 1
+	else if (type = A_unitID["PlanetaryFortress"]) 
+		getBuildStatsPF(unit, state) ;state = queue size 1 means 1 worker is in production
+	else 
+		getBuildStats(unit, state)
+	return state
+
+}
+
+; state =	0x0A = flying | 32 ->PF | 64 -> orbital
+; state = 	0x76 idle
 isCommandCenterMorphing(unit)
 {
 	local state
@@ -8883,6 +8945,8 @@ isCommandCenterMorphing(unit)
 		return A_unitID["OrbitalCommand"]
 	return 0
 }
+
+
 isHatchOrLairMorphing(unit)
 {
 			/*
@@ -9368,6 +9432,25 @@ return
 
 
 
+
+getBuildStatsPF(unit, byref QueueSize := "",  QueuePosition := 0) ; dirty hack until i can be bothered fixing this function
+{	GLOBAL GameIdentifier
+	STATIC O_pQueueArray := 0x34, O_IndexParentTypes := 0x18, O_unitsQueued := 0x28
+	CAbilQueue := ReadMemory(getUnitAbilityPointer(unit) + 0x5C, GameIdentifier)
+
+	localQueSize := ReadMemory(CAbilQueue + O_unitsQueued, GameIdentifier, 1) ; This is acutally the queue size
+
+	if IsByRef(QueueSize)
+		QueueSize := localQueSize
+	queuedArray := readmemory(CAbilQueue + O_pQueueArray, GameIdentifier)
+	B_QueueInfo := readmemory(queuedArray + 4 * QueuePosition, GameIdentifier)
+
+	if localQueSize
+		return getPercentageUnitCompleted(B_QueueInfo)
+	else return 0
+}
+
+
 getBuildStats(building, byref QueueSize := "")
 {
 	pAbilities := getUnitAbilityPointer(building)
@@ -9398,6 +9481,7 @@ getPointerToQueueInfo(pAbilities, CAbilQueueIndex, byref QueueSize := "", QueueP
 	STATIC O_pQueueArray := 0x34, O_IndexParentTypes := 0x18, O_unitsQueued := 0x28
 
 	CAbilQueue := readmemory(pAbilities + O_IndexParentTypes + 4 * CAbilQueueIndex, GameIdentifier)
+			
 
 	if IsByRef(QueueSize) 
 		QueueSize := readmemory(CAbilQueue + O_unitsQueued, GameIdentifier)
@@ -9416,15 +9500,38 @@ getCAbilQueueIndex(pAbilities, AbilitiesCount)
 	STATIC CAbilQueue := 0x19
 	ByteArrayAddress := ReadMemory(pAbilities, GameIdentifier) + 0x3 
 	ReadRawMemory(ByteArrayAddress, GameIdentifier, MemDump, AbilitiesCount)
-	
 	loop % AbilitiesCount
-		if (CAbilQueue = result := numget(MemDump, A_Index-1, "Char"))
-			return A_Index - 1
-	return -1 ;error
+		if (CAbilQueue = numget(MemDump, A_Index-1, "Char"))
+			return A_Index-1
+	 return -1 ;error
 }
 
 
+
+/*
+f2::
+
+
+
+	u := getSelectedUnitIndex()
+	o := getunitowner(u)
+	t := getPlayerTeam(o)
+	type := getUnitType(getSelectedUnitIndex())
+msgbox % ifTypeInList(type, l_Changeling)
+msgbox % l_Changeling
+msgbox % "unit: " u "`nOwner: " o "`nTeam: " t "`nType: " type "`n"  A_UnitName[type] 
 return
+
+
++f3::
+	u := getSelectedUnitIndex()
+	o := getunitowner(u)
+	t := getPlayerTeam(o)
+	type := getUnitType(getSelectedUnitIndex())
+msgbox % "unit: " u "`nOwner: " o "`nTeam: " t "`nType: " type "`n"  A_UnitName[type] 
+return
+
+
 ; nexus
 ;queueSize Offset for nexus is +0xA4 (from pQueueInfo)
 ; pQueTimerBase := 0xB0 + pQueueInfo  ; there is more infor here like number of probes in production, number of queues probes (mothership doeant affect these)
