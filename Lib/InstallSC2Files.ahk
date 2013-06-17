@@ -46,6 +46,7 @@ InstallSC2Files()
 	FileInstall, Included Files\Used_Icons\Supply_1Protoss.png, %A_Temp%\Supply_1Protoss.png, 1
 	FileInstall, Included Files\Used_Icons\Supply_1Terran.png, %A_Temp%\Supply_1Terran.png, 1
 	FileInstall, Included Files\Used_Icons\Supply_1Zerg.png, %A_Temp%\Supply_1Zerg.png, 1
+	FileInstall, Included Files\Used_Icons\Starcraft-2.ico, %A_Temp%\Starcraft-2.ico, 1
 	FileInstall, Included Files\Used_Icons\Worker_0Protoss.png, %A_Temp%\Worker_0Protoss.png, 1
 	FileInstall, Included Files\Used_Icons\Worker_0Terran.png, %A_Temp%\Worker_0Terran.png, 1
 	FileInstall, Included Files\Used_Icons\Worker_0Zerg.png, %A_Temp%\Worker_0Zerg.png, 1
