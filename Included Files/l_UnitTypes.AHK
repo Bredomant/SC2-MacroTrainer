@@ -419,6 +419,7 @@ l_UnitTypes =
 	Tempest = 422,
 	WidowMine = 424,
 	Viper = 425,
-	WidowMineBurrowed = 426	
+	WidowMineBurrowed = 426,	
+	ProtossVespeneGeyser = 507
 )
 #LTrim, off

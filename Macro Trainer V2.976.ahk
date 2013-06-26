@@ -13,7 +13,6 @@
 ; compiled using AHK 1.1.09.03 - the later version have changed how soundset works. Cant be bothered working it out and nothing beneficial in the updates 
 
 /*	Things to do
-	Fix Changeling colour
 	Team send warn message after clicking building..maybe
 	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
 */
@@ -70,6 +69,7 @@ if not A_IsAdmin
 	try  Run *RunAs "%A_ScriptFullPath%"
 	ExitApp
 }
+Process, Priority, , H
 Menu Tray, Add, &Settings && Options, options_menu
 Menu Tray, Add, &Check For Updates, TrayUpdate
 Menu Tray, Add, &Homepage, Homepage
@@ -136,6 +136,7 @@ if HideTrayIcon
 InstallSC2Files()
 #include %A_ScriptDir%\Included Files\Gdip.ahk
 #include %A_ScriptDir%\Included Files\Colour Selector.ahk
+#include %A_ScriptDir%\Included Files\Class_BufferInputFast.AHk
 
 CreatepBitmaps(a_pBitmap, a_unitID)
 aUnitInfo := []
@@ -327,7 +328,7 @@ g_GLHF:
 	if !isChatOpen()
 		send, +{Enter}
 	send, GL{ASC 3}HF{!}
-	SetStoreCapslockMode, Off
+	SetStoreCapslockMode, Off ; this isn't really needed as it is no off by default for new threads
 return
 
 g_DeselectUnit:
@@ -342,19 +343,24 @@ return
 
 
 ;	This ReleaseModifiers function needs to wait an additional amount of time, as SC2 can be slow to 
-;	update its keystate and/or it buffers input/keys for a while.
+;	update its keystate and/or it buffers input/keys for a while. Perhaps checking logical keystate would be better
+;	but this isnt solid as the game state is still slower to change than this.
 ; 	I have added the AdditionalKeys which is mainly used for zerg burrow
 ;	and i have provided an additional 15 ms sleep time if burrow is being held down
+; 	can't use critical inside function, as that will delay all timers too much
 
-ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "", timeout := "") ;timout in ms
+/*
+ReleaseModifiersOld(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "", timeout := "") ;timout in ms
 {
 	GLOBAL HotkeysZergBurrow
+	PreviousBatchLines := A_BatchLines
+	SetBatchLines, -1
 	startTime := A_Tickcount
 
 	startReleaseModifiers:	
 	while getkeystate("Ctrl", "P") || getkeystate("Alt", "P") 
 	|| getkeystate("Shift", "P") || getkeystate("LWin", "P") || getkeystate("RWin", "P")
-	||  AdditionalKeys && (ExtraKeysDown := isaKeyPhysicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
+	||  AdditionalKeys && (ExtraKeysDown := isaKeyPhysicallyOrLogicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
 	|| (isPerformingAction := CheckIfUserPerformingAction && isUserPerformingAction()) ; have this function last as it can take the longest if lots of units selected
 	{
 		loopCount++
@@ -376,18 +382,65 @@ ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "",
 		else sleep, 35	;give time for sc2 to update keystate - it can be a slower than AHK (or it buffers)! 
 		Goto, startReleaseModifiers
 	}
+	SetBatchLines, %PreviousBatchLines%
+	return
+}
+*/
+
+ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "", timeout := "") ;timout in ms
+{
+	GLOBAL HotkeysZergBurrow
+	PreviousBatchLines := A_BatchLines
+	SetBatchLines, -1
+	startTime := A_Tickcount
+
+	startReleaseModifiers:	
+;	while readModifierState() 		;double check the modifiers extra safety. AHk detects changes faster than SC2 Actually it seems when using logical state theyre the same... herp derp im so stupid!
+
+	While getkeystate("Shift", "P") || getkeystate("Control", "P") || getkeystate("Alt", "P")
+	|| getkeystate("LWin", "P") || getkeystate("RWin", "P")		
+	|| getkeystate("Shift", "L") || getkeystate("Control", "L") || getkeystate("Alt", "L")
+	|| getkeystate("LWin", "L") || getkeystate("RWin", "L")
+	|| getkeystate("LButton", "P") || getkeystate("LButton", "L")
+	|| getkeystate("RButton", "P") || getkeystate("RButton", "L")
+	||  AdditionalKeys && (ExtraKeysDown := isaKeyPhysicallyOrLogicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
+	|| (isPerformingAction := CheckIfUserPerformingAction && isUserPerformingAction()) ; have this function last as it can take the longest if lots of units selected
+	{
+		loopCount++
+		ModifierDown := 1
+		if (timeout && A_Tickcount - startTime >= timeout)
+			return 1 ; was taking too long
+		if (loopCount = 1 && Beep && !isPerformingAction && !ExtraKeysDown)	;wont beep if casting or burrow AKA 'extra key' is down
+			SoundPlay, %A_Temp%\ModifierDown.wav	
+		if ExtraKeysDown
+			LastExtraKeyHeldDown := ExtraKeysDown ; as ExtraKeysDown will get blanked in the loop preventing detection in the below if
+		else LastExtraKeyHeldDown := ""
+		sleep(5)
+	}
+;	if ModifierDown
+;	{
+;		ModifierDown := 0
+;		if (LastExtraKeyHeldDown = HotkeysZergBurrow)
+;			sleep 50 ;as burrow can 'buffer' within sc2
+;		else sleep, 5 	; I tried not having this here since adding the readmodifier state - but hard to judge difference 
+;						; I think its a good idea to have a sleep to allow the selection buffer to update in case the user changes selection i.e mouse down then up
+;		Goto, startReleaseModifiers
+;	}
+	SetBatchLines, %PreviousBatchLines%
 	return
 }
 
-isaKeyPhysicallyDown(Keys)
+
+
+isaKeyPhysicallyOrLogicallyDown(Keys)
 {
   if isobject(Keys)
   {
     for Index, Key in Keys
-      if getkeystate(Key, "P")
+      if getkeystate(Key, "P") || getkeystate(Key, "L")
         return key
   }
-  else if getkeystate(Keys, "P")
+  else if getkeystate(Keys, "P") || getkeystate(Keys, "L")
   	return Keys ;keys!
   return 0
 }
@@ -634,6 +687,9 @@ clock:
 		game_status := "game", warpgate_status := "not researched", gateway_count := warpgate_warning_set := 0
 		AW_MaxWorkersReached := TmpDisableAutoWorker := 0
 		MiniMapWarning := [], a_BaseList := [], aUnitModel := [], aGatewayWarnings := []
+		aResourceLocations := []
+		BufferInputFast.disableHotkeys() ; disable any previously created buffered hotkeys in case user has changed the key blocking list
+		BufferInputFast.createHotkeys(aButtons.List) ; re-create the hotkeys	
 		if WinActive(GameIdentifier)
 			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := ReDrawIdleWorkers := ReDrawLocalPlayerColour := 1
 		if idle_enable	;this is the idle AFK
@@ -654,6 +710,7 @@ clock:
 			zergGetHatcheriesToInject(oHatcheries)
 			settimer, g_ForceInjectSuccessCheck, %FInjectHatchFrequency%	
 		}
+		aResourceLocations := getMapInforMineralsAndGeysers()
 		if	mineralon
 			settimer, money, 500
 		if	gas_on
@@ -690,7 +747,7 @@ clock:
 		CreateHotkeys()
 		if (a_LocalPlayer["Name"] == "Kalamity")
 		{
-			Hotkey, If, WinActive(GameIdentifier) && time
+			Hotkey, If, WinActive(GameIdentifier) && time && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, >!g, g_GLHF
 			Hotkey, If
 		}	
@@ -756,12 +813,13 @@ return
 
 Cast_ChronoGates:
 	ReleaseModifiers()
-	Critical
+	Critical 		;just blocking here so can use critical, otherwise would need nothread timers if wanted to track input then re-send
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
-	BufferInput(aButtons.List, "Block")
+
+	BufferInputFast.BlockInput()
 	CastChronoWarpgates()
-	BufferInput(aButtons.List) ;re-enable keys without sending buffer
+	BufferInputFast.disableBufferingAndBlocking()
 	Critical Off	
 Return
 
@@ -775,7 +833,8 @@ CastChronoWarpgates()
 	HighlightedGroup := getSelectionHighlightedGroup()
 	send % "^" CG_control_group
 	send % CG_nexus_Ctrlgroup_key
-	sleep % Chrono_Gate_Sleep/2 ;needs a few ms to update the selection buffer
+;	sleep % Chrono_Gate_Sleep/2 ;needs a few ms to update the selection buffer
+	sleep(5) ;needs a few ms to update the selection buffer
 	SelectionCount := getSelectionCount()
 	While (A_index <= SelectionCount)
 	{
@@ -815,8 +874,9 @@ CastChronoWarpgates()
 		for  index, unit in a_Result
 		{
 			If (A_index > max_chronod)
-				Break		
-			sleep, %Chrono_Gate_Sleep% 
+				Break	
+			if Chrono_Gate_Sleep
+				sleep(Chrono_Gate_Sleep)
 			getMiniMapMousePos(unit, click_x, click_y)
 			click_x := click_x, click_y := click_y
 			send % chrono_key
@@ -836,15 +896,19 @@ CastChronoWarpgates()
 
 
 Auto_Group:
-	critical
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	AutoGroup(A_AutoGroup, AG_Delay)
-	critical, off
 	Return
 
 AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
-{ 	global GameIdentifier
+{ 	global GameIdentifier, aButtons
 	static PrevSelectedUnits, SelctedTime
+
+	BatchLines := A_BatchLines
+	Thread, NoTimers, true
+	SetBatchLines, -1
+
+
 	numGetUnitSelectionObject(oSelection)
 	selectedUnits := oSelection.Count
 	, SelectedTypes := oSelection.Types
@@ -856,7 +920,7 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 				WrongUnit := 1
 				break
 		}
-		CurrentlySelected .= unit.UnitIndex
+		CurrentlySelected .= "," unit.UnitIndex
 		found := 0
 		For Player_Ctrl_Group, ID_List in A_AutoGroup	;check the array - player_ctrl_group = key 1,2,3 etc, ID_List is the value
 		{
@@ -886,7 +950,7 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 		PrevSelectedUnits := CurrentlySelected
 		SelctedTime := A_Tickcount
 	}
-	if (A_Tickcount - SelctedTime >= AGDelay) && !WrongUnit  && (CtrlType_i = SelectedTypes) && (Player_Ctrl_GroupSet <> "") && WinActive(GameIdentifier) ; note <> "" as there is group 0! cant use " Player_Ctrl_GroupSet "
+	if (A_Tickcount - SelctedTime >= AGDelay) && !WrongUnit  && (CtrlType_i = SelectedTypes) && (Player_Ctrl_GroupSet <> "") && WinActive(GameIdentifier) && !isGamePaused() ; note <> "" as there is group 0! cant use " Player_Ctrl_GroupSet "
 	{		;note, i use Alt as 'group 2' - so i have winactive here as i can 'alt tab out' thereby selecting a groupable unit and having the program send the command while outside sc2
 		Sort, CtrlGroupSet, D| N U			;also now needed due to possible AG_delay and user being altabbed out when sending
 		CtrlGroupSet := RTrim(CtrlGroupSet, "|")	
@@ -894,9 +958,22 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 			AG_Temp_count := A_Index	;this counts the number of different ctrl groups ie # 1's  and 2's etc - must be only 1
 		If (AG_Temp_count = 1) && !isMenuOpen()
 		&& !getkeystate("Shift", "P") && !getkeystate("Control", "P") && !getkeystate("Alt", "P")
-		&& !getkeystate("LWin", "P") && !getkeystate("RWin", "P")
-			send, +%Player_Ctrl_GroupSet%
+		&& !getkeystate("LWin", "P") && !getkeystate("RWin", "P")		
+		&& !getkeystate("Shift", "L") && !getkeystate("Control", "L") && !getkeystate("Alt", "L")
+		&& !getkeystate("LWin", "L") && !getkeystate("RWin", "L")
+		{
+			; testing without blocking user input
+			Sleep(1) ; give time for selection buffer to update. This along with blocking input should cover pre- and post-selection delay buffer changes
+			numGetUnitSelectionObject(oSelection)
+			for index, Unit in oSelection.Units
+				PostDelaySelected .= "," unit.UnitIndex
+			if (CurrentlySelected = PostDelaySelected)
+				send, +%Player_Ctrl_GroupSet%
+		}
+			
 	}
+	SetBatchLines, %BatchLines%
+	Thread, NoTimers, false
 	Return
 }
 
@@ -960,24 +1037,8 @@ Cast_DisableInject:
 	Return
 
 
-BlockInput(Mode="Disable", byref L_Keys="", Delimiter="|") ; eg 	;	BlockInput("All", keylist)
-{ 							
-	If (Mode = "All")		;note 2 button hotkeys eg Shift+1 or ctrl+a will still work
-		BlockInput, MouseMove	;note ctrl/shift/alt not in the keylists ..... 
-	If (Mode = "Enable" || Mode = "All")			
-		Loop, Parse, L_Keys, %Delimiter%
-			Try	 Hotkey, %A_LoopField%, g_DoNothing, On
-	Else
-	{
-		Loop, Parse, L_Keys, %Delimiter%
-			Try	Hotkey, %A_LoopField%, Off
-		BlockInput, MouseMoveOff	
-		CreateHotkeys()	
-	}
-Return
-}
 
-; due to actually blocking the mouse properly, cant restore the boxdrag but I have it checking Mouse state via SC2 memory in the is casting section anyway
+; due to actually blocking the mouse properly, cant restore the boxdrag but I have it checking Mouse sta7te via SC2 memory in the is casting section anyway
 
 cast_ForceInject:
 cast_inject:
@@ -1003,7 +1064,8 @@ cast_inject:
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
 
 
-	BufferInput(aButtons.List, "Buffer", 0)
+	;	BufferInput(aButtons.List, "Buffer", 0)
+	BufferInputFast.BufferInput()
 
 	If (Inject.LMouseState := GetKeyState("LButton")) ; 1=down
 		send {click Left up}
@@ -1031,7 +1093,9 @@ cast_inject:
 	
 	If ChatStatus
 		send {Enter}
-	BufferInput(aButtons.List, "Send")
+
+	;	BufferInput(aButtons.List, "Send", 1) ; 1 so mouse isn't moved for the saved mouse clicks 
+	BufferInputFast.Send(1) ; 1 so mouse isn't moved for the saved mouse clicks 
 
 	if (Inject.LMouseState AND !GetKeyState("LButton", "P")) ;mouse button up
 		send {click Left up}
@@ -1053,6 +1117,8 @@ Return
 
 g_ForceInjectSuccessCheck:
 
+	if isGamePaused()
+		return 
 	if !F_Inject_Enable
 	{
 		settimer, g_ForceInjectSuccessCheck, off	
@@ -1121,8 +1187,11 @@ getBurrowedQueenCountInControlGroup(Group, ByRef UnburrowedCount="")
 
 getCurrentlyHighlightedUnitType(ByRef SampleTargetFilter="")
 {
-	PreviousCritical := A_IsCritical
-	critical, on ;otherwise takes too long! still takes a long time for lots of selected units! 733ms for 118 selected units when sorting them
+;	PreviousCritical := A_IsCritical 	
+	BatchLines := A_BatchLines
+	Thread, NoTimers, true 	;shouldn't use critical here, incase i'm trying to track user input
+	SetBatchLines, -1
+;	critical, on ;otherwise takes too long! still takes a a bit of time for lots of selected units! 16ms for 295 and 63ms for 540 supply selected units when sorting them
 
 	if (getSelectionHighlightedGroup() = 0 && getSelectionCount()) ; this is a trick to speed it up so if heaps of units are selected but only first highlighted, it wont sort them
 	{
@@ -1146,15 +1215,21 @@ getCurrentlyHighlightedUnitType(ByRef SampleTargetFilter="")
 				}
 			}
 		}
-	Critical %PreviousCritical%
+	SetBatchLines, %BatchLines%
+	Thread, NoTimers, false ; dont think is required as the thread is about to end
+
+;	Critical %PreviousCritical%
 	Return 0 ;either error or no units selected
 }
 
 ;not sure if this works
 findunitTypeTabPosition(l_searchType, ByRef SampleTargetFilter="") ; l_searchType a commo delimited list
 {
-	PreviousCritical := A_IsCritical
-	critical, on ;otherwise takes too long! still takes a long time for lots of selected units! 733ms for 118 selected units when sorting them
+;	PreviousCritical := A_IsCritical
+;	critical, on ;otherwise takes too long! still takes a a bit of time for lots of selected units! 16ms for 295 and 63ms for 540 supply selected units when sorting them
+	BatchLines := A_BatchLines
+	Thread, NoTimers, true 	;shouldn't use critical here, incase i'm trying to track user input
+	SetBatchLines, -1
 
 	if (getSelectionHighlightedGroup() = 0 && getSelectionCount()) ; this is a trick to speed it up so if heaps of units are selected but only first highlighted, it wont sort them
 	{
@@ -1179,36 +1254,53 @@ findunitTypeTabPosition(l_searchType, ByRef SampleTargetFilter="") ; l_searchTyp
 				}
 			}
 		}
-	Critical %PreviousCritical%
+;	Critical %PreviousCritical%
+	SetBatchLines, %BatchLines%
+	Thread, NoTimers, false ; dont think is required as the thread is about to end
 	Return 0 ;either error or no units selected
 }
 
 
-
-
-
 isUserPerformingAction()
-{	Local Type, worker
-	type := getCurrentlyHighlightedUnitType()
+{	GLOBAL
+;	Local Type, worker
+;	type := getCurrentlyHighlightedUnitType()
 ;	if a_UnitTargetFilter.Structure & TargetFilter
 ;		return 0 ; as it's a building and the user cant really be doing anything - perhaps set rally point for hatches via 'y'... Dont need to do this anymore
-	If (a_LocalPlayer["Race"] = "Terran")
-		worker := "SCV"	
-	Else If (a_LocalPlayer["Race"] = "Protoss")
-		worker := "Probe"
-	Else Worker := "Drone"
+;	If (a_LocalPlayer["Race"] = "Terran")
+;		worker := "SCV"	
+;	Else If (a_LocalPlayer["Race"] = "Protoss")
+;		worker := "Probe"
+;	Else Worker := "Drone"
 
-	if ( type = A_UnitID[Worker] && isUserBusyBuilding() )  || IsUserMovingCamera() || IsMouseButtonActive() ; so it wont do anything if user is holding down a mousebutton! eg dragboxing
+;	if ( type = A_UnitID[Worker] && isUserBusyBuilding() )  || IsUserMovingCamera() || IsMouseButtonActive() ; so it wont do anything if user is holding down a mousebutton! eg dragboxing
+	
+	if ( isUserBusyBuilding() || IsUserMovingCamera() || IsMouseButtonActive() 	; so it wont do anything if user is holding down a mousebutton! eg dragboxing
+	||  pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ) ; this gives 1 when reticle/cast cursor is present
 		return 1
-	else return pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ; this gives 1 when reticle/cast cursor is present
+	else return 0
+}
+
+isUserPerformingActionIgnoringCamera()
+{	GLOBAL
+	if ( isUserBusyBuilding() || IsMouseButtonActive() 	; so it wont do anything if user is holding down a mousebutton! eg dragboxing
+	||  pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ) ; this gives 1 when reticle/cast cursor is present
+		return 1
+	else return 0
 }
 
 
+
+; for the second old pointer
 ; This will return 1 if the basic or advanced building selection card is up (even if all structures greyed out)
 ; This will also return 1 when user is trying to place the structure
 isUserBusyBuilding()	
 { 	GLOBAL
-	return pointer(GameIdentifier, P_IsUserBuildingWithWorker, 01_IsUserBuildingWithWorker, 02_IsUserBuildingWithWorker, 03_IsUserBuildingWithWorker, 04_IsUserBuildingWithWorker)
+	; if 6, it means that either the basic or advanced build cards are displayed - even if all are greyed out (and hence a worker is selected) - give 1 for most other units, but gives 7 for targeting reticle
+	if ( 6 = pointer(GameIdentifier, P_IsBuildCardDisplayed, 01_IsBuildCardDisplayed, 02_IsBuildCardDisplayed, 03_IsBuildCardDisplayed)) 
+		return 1 ; as it seems 6 is only displayed when the worker build cards are up, so don't need to double check with below pointer
+	;	return pointer(GameIdentifier, P_IsUserBuildingWithWorker, 01_IsUserBuildingWithWorker, 02_IsUserBuildingWithWorker, 03_IsUserBuildingWithWorker, 04_IsUserBuildingWithWorker)
+	else return 0
 }
 	
 
@@ -2158,6 +2250,7 @@ getMiniMapMousePos(Unit, ByRef  Xvar="", ByRef  Yvar="") ; Note raounded as mous
 	return	
 }
 
+
 getMiniMapPos(Unit, ByRef  Xvar="", ByRef  Yvar="") ; unit aray index Number
 {
 	global minimap
@@ -2171,8 +2264,8 @@ convertCoOrdindatesToMiniMapPos(ByRef  X, ByRef  Y) ; unit aray index Number
 {
 	global minimap
 	X -= minimap.MapLeft, Y -= minimap.MapBottom ; correct units position as mapleft/start of map can be >0
-	, X := minimap.ScreenLeft + (X/minimap.MapPlayableWidth * minimap.Width)
-	, Y := minimap.Screenbottom - (Y/minimap.MapPlayableHeight * minimap.Height)		;think about rounding mouse clicks igornore decimals
+	, X := round(minimap.ScreenLeft + (X/minimap.MapPlayableWidth * minimap.Width))
+	, Y := round(minimap.Screenbottom - (Y/minimap.MapPlayableHeight * minimap.Height))		;think about rounding mouse clicks igornore decimals
 	return	
 }
 
@@ -2526,7 +2619,10 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, HumanMouseTimeHi, %config_file%, %section%, HumanMouseTimeHi, 110
 	IniRead, ProcessSleep, %config_file%, %section%, ProcessSleep, 0
 	IniRead, SetBatchLines, %config_file%, %section%, SetBatchLines, 10ms
+		SetBatchLines := -1  ;fuck the user settings put her to max!
 		SetBatchLines, %SetBatchLines%
+
+
 	IniRead, UnitDetectionTimer_ms, %config_file%, %section%, UnitDetectionTimer_ms, 3500
 	
 
@@ -2566,7 +2662,6 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, EnableAutoWorkerTerranStart, %config_file%, %section%, EnableAutoWorkerTerranStart, 0 
 	IniRead, EnableAutoWorkerProtossStart, %config_file%, %section%, EnableAutoWorkerProtossStart, 0 
 	IniRead, ToggleAutoWorkerState_Key, %config_file%, %section%, ToggleAutoWorkerState_Key, #F2
-	IniRead, AutoWorkerProtectionDelay, %config_file%, %section%, AutoWorkerProtectionDelay, 800
 	IniRead, AutoWorkerAPMProtection, %config_file%, %section%, AutoWorkerAPMProtection, 160
 	IniRead, AutoWorkerStorage_T_Key, %config_file%, %section%, AutoWorkerStorage_T_Key, 3
 	IniRead, AutoWorkerStorage_P_Key, %config_file%, %section%, AutoWorkerStorage_P_Key, 3
@@ -2733,7 +2828,7 @@ ini_settings_write:
 		{
 			Try Hotkey,	%exit_hotkey%, off
 
-			Hotkey, If, WinActive(GameIdentifier) 						
+			Hotkey, If, WinActive(GameIdentifier) && !BufferInputFast.isInputBlockedOrBuffered() 						
 														; 	deactivate the hotkeys
 			hotkey, %speaker_volume_up_key%, off		; 	so they can be updated with their new keys
 			hotkey, %speaker_volume_down_key%, off		;	
@@ -2743,7 +2838,7 @@ ini_settings_write:
 			hotkey, %program_volume_down_key%, off		; still left the overall try just incase i missed something
 			hotkey, %warning_toggle_key%, off			; gives the user a friendlier error
 
-			Hotkey, If, WinActive(GameIdentifier) && time	
+			Hotkey, If, WinActive(GameIdentifier) && time && !BufferInputFast.isInputBlockedOrBuffered()	
 			hotkey, %worker_count_local_key%, off
 			hotkey, %worker_count_enemy_key%, off
 			hotkey, %Playback_Alert_Key%, off
@@ -2760,20 +2855,20 @@ ini_settings_write:
 		try	hotkey, %inject_start_key%, off
 		try	hotkey, %inject_reset_key%, off	
 
-			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
+			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, %castSelectArmy_key%, off
-			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
+			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, %castSplitUnit_key%, off
-			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable
+			Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, %castRemoveUnit_key%, off
-			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, %cast_inject_key%, off
 			hotkey, %F_InjectOff_Key%, Cast_DisableInject, on	
-			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, %Cast_ChronoGate_Key%, off
-			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time	
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()	
 			hotkey, %ToggleAutoWorkerState_Key%, off		
-			Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
+			Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
 			Hotkey, %ping_key%, off		
 			while (10 > i := A_index - 1)
 			{
@@ -3016,7 +3111,6 @@ ini_settings_write:
 	IniWrite, %EnableAutoWorkerTerranStart%, %config_file%, %section%, EnableAutoWorkerTerranStart
 	IniWrite, %EnableAutoWorkerProtossStart%, %config_file%, %section%, EnableAutoWorkerProtossStart
 	IniWrite, %ToggleAutoWorkerState_Key%, %config_file%, %section%, ToggleAutoWorkerState_Key
-	IniWrite, %AutoWorkerProtectionDelay%, %config_file%, %section%, AutoWorkerProtectionDelay
 	IniWrite, %AutoWorkerAPMProtection%, %config_file%, %section%, AutoWorkerAPMProtection
 	IniWrite, %AutoWorkerStorage_T_Key%, %config_file%, %section%, AutoWorkerStorage_T_Key
 	IniWrite, %AutoWorkerStorage_P_Key%, %config_file%, %section%, AutoWorkerStorage_P_Key
@@ -3842,10 +3936,6 @@ Gui, Tab, Auto
 		Gui, Add, Edit, Readonly yp-2 x+10 center w65 vToggleAutoWorkerState_Key gedit_hotkey, %ToggleAutoWorkerState_Key%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleAutoWorkerState_Key,  Edit ;have to use a trick eg '#' as cant write directly to above edit var, or it will activate its own label!
 
-	Gui, Add, Text, xs+220 ys-35 w85, Delay Protection:
-		Gui, Add, Edit, Number Right x+15 yp-2 w50 vTT_AutoWorkerProtectionDelay
-				Gui, Add, UpDown,  Range400-100000 vAutoWorkerProtectionDelay, %AutoWorkerProtectionDelay%		
-	
 	Gui, Add, Text, xs+220 ys w85, APM Protection:
 		Gui, Add, Edit, Number Right x+15 yp-2 w50 vTT_AutoWorkerAPMProtection
 				Gui, Add, UpDown,  Range0-100000 vAutoWorkerAPMProtection, %AutoWorkerAPMProtection%		
@@ -3910,8 +4000,9 @@ Gui, Tab, Info
 		
 		gui, Add, Text, w400 y+25, Although you will most likely not notice this, workers will not be produced while:
 		gui, Add, Text, w400 y+5, • The control, alt, shift, or windows keys are held down.
-		gui, Add, Text, w400 y+5, • The user is casting a spell.
+		gui, Add, Text, w400 y+5, • A spell is being cast (includes attack)
 		gui, Add, Text, w400 y+5, • The construction card i.e. the basic or advanced building card is displayed.
+		gui, Add, Text, w400 y+5, • A non-self unit is selected e.g. a mineral patch or an enemy/allied unit.
 
 		gui, font, norm s10
 		gui, font, 		
@@ -4362,7 +4453,8 @@ AutoWorkerMakeWorker_P_Key_TT := #AutoWorkerMakeWorker_P_Key_TT := "The keyboard
 TT_AutoWorkerMaxWorkerTerran_TT := TT_AutoWorkerMaxWorkerProtoss_TT := AutoWorkerMaxWorkerTerran_TT := AutoWorkerMaxWorkerProtoss_TT := "Worker production will stop for the remainder of the game when this number of workers exist.`n"
 				. "Workers can then be 'sacked' and the function will remain off!`n`nIf you wish to turn it back on, simply use the 'toggle hotkey' twice."
 AutoWorkerMaxWorkerPerBaseTerran_TT := TT_AutoWorkerMaxWorkerPerBaseProtoss_TT := AutoWorkerMaxWorkerPerBaseTerran_TT := AutoWorkerMaxWorkerPerBaseProtoss_TT :=  "Worker production will stop when this number is exceeded by`n"
-			. "the current worker count per the number of fully constructed (and control grouped) main-bases."
+			. "the current worker count per the number of fully constructed (and control grouped) main-bases`n"
+			. "WHICH are within 8 map units of a gas geyser."
 
 Inject_spawn_larva_TT := #Inject_spawn_larva_TT := "This needs to correspond to your SC2 'spawn larva' button.`n`nThis key is sent during an inject to invoke Zerg's 'spawn larva' ability."
 
@@ -4399,15 +4491,22 @@ exit_hotkey_TT := "Can be used to exit the program while stealth mode is enabled
 TT2_MI_QueenDistance_TT := MI_QueenDistance_TT := "The edge of the hatchery creep is approximately 14`nThis helps prevent queens injecting on remote hatches - It works better with lower numbers"
 TT_F_Max_Injects_TT := F_Max_Injects_TT := "The max. number of 'forced' injects which can occur after a user 'F5'/auto-inject.`nSet this to a high number if you want the program to inject for you."
 TT_F_Alert_PreTime_TT := F_Alert_PreTime_TT := "The alert will sound X seconds before the forced inject."
-TT_F_Sleep_Time_TT := F_Sleep_Time_TT := "The amount of time spent idle after injecting a hatch.`nThis should be set as low as reliably possible so that the inject rounds are shorter and there is less chance of it affecting your gameplay."
+TT_F_Sleep_Time_TT := F_Sleep_Time_TT := "The amount of time spent idle after injecting each hatch.`n"
+		. "This should be set as low as reliably possible so that the inject rounds are shorter and there is less chance of it affecting your gameplay.`n`n"
+		. "This will vary for users, but 0 ms works reliably for me."
 TT_FInjectHatchFrequency_TT := FInjectHatchFrequency_TT := "How often the larva state of the hatcheries are checked. (In ms/real-time)`nAny uninjected hatches will then be injected.`n`nIncreasing this value will delay injects, that is, a hatch will remain uninjected for longer."
 
 
 TT_AM_KeyDelay_TT := AM_KeyDelay_TT := TT_I_KeyDelay_TT := I_KeyDelay_TT := TT_CG_KeyDelay_TT := CG_KeyDelay_TT := "This sets the delay between key/mouse events`nLower numbers are faster, but they may cause problems.`n0-10`n`nWith regards to speed, changing the 'sleep' time will generally have a larger impact."
-TT_Chrono_Gate_Sleep_TT := Chrono_Gate_Sleep_TT  := Auto_inject_sleep_TT := Edit_pos_var_TT := Auto_Mine_Sleep2_TT := TT_Auto_Mine_Sleep2_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'."
+TT_Chrono_Gate_Sleep_TT := Chrono_Gate_Sleep_TT  := Auto_Mine_Sleep2_TT := TT_Auto_Mine_Sleep2_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'."
 CG_chrono_remainder_TT := TT_CG_chrono_remainder_TT := "This is how many full chronoboosts will remain afterwards between all your nexi.`nA setting of 1 will leave 1 full chronoboost (or 25 energy) on one of your nexi."
 CG_control_group_TT := Inject_control_group_TT := #CG_control_group_TT := #Inject_control_group_TT := "This stores the currently selected units into a temporary control group, so that the current unit selection may be restored after the automated cycle.`nNote: Ensure that this is set to a control group you do not use."
 WorkerSplitType_TT := "Defines how many workers are rallied to each mineral patch."
+
+Auto_inject_sleep_TT := Edit_pos_var_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'.`n`n"
+		. "The lowest reliable values will vary for users, but for myself the minimap method can be used with a sleep time of 0 ms.`n"
+		. "The backspace methods require at least 8 ms."
+
 
 AM_MiniMap_PixelColourAlpha_TT := AM_MiniMap_PixelColourRed_TT := AM_MiniMap_PixelColourGreen_TT := AM_MinsiMap_PixelColourBlue_TT := "The ARGB pixel colour of the mini map mineral field."
 #ResetPixelColour_TT := "Resets the pixel colour and variance to their default settings."
@@ -5888,7 +5987,10 @@ numGetControlGroupnObject(Byref oControlGroup, Group)
 		if (!isUnitDead(unit) && isUnitLocallyOwned(unit))
 		{
 			Local Type := getUnitType(unit)
-			oControlGroup.units.insert({ "UnitIndex": unit, "Type": Type}) ;note the object is unitS not unit!!!
+			Local x := getUnitPositionX(unit)
+			local Y := getUnitPositionY(unit)
+			local z := getUnitPositionZ(unit)
+			oControlGroup.units.insert({ "UnitIndex": unit, "Type": Type, "x": x, "y": y, "z": z}) ;note the object is unitS not unit!!!
 			oControlGroup["Count"]++
 			if Type not in %typeList%
 			{
@@ -5945,7 +6047,6 @@ temporarilyDisableAutoWorkerProduction()
 			{
 				TmpDisableAutoWorker := 1
 				SetTimer, g_RenableAutoWorkerState, -4500 ; give time for user to morph/lift base ; use timer so dont have this function queueing up
-
 			}
 		}
 	}
@@ -5953,14 +6054,23 @@ temporarilyDisableAutoWorkerProduction()
 }
 
 g_autoWorkerProductionCheck:
-if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !TmpDisableAutoWorker && !AW_MaxWorkersReached && getPlayerCurrentAPM() < AutoWorkerAPMProtection)
+if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !TmpDisableAutoWorker && !AW_MaxWorkersReached  )
+{
+	while (getPlayerCurrentAPM() > AutoWorkerAPMProtection)
+	{	
+		if (A_index > 45) ; so its been longer then 500 ms
+			return 
+		sleep 10
+	}
 	autoWorkerProductionCheck()
+}
 return
 
 autoWorkerProductionCheck()
 {	GLOBAl A_unitID, a_LocalPlayer, Base_Control_Group_T_Key, AutoWorkerStorage_P_Key, AutoWorkerStorage_T_Key, Base_Control_Group_P_Key
 	, AutoWorkerMakeWorker_T_Key, AutoWorkerMakeWorker_P_Key, AutoWorkerMaxWorkerTerran, AutoWorkerMaxWorkerPerBaseTerran
-	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached, AutoWorkerProtectionDelay
+	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached
+	, aResourceLocations, aButtons, EventKeyDelay
 	static TickCountRandomSet := 0, randPercent
 
 	if (a_LocalPlayer["Race"] = "Terran") 
@@ -6010,7 +6120,15 @@ autoWorkerProductionCheck()
 		|| object.type = A_unitID["PlanetaryFortress"] || object.type = A_unitID["Nexus"] )
 		&& !isUnderConstruction(object.unitIndex) 
 		{
-			Basecount++
+			; this is for terran, so if build cc inside base, wont build up to 60 workers even though 2 bases, but just 1 mining
+			for index, geyser in aResourceLocations.geysers
+				if isUnitNearUnit(geyser, object, 7.9) ; also compares z but for 1 map unit ; so if the base is within 8 map units it counts. It seems geyers are generally no more than 7 or 7.5 away
+				{
+					Basecount++
+					break
+				}
+
+
 			if !isWorkerInProduction(object.unitIndex) ; also accounts for if morphing 
 				idleBases++
 			else 
@@ -6065,12 +6183,51 @@ autoWorkerProductionCheck()
 
 	if (MaxWokersTobeMade >= 1) && (idleBases || almostComplete || (halfcomplete && !nearHalfComplete)  ) ; i have >= 1 in case i stuffed the math and end up with a negative number or a fraction
 	{
-		if ReleaseModifiers(0, 1, makeWorkerKey, 60) ;times out after 60ms
-			return ;as it timed out 
-		Critical
+	;	numGetUnitSelectionObject(oSelection)
+	;	for index, object in oSelection.units  			; this is just a quick check even with the dirty selection buffer
+	;		if (object.owner != a_LocalPlayer.slot)  	; so if theres not a match it wont make the thread sleep 
+	;			return 
+
+;		if ReleaseModifiers(0, 1, makeWorkerKey, 60) ;times out after 60ms
+;			return ;as it timed out 
+		While getkeystate("Shift", "P") || getkeystate("Control", "P") || getkeystate("Alt", "P")
+		|| getkeystate("LWin", "P") || getkeystate("RWin", "P")		
+		|| getkeystate("Shift", "L") || getkeystate("Control", "L") || getkeystate("Alt", "L")
+		|| getkeystate("LWin", "L") || getkeystate("RWin", "L")
+		|| getkeystate("LButton", "P") || getkeystate("LButton", "L")
+		|| getkeystate("RButton", "P") || getkeystate("RButton", "L")
+		|| isUserPerformingActionIgnoringCamera()
+		{
+			if (A_index > 12)
+				return ; timed out after 60 ms
+			sleep(5)
+		}
+		Thread, NoTimers, true
+		BatchLines := A_BatchLines
+		SetBatchLines, -1
+
 		SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 		SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
-		BufferInput(aButtons.List, "Block", 0)
+		BufferInputFast.BufferInput()
+		Sleep(1) ; give time for the selection buffer to update
+		
+
+
+
+		HighlightedGroup := getSelectionHighlightedGroup()
+		numGetUnitSelectionObject(oSelection)
+
+		for index, object in oSelection.units
+		{
+			L_SelectionIndexes .= "," object.unitIndex
+			if (object.owner != a_LocalPlayer.slot) 	; as cant restore unit selection. Need to work out how to detect allied leaver
+			{
+			;	BufferInput(aButtons.List, "Send", 0) ; allow the mouse to move for the saved co-ordinates
+				SetBatchLines, %BatchLines%
+				Thread, NoTimers, false ; dont think is required as the thread is about to end
+				return 
+			}
+		}
 
 		If (ChatStatus := isChatOpen())
 		{
@@ -6078,17 +6235,15 @@ autoWorkerProductionCheck()
 			send {click Left %Xscentre% %Yscentre%}
 		}
 
-
-		HighlightedGroup := getSelectionHighlightedGroup()
-		numGetUnitSelectionObject(oSelection)
-
-		for index, object in oSelection.units
-			L_SelectionIndexes .= "," object.unitIndex
-
 		if (L_SelectionIndexes != L_ctrlGroupIndexes) ; hence if the 'main base' control group is already selected, it wont bother control grouping them (and later restoring them)
 		{
-			send % "^" controlstorageGroup
+			numGetControlGroupnObject(oControlstorage, controlstorageGroup) 	; this checks if the currently selected units match those
+			for index, object in oControlstorage.units 							; already stored in the ctrl group
+				L_ControlstorageIndexes .= "," object.unitIndex 				; if they do, it wont bother sending the store control group command
+			if (L_SelectionIndexes != L_ControlstorageIndexes)
+				send % "^" controlstorageGroup
 			send % mainControlGroup
+
 		}
 		Else If HighlightedGroup ; != 0
 		{
@@ -6099,28 +6254,27 @@ autoWorkerProductionCheck()
 
 		while (A_Index <= MaxWokersTobeMade)
 			send % makeWorkerKey
-		if (L_SelectionIndexes != L_ctrlGroupIndexes)		
+		if (L_SelectionIndexes != L_ctrlGroupIndexes)
+		{		
+			Sleep(4) 					; I think sc2 needs a sleep as otherwise this gets ignored every now and then ; but this could have been due to the other previous stuffups
 			send % controlstorageGroup
+		}
 
 		while (A_Index <= HighlightedGroup)
 			send {Tab}
 
 		If ChatStatus
 			send {Enter}
-		BufferInput(aButtons.List, "Send")
 
-		Critical Off	
+		BufferInputFast.send()
 
-		sleep %AutoWorkerProtectionDelay% 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
+		SetBatchLines, %BatchLines%
+		Thread, NoTimers, false ; dont think is required as the thread is about to end
+		sleep, 800 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
 											; so will send another build event and queueing more workers
 	}
 	return
 }
-
-
-
-
-
 
 
 howManyUnitsCanBeProduced(mineralCost, gasCost, supplyUsage)
@@ -7629,6 +7783,9 @@ CreatepBitmaps(byref a_pBitmap, a_unitID)
 ;	#MaxThreadsPerHotkey 1 		- 
 ;	#MaxThreadsBuffer off
 
+; these hotkeys will be blocked and wont be activated if the user presses them while blocked - the keys that make themup will then be sent if it was buffered
+; send level doesnt seem to fix this
+
 CreateHotkeys()
 {	global
 	Hotkeys:	 
@@ -7638,22 +7795,22 @@ CreateHotkeys()
 		SendMode Play	; causes problems 
 	Else ;If (input_method = "input")
 		SendMode Input 
-	#If, WinActive(GameIdentifier) 
+	#If, WinActive(GameIdentifier) && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && LwinDisable
-	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && !isMenuOpen() && time 
-	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time  
-	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
-	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time	
-	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace%
-	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
-	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
-	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable
-	#If, WinActive(GameIdentifier) && !isMenuOpen() && time
-	#If, WinActive(GameIdentifier) && time
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace% && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If
 	if HideTrayIcon
 		Hotkey,	%exit_hotkey%, Stealth_Exit, on 
-	Hotkey, If, WinActive(GameIdentifier) 														
+	Hotkey, If, WinActive(GameIdentifier) && !BufferInputFast.isInputBlockedOrBuffered() 														
 		hotkey, %speaker_volume_up_key%, speaker_volume_up, on		
 		hotkey, %speaker_volume_down_key%, speaker_volume_down, on
 		hotkey, %speech_volume_up_key%, speech_volume_up, on
@@ -7664,9 +7821,9 @@ CreateHotkeys()
 		hotkey, *~LButton, g_LbuttonDown, on
 	Hotkey, If, WinActive(GameIdentifier) && LwinDisable
 			hotkey, Lwin, g_DoNothing, on		
-	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
+	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %ping_key%, ping, on									;on used to re-enable hotkeys as were 
-	Hotkey, If, WinActive(GameIdentifier) && time						;turned off during save to allow for swaping of keys
+	Hotkey, If, WinActive(GameIdentifier) && time && !BufferInputFast.isInputBlockedOrBuffered()		;turned off during save to allow for swaping of keys
 		hotkey, %worker_count_local_key%, worker_count, on
 		hotkey, %worker_count_enemy_key%, worker_count, on
 		hotkey, %Playback_Alert_Key%, g_PrevWarning, on					
@@ -7688,23 +7845,23 @@ CreateHotkeys()
 		hotkey, %inject_start_key%, inject_start, on
 		hotkey, %inject_reset_key%, inject_reset, on
 	}	
-	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %castSelectArmy_key%, g_SelectArmy, on  ; buffer to make double tap better remove 50ms delay
 	;	hotkey, %castSelectArmy_key%, g_SelectArmy, on, B ; buffer to make double tap better remove 50ms delay
-	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && SplitUnitsEnable && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %castSplitUnit_key%, g_SplitUnits, on	
-	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && RemoveUnitEnable && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %castRemoveUnit_key%, g_DeselectUnit, on	
-	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %cast_inject_key%, cast_inject, on	
 		hotkey, %F_InjectOff_Key%, Cast_DisableInject, on			
-	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoGates, on	
-	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time	
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()	
 		hotkey, %ToggleAutoWorkerState_Key%, g_UserToggleAutoWorkerState, on	
-	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace% ; cant use !ischatopen() - as esc will close chat before memory reads value so wont see chat was open
+	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace% && !BufferInputFast.isInputBlockedOrBuffered() ; cant use !ischatopen() - as esc will close chat before memory reads value so wont see chat was open
 		hotkey, *~Esc, g_temporarilyDisableAutoWorkerProduction, on	
-	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time
+	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
 	while (10 > i := A_index - 1)
 	{
 		if A_UnitGroupSettings["LimitGroup", a_LocalPlayer["Race"], i,"Enabled"] 
@@ -7807,11 +7964,12 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 {	global
 	LOCAL click_x, click_y
 	LOCAL HighlightedGroup := getSelectionHighlightedGroup()
+
 ;	Send, ^%Inject_control_group%
 	send % "^" Inject_control_group
 	if (Method = "MiniMap" OR ForceInject)
 	{
-
+		Sleep(1) ; give time for the selection buffer to update
 		local xNew, yNew
 	;	Send, %MI_Queen_Group%
 	;	if ForceInject
@@ -7824,7 +7982,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		Local SkipUsedQueen := []
 		local MissedHatcheries := []
 	    randomcount := 0
-		If(Local QueenCount := getSelectedQueensWhichCanInject(oSelection))  ; this wont fetch burrowed queens!! so dont have to do a check below - as burrowed queens can make cameramove when clicking their hatch
+			
+		If (Local QueenCount := getSelectedQueensWhichCanInject(oSelection, ForceInject)) ; this wont fetch burrowed queens!! so dont have to do a check below - as burrowed queens can make cameramove when clicking their hatch
 		{
 			For Index, CurrentHatch in oHatcheries
 			{
@@ -7843,7 +8002,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 						If HumanMouse
 							MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 						send {click Left %click_x%, %click_y%}
-						Sleep, %sleepTime% 
+						if sleepTime
+							sleep(sleepTime)
 						Queen.Energy -= 25	
 						If ForceInject 		; this will update cursos position if user moves it during a force inject
 						{
@@ -7890,7 +8050,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 						If HumanMouse
 							MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 						send +{click Left %click_x%, %click_y%}	
-						Sleep, %sleepTime% 
+						if sleepTime
+							sleep(sleepTime)
 						if (A_Index = QueenUnit.maxIndex())
 							send % MI_Queen_Group
 						If ForceInject 		; this will update cursos position if user moves it during a force inject
@@ -7910,7 +8071,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 	{		; this is really just the minimap method made to look like the backspace
 		send % BI_create_camera_pos_x
 		send % MI_Queen_Group
-
+		Sleep(1) ; give time for the selection buffer to update
 		oHatcheries := [] ; Global used to check if successfuly without having to iterate again
 		local BaseCount := zergGetHatcheriesToInject(oHatcheries)
 		Local oSelection := []
@@ -7942,8 +8103,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 						click_x := CurrentHatch.MiniMapX, click_y := CurrentHatch.MiniMapY
 					
 					;	click_x := A_ScreenWidth/2 , click_y := A_ScreenHeight/2
-
-						Sleep, %sleepTime% 
+						if sleepTime
+							sleep(sleepTime)
 						send {click Left %click_x%, %click_y%}
 						Queen.Energy -= 25	
 						Break
@@ -7967,7 +8128,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		loop, % getBaseCameraCount()	
 		{
 			send % base_camera
-			Sleep, sleepTime/2	;need a sleep somerwhere around here to prevent walkabouts...sc2 not registerings box drag?
+
+			sleep(sleepTime/2)	;need a sleep somerwhere around here to prevent walkabouts...sc2 not registerings box drag?
 			If (drag_origin = "Right" OR drag_origin = "R") And HumanMouse ;so left origin - not case sensitive
 				Dx1 := A_ScreenWidth-15-rand(0,(360/1920)*A_ScreenWidth), Dy1 := 45+rand(5,(200/1080)*A_ScreenHeight), Dx2 := 40+rand((-5/1920)*A_ScreenWidth,(300/1920)*A_ScreenWidth), Dy2 := A_ScreenHeight-240-rand((-5/1080)*A_ScreenHeight,(140/1080)*A_ScreenHeight)
 			Else If (drag_origin = "Left" OR drag_origin = "L") AND HumanMouse ;left origin
@@ -7981,7 +8143,8 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 			}
 			Else 
 				send {click down %Dx1%, %Dy1%}{click up, %Dx2%, %Dy2%} 
-			Sleep, sleepTime/2	;sleep needs to be here (to give time to update selection buffer?)		
+		;	Sleep, sleepTime/2	;sleep needs to be here (to give time to update selection buffer?)	
+			sleep(5)
 			if (QueenIndex := filterSlectionTypeByEnergy(25, A_unitID["Queen"]))
 			{																	
 				send % Inject_spawn_larva							;have to think about macro hatch though
@@ -8108,7 +8271,7 @@ OldBackSpaceCtrlGroupInject()
 	{
 		unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
 		type := getUnitType(unit)
-		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25))
+		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25) && getUnitMoveState(unit) = -1) ; so queen is not moving/patrolling/a-moving/holdposition
 			aControlGroup.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aControlGroup.Queens[aControlGroup.Queens.MaxIndex(), "Type"] := Type
 
 	}
@@ -8116,8 +8279,8 @@ OldBackSpaceCtrlGroupInject()
 	return 	aControlGroup.Queens.maxindex()
  }
 
-
- getSelectedQueensWhichCanInject(ByRef aSelection)
+	; CheckMoveState for forced injects
+ getSelectedQueensWhichCanInject(ByRef aSelection, CheckMoveState := 0)
  {	GLOBAL A_unitID, O_scTypeCount, O_scTypeHighlighted, S_scStructure, O_scUnitIndex, GameIdentifier, B_SelectionStructure
  	, S_uStructure, GameIdentifier 
 	aSelection := []
@@ -8132,7 +8295,7 @@ OldBackSpaceCtrlGroupInject()
 	{
 		unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
 		type := getUnitType(unit)
-		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25))
+		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25)) && (!CheckMoveState || (CheckMoveState && getUnitMoveState(unit) = -1) )
 			aSelection.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aSelection.Queens[aSelection.Queens.MaxIndex(), "Type"] := Type
 
 	}
@@ -8145,6 +8308,14 @@ isQueenNearHatch(Queen, Hatch, MaxXYdistance) ; takes objects which must have ke
 	x_dist := Abs(Queen.X - Hatch.X)
 	y_dist := Abs(Queen.Y- Hatch.Y)																									
 																								; there is a substantial difference in height even on 'flat ground' - using a max value of 1 should give decent results
+	Return Result := (x_dist > MaxXYdistance) || (y_dist > MaxXYdistance) || (Abs(Queen.Z - Hatch.Z) > 1) ? 0 : 1 ; 0 Not near
+}
+
+isUnitNearUnit(Queen, Hatch, MaxXYdistance) ; takes objects which must have keys of x, y and z
+{
+	x_dist := Abs(Queen.X - Hatch.X)
+	y_dist := Abs(Queen.Y- Hatch.Y)																											
+												; there is a substantial difference in height even on 'flat ground' - using a max value of 1 should give decent results
 	Return Result := (x_dist > MaxXYdistance) || (y_dist > MaxXYdistance) || (Abs(Queen.Z - Hatch.Z) > 1) ? 0 : 1 ; 0 Not near
 }
 
@@ -8173,6 +8344,15 @@ isQueenNearHatch(Queen, Hatch, MaxXYdistance) ; takes objects which must have ke
  	return (48 = numget(MemDump, Unit * S_uStructure + O_uChronoAndInjectState, "UChar")/4096) ? 1 : 0
  }
 
+
+numGetUnitPositionXYZFromMemDump(ByRef MemDump, Unit)
+{	
+	position := []
+	, position.x := numGetUnitPositionXFromMemDump(MemDump, Unit)
+	, position.y := numGetUnitPositionYFromMemDump(MemDump, Unit)
+	, position.z := numGetUnitPositionZFromMemDump(MemDump, Unit)
+	return position
+}
 
 
 
@@ -8372,7 +8552,7 @@ LoadMemoryAddresses(SC2EXE)
 	, Follow: 512
 	, FollowNoAttack: 515} ; This is used by unit spell casters such as infestors and High temps which dont have a real attack 
 	; note I have Converted these hex numbers from their true decimal conversion 
-	; so that they can be used as bit flags with bit wise &
+	
 
 
 	P_BaseCameraIndex := SC2EXE + 0x0209C3C8
@@ -8388,8 +8568,18 @@ LoadMemoryAddresses(SC2EXE)
 	P_IsUserBuildingWithWorker := SC2EXE + 0x0209C3C8  	 	; this is like the one but will give 1 even when all structure are greyed out (eg lari tech having advanced mutations up)
 		01_IsUserBuildingWithWorker := 0x364 				; works for workers of all races
 		02_IsUserBuildingWithWorker := 0x17C           		; even during constructing SVC will give 0 - give 1 when selection card is up :)
-		03_IsUserBuildingWithWorker := 0x3A8
-		04_IsUserBuildingWithWorker := 0x168
+		03_IsUserBuildingWithWorker := 0x3A8   				; also displays 1 when the toss hallucination card is displayed
+		04_IsUserBuildingWithWorker := 0x168 				; BUT will also give 1 when a hatch is selected!!!
+
+
+	P_IsBuildCardDisplayed := SC2EXE + 0x020AFD6C 		; this displays 1 or 0 units selected - displays 7 when targeting reticle displayed/or placing a building (same thing)
+		01_IsBuildCardDisplayed := 0x7C 				; **but when either build card is displayed it displays 6 (even when all advanced structures are greyed out)!!!!
+		02_IsBuildCardDisplayed := 0x58 				; also displays 6 when the toss hallucination card is displayed
+		03_IsBuildCardDisplayed := 0x3C4 				; could use this in place of the current 'is user performing action offset'
+
+											; there are two of these the later 1 is actually the one that affects the game
+	B_ModifierKeys := SC2EXE + 0x1FDF7D8  	;shift = 1, ctrl = 2, alt = 4 (and add them together)
+
 
 	B_MouseButtonState := SC2EXE + 0x1FDF7BC 				;1 byte - MouseButton state 1 for Lbutton,  2 for middle mouse, 4 for rbutton
 															; 
@@ -8449,12 +8639,14 @@ LoadMemoryAddresses(SC2EXE)
 g_SplitUnits:
 	Thread, NoTimers, true
 	SetBatchLines, -1
-	BufferInput(aButtons.List, "Buffer", 0)
+	BufferInputFast.BlockInput()
+
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
 	SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
-	BufferInput(aButtons.List) ;re-enable keys without sending buffer
+	BufferInputFast.disableBufferingAndBlocking()
 	SetBatchLines, %SetBatchLines%
+	Thread, NoTimers, false ; dont think is required as the thread is about to end
 	return
 	
 
@@ -8465,7 +8657,7 @@ g_SelectArmy:
 	Thread, NoTimers, true
 	SetBatchLines, -1
 	DoublteTap := 0
-	BufferInput(aButtons.List, "Buffer", 0)
+	BufferInputFast.BlockInput()
 	If !isobject(SelectArmy)
 		SelectArmy := []
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
@@ -8503,7 +8695,8 @@ g_SelectArmy:
 		send ^%Sc2SelectArmyCtrlGroup%
 	BlockInput, MouseMoveOff
 	SetBatchLines, %SetBatchLines%
-	BufferInput(aButtons.List, "Off")
+	Thread, NoTimers, false
+	BufferInputFast.disableBufferingAndBlocking()
 	if !DoublteTap   ;needed if the user just holds down the hotkey - can stuff things up - BUT THE buffer thing can still stuff things?
 		KeyWait, %castSelectArmy_key%, T.1	;needed if the user just holds down the hotkey for ages - can stuff things up the hotkeys go weird - BUT THE buffer thing can still stuff things?
 	Else
@@ -8511,18 +8704,20 @@ g_SelectArmy:
 return
 
 getScreenAspectRatio()
-{
-	if ((AspectRatio := A_ScreenWidth / A_ScreenHeight) = 1680/1050)
+{ 	;ROUND as this should group 1366x768 (1.7786458333) in with 16:9
+	AspectRatio := Round(A_ScreenWidth / A_ScreenHeight, 2)
+	if ( AspectRatio = Round(1680/1050, 2)) 	; 1.6
 		AspectRatio := "16:10"
-	else if (AspectRatio = 1920/1080)
+	else if (AspectRatio = Round(1920/1080, 2)) ; 1.78
 		AspectRatio := "16:9"
-	else if (AspectRatio = 1280/1024)
+	else if (AspectRatio = Round(1280/1024, 2)) ; 1.25
 		AspectRatio := "5:4"
-	else if (AspectRatio = 1600/1200)
+	else if (AspectRatio = Round(1600/1200, 2)) ; 1.33
 		AspectRatio := "4:3"
 	else AspectRatio := "Unknown"
 	return AspectRatio
 }
+
 findUnitsToRemoveFromArmy(byref a_Units, DeselectXelnaga = 1, DeselectPatrolling = 1, DeselectHoldPosition = 0, DeselectFollowing = 0, l_Types = "")
 { global uMovementFlags
 	while (A_Index <= getSelectionCount())		;loop thru the units in the selection buffer	
@@ -9102,7 +9297,7 @@ getEnemyUnitCount(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUn
 				if (Type = aUnitID["CommandCenter"] && MorphingType := isCommandCenterMorphing(unit))	; this allows the orbital to show as a 'under construction' unit on the right
 					Priority := aUnitInfo["CommandCenter", "Priority"], aEnemyBuildingConstruction[Owner, Priority, MorphingType] := aEnemyBuildingConstruction[Owner, Priority, MorphingType] ? aEnemyBuildingConstruction[Owner, Priority, MorphingType] + 1 : 1 ;*** use 4 as morphing has no 0 priority, which != 4/CC
 				else if (Type = aUnitID["Hatchery"] || aUnitID["Lair"]) && MorphingType := isHatchOrLairMorphing(unit)
-					Priority := aUnitInfo["CommandCenter", "Priority"], aEnemyBuildingConstruction[Owner, Priority, MorphingType] := aEnemyBuildingConstruction[Owner, Priority, MorphingType] ? aEnemyBuildingConstruction[Owner, Priority, MorphingType] + 1 : 1
+					Priority := aUnitInfo["Hatchery", "Priority"], aEnemyBuildingConstruction[Owner, Priority, MorphingType] := aEnemyBuildingConstruction[Owner, Priority, MorphingType] ? aEnemyBuildingConstruction[Owner, Priority, MorphingType] + 1 : 1
 				else
 					aEnemyUnits[Owner, Priority, Type] := aEnemyUnits[Owner, Priority, Type] ? aEnemyUnits[Owner, Priority, Type] + 1 : 1 ;note +1 (++ will not work!!!)
 			}
@@ -9119,7 +9314,7 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 							, "Zerg": ["CreepTumorBurrowed","Broodling","Locust"]}
 
 	STATIC aAddUnits 	:=	{"Terran": {SupplyDepotLowered: "SupplyDepot", WidowMineBurrowed: "WidowMine", CommandCenterFlying: "CommandCenter", OrbitalCommandFlying: "OrbitalCommand"
-										, BarracksFlying: "Barracks", StarportFlying: "Starport", SiegeTankSieged: "SiegeTank", VikingAssault: "VikingAssault"}
+										, BarracksFlying: "Barracks", StarportFlying: "Starport", SiegeTankSieged: "SiegeTank", VikingAssault: "VikingFighter"}
 							, "Zerg": {DroneBurrowed: "Drone", ZerglingBurrowed: "Zergling", HydraliskBurrowed: "Hydralisk", UltraliskBurrowed: "Ultralisk", RoachBurrowed: "Roach"
 							, InfestorBurrowed: "Infestor", BanelingBurrowed: "Baneling", QueenBurrowed: "Queen", SporeCrawlerUprooted: "SporeCrawler", SpineCrawlerUprooted: "SpineCrawler"}} 
 
@@ -9152,7 +9347,7 @@ FilterUnits(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitPane
 
 
 									; note - could have just done - if name contains "Burrowed" check, substring = minus burrowed
-									; overlorrd cocoon = morphing overseer (and it isnt under construction)
+									; overlord cocoon = morphing overseer (and it isnt under construction)
 									;also need to account for morphing drones into buildings 
 /*									; SupplyDepotDrop
 	object looks like this
@@ -9454,6 +9649,18 @@ IsCameraDragScrollActivated()
 	Return ReadMemory(B_CameraDragScroll, GameIdentifier, 1)
 }
 
+	; these will return the same as if you check logical state of the key
+	; whereas if check physical, AHK changes physical faster
+	; there are two of these the later 1 is actually the one that affects the game
+	; shift = 1, ctrl = 2, alt = 4 (and add them together)
+	; if you modify these values will actually affect in game
+readModifierState()
+{	GLOBAL 
+	return ReadMemory(B_ModifierKeys, GameIdentifier, 1)
+}
+
+
+
 ;f1::
 /*
 mousegetpos, mx, my 
@@ -9561,7 +9768,7 @@ getPercentageUnitCompleted(B_QueueInfo)
 	return round( (TotalTime - RemainingTime) / TotalTime, 2) ;return .47 (ie 47%)
 }
 
-
+; this doesnt correspond to the unit in production for all structures!
 getPointerToQueueInfo(pAbilities, CAbilQueueIndex, byref QueueSize := "", QueuePosition := 0)
 {	GLOBAL GameIdentifier
 	STATIC O_pQueueArray := 0x34, O_IndexParentTypes := 0x18, O_unitsQueued := 0x28
@@ -9592,7 +9799,206 @@ getCAbilQueueIndex(pAbilities, AbilitiesCount)
 	 return -1 ;error
 }
 
+; this is just used for testing
+getbilListIndex(pAbilities, AbilitiesCount)
+{	GLOBAL GameIdentifier
+	STATIC CAbilQueue := 0x19
+	abilties := []
+	ByteArrayAddress := ReadMemory(pAbilities, GameIdentifier) + 0x3 
+	ReadRawMemory(ByteArrayAddress, GameIdentifier, MemDump, AbilitiesCount)
+	loop % AbilitiesCount
+		abilties.insert(CAbilQueue := dectohex(numget(MemDump, A_Index-1, "Char")))
+	 return abilties
+}
 
+; This is used by the auto worker macro to check if a real one, or a extra/macro one
+getMapInforMineralsAndGeysers() 
+{ 	GLOBAL A_unitID
+	resources := [], resources.minerals := [], resources.geysers := []
+
+	Unitcount := DumpUnitMemory(MemDump)
+	while (A_Index <= Unitcount)
+	{
+		unit := A_Index - 1
+		TargetFilter := numgetUnitTargetFilter(MemDump, unit)
+		if isTargetDead(TargetFilter) 
+			continue
+		type := numgetUnitModelType(numgetUnitModelPointer(MemDump, unit))
+
+    	IF ( type = A_unitID["MineralField"] || type = A_unitID["RichMineralField"] )
+    		resources.minerals[unit] := numGetUnitPositionXYZFromMemDump(MemDump, unit)
+    	Else If ( type = A_unitID["VespeneGeyser"] || type = A_unitID["ProtossVespeneGeyser"]  
+    		|| type = A_unitID["SpacePlatformGeyser"] || type = A_unitID["RichVespeneGeyser"] )
+			resources.geysers[unit] := numGetUnitPositionXYZFromMemDump(MemDump, unit)
+	}
+	return resources
+}
+
+; have to think about if they restart the program and no minerals at base - probably better to use geysers
+; This just returns an object containing the middle x, y, and z positions of each mineral field i.e. group of patches on the map
+groupMinerals(minerals)
+{
+	averagedMinerals := []
+
+	groupMinerals_groupMineralsStart:
+
+	for unitIndex, unit in  minerals
+	{
+		for unitIndex2, unit2 in  minerals
+			if ( 	unitIndex != unitIndex2
+				&& 	abs(unit.x - unit2.x) < 9
+				&& 	abs(unit.y - unit2.y) < 9
+				&& 	abs(unit.z - unit2.z) < 1 )
+			{
+				unit.x := (unit.x + unit2.x) / 2
+				unit.y := (unit.y + unit2.y) / 2
+				unit.z := (unit.z + unit2.z) / 2
+				minerals.remove(unitIndex2)
+				goto groupMinerals_groupMineralsStart
+			}
+		averagedMinerals.insert( {x: unit.x, y: unit.y, z: unit.z} )
+		minerals.remove(unitIndex, "")
+	}
+	return averagedMinerals
+}
+
+
+
+f1::
+
+	SetBatchLines, -1
+	Thread, NoTimers, true
+sleep 500 
+soundplay *-1
+time := A_TickCount
+;	BufferInput(aButtons.List, "Buffer", 0)
+BufferInputFast.BufferInput()
+;BufferInputFast.BlockInput()
+	sleep 2500
+;	BufferInputFast.disableBufferingAndBlocking()
+;	BufferInput(aButtons.List, "Send", 0)
+BufferInputFast.send()
+;sendEvent {click Down}
+soundplay *48
+return
+
+f2::
+	SetBatchLines, -1
+	Thread, NoTimers, true
+var := ""
+time := A_TickCount
+loop 25
+{
+	sleep(1)
+	var .= A_TickCount - time "`n"
+}
+msgbox % var
+return
+!f2::
+
+
+msgbox % GetKeyState("Lbutton", "P") "`n" GetKeyState("Lbutton") "`n"
+return
+
++f3::
+msgbox % GetKeyState("Lbutton", "P") "`n" GetKeyState("Lbutton")
+msgbox % var
+return
+^f2::
+objtree(BufferInputFast.retrieveBuffer(), "aBuffer")
+return
+
+#If, !BufferInputFast.isInputBlockedOrBuffered() 
+~Lbutton Up::
+sleep(1)
+if !GetKeyState("Lbutton", "P") && GetKeyState("Lbutton") 
+	send {click left up}
+return
+/*
+f2::
+unit := getSelectedUnitIndex()
+msgbox % clipboard := substr(dectohex(B_uStructure + unit * S_uStructure),3)
+return 
+critical, on
+	keywait, Lbutton, D
+	keywait, Lbutton
+	send, 6
+	sleep, 10
+
+	numGetUnitSelectionObject(oTestSelection)
+	objtree(oTestSelection, "oTestSelection")
+	critical, off
+return
+/*
+
+f2::
+
+MouseGetPos, mx, my 
+
+selectedunit := getSelectedUnitIndex()
+
+settimer, g_TTTest, 200
+return 
+
+g_TTTest:
+testtime := A_TickCount
+getCurrentlyHighlightedUnitType()
+testtime := A_TickCount - testtime
+;ToolTip, % isUserBusyBuilding() "`n" pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction), (mx+10), (my+10)
+ToolTip, %  getUnitMoveState(selectedunit)	, (mx+10), (my+10)
+return 
+
+
+/*
+f2::
+unit1 := getSelectedUnitIndex(0)
+msgbox %  getUnitType(unit1)
+objtree(aResourceLocations.geysers)
+return
+
+
+unit1 := getSelectedUnitIndex(0)
+unit2 := getSelectedUnitIndex(0)
+Unitcount := DumpUnitMemory(MemDump)
+
+aunit1 := []
+aunit2 := []
+aunit1 := numGetUnitPositionXYZFromMemDump(MemDump, Unit1)
+aunit2 := numGetUnitPositionXYZFromMemDump(MemDump, Unit2)
+
+objtree(aunit1, "aunit1")
+objtree(aunit2, "aunit2")
+return
+
+/*
+f2::
+resources := []
+minerals := []
+
+	resources :=  getMineralsAndGeysers()
+	objtree(resources, "resources")
+ 	minerals := groupMinerals(resources.minerals)
+
+
+	objtree(minerals, "minerals")
+return
+
+f3::
+sleep 2000
+
+for index, mineralPatch in minerals
+{
+	click_x := mineralPatch.x,  click_y := mineralPatch.y
+	convertCoOrdindatesToMiniMapPos(click_x, click_y)
+	send {click Left %click_x%, %click_y%}
+	soundplay *-1
+	sleep 1000
+
+}
+	soundplay *-1
+	sleep 200
+	soundplay *-1
+return
 /*
 f2::
 
@@ -9746,3 +10152,12 @@ return
 		dspeak("Follow")
 		
 ; fold//
+
+
+
+
+
+
+
+
+*/

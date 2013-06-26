@@ -74,6 +74,7 @@
         ; in the blocking section)
         ; Also need the plain " LButton " here
         ;-- Mouse
+        ; the Up is used to monitor when lbutton is released during key buffering
     l_MouseKeysList=
        (ltrim join|
         LButton
@@ -85,6 +86,15 @@
         +!LButton
         ^!LButton
         +^!LButton
+        LButton Up
+        *LButton Up
+        +LButton Up
+        ^LButton Up
+        !LButton Up
+        +^LButton Up
+        +!LButton Up
+        ^!LButton Up
+        +^!LButton Up
         *RButton
         *MButton
         *WheelDown
