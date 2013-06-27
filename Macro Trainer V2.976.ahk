@@ -2294,6 +2294,7 @@ ShutdownProcedure:
 	close := ReadRawMemory()
 	Closed := ReadMemory_Str()
 	Gdip_Shutdown(pToken)
+	sleep("Off") ; this resets the timeEndPeriod/timeBeginPeriod
 	If A_IsCompiled
 	{	
 		SoundGet, volume
@@ -3363,7 +3364,7 @@ Gui, Tab,  Basic
 				Gui, Add, Text, xs+20 yp+25 vSG1, Sleep time (ms):`n(Lower is faster)
 					GuiControlGet, XTab2, Pos, SG1 ;XTabX = x loc
 				Gui, Add, Edit, Number Right xs+125 yp-2 w45 vEdit_pos_var 
-					Gui, Add, UpDown,  Range1-100000 vAuto_inject_sleep, %auto_inject_sleep%
+					Gui, Add, UpDown,  Range0-100000 vAuto_inject_sleep, %auto_inject_sleep%
 					GuiControlGet, settingsR, Pos, Edit_pos_var ;XTabX = x loc
 				Gui, Add, Checkbox, x%XTab2X% y+25 vCanQueenMultiInject checked%CanQueenMultiInject%,
 				Gui, Add, Text, x+0 yp-5, Queen Can Inject`nMultiple Hatcheries ; done as checkbox with 2 lines text is too close to checkbox
@@ -9883,6 +9884,8 @@ soundplay *48
 return
 
 f2::
+msgbox % getSystemTimerResolutions(min, max) "`n" min "`n" max 
+return 
 	SetBatchLines, -1
 	Thread, NoTimers, true
 var := ""
@@ -9908,12 +9911,7 @@ return
 objtree(BufferInputFast.retrieveBuffer(), "aBuffer")
 return
 
-#If, !BufferInputFast.isInputBlockedOrBuffered() 
-~Lbutton Up::
-sleep(1)
-if !GetKeyState("Lbutton", "P") && GetKeyState("Lbutton") 
-	send {click left up}
-return
+
 /*
 f2::
 unit := getSelectedUnitIndex()

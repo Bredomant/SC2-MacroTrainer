@@ -182,4 +182,11 @@ g_BufferInputFastLabel:
 return
 g_ReturnFastLabel:
 return
+#If, !BufferInputFast.isInputBlockedOrBuffered() 
+~Lbutton Up::
+sleep(1)
+if !GetKeyState("Lbutton", "P") && GetKeyState("Lbutton") 
+	send {click left up}
+return
+#If
 g_class_BufferInputFastLabelSkip>:
