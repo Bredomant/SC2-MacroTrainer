@@ -29,3 +29,27 @@ and be sure to call the timeEndPeriod function at the very end of the applicatio
 
 
 */
+
+/* This can be used to benchmark the sleep function
+f2::
+
+	SetBatchLines, -1
+	Thread, NoTimers, true
+	var := ""
+	DllCall("QueryPerformanceCounter", "Int64 *", Counter)
+	time :=  Counter
+	DllCall("QueryPerformanceFrequency", "Int64 *", Freq)
+
+	loop 10
+	{
+		;sleep(1)
+		sleep 1
+		DllCall("QueryPerformanceCounter", "Int64 *", Counter)
+		var .=  ((Counter - time) / Freq )*1000 "`n"
+	}
+	msgbox % var
+return
+
+
+
+*/

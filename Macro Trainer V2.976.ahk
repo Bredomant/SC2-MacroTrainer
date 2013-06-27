@@ -824,16 +824,16 @@ Cast_ChronoGates:
 Return
 
 CastChronoWarpgates()	
-{	global A_unitID, DeadFilterFlag, CG_control_group, chrono_key, CG_nexus_Ctrlgroup_key, CG_chrono_remainder, Chrono_Gate_Sleep, CG_Random_off, HumanMouse, HumanMouseTimeLo
-	, HumanMouseTimeLo, HumanMouseTimeHi
+{	global A_unitID, CG_control_group, chrono_key, CG_nexus_Ctrlgroup_key, CG_chrono_remainder, ChronoBoostSleep
+	, HumanMouse, HumanMouseTimeLo, HumanMouseTimeHi
 	a_warpgates := [], a_gateways := [],
-	a_WarpgatesOnCoolDown := [], F_baselist_var := [],  a_Result := []
+	a_WarpgatesOnCoolDown := [], a_Result := []
 
 	MouseGetPos, start_x, start_y
 	HighlightedGroup := getSelectionHighlightedGroup()
 	send % "^" CG_control_group
 	send % CG_nexus_Ctrlgroup_key
-;	sleep % Chrono_Gate_Sleep/2 ;needs a few ms to update the selection buffer
+;	sleep % ChronoBoostSleep/2 ;needs a few ms to update the selection buffer
 	sleep(5) ;needs a few ms to update the selection buffer
 	SelectionCount := getSelectionCount()
 	While (A_index <= SelectionCount)
@@ -875,10 +875,9 @@ CastChronoWarpgates()
 		{
 			If (A_index > max_chronod)
 				Break	
-			if Chrono_Gate_Sleep
-				sleep(Chrono_Gate_Sleep)
+			if ChronoBoostSleep
+				sleep(ChronoBoostSleep)
 			getMiniMapMousePos(unit, click_x, click_y)
-			click_x := click_x, click_y := click_y
 			send % chrono_key
 			If HumanMouse
 				MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
@@ -893,6 +892,106 @@ CastChronoWarpgates()
 		send {Tab}
 	Return 
 }
+
+Cast_ChronoStructure:
+UserPressedHotkey := A_ThisHotkey ; as this variable can get changed very quickly
+ReleaseModifiers()
+	Critical 		;just blocking here so can use critical, otherwise would need nothread timers if wanted to track input then re-send
+	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
+	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
+; BufferInputFast.BlockInput()
+if (UserPressedHotkey = Cast_ChronoStargate_Key)
+	Cast_ChronoStructure(A_unitID.Stargate)
+Else if (UserPressedHotkey = Cast_ChronoForge_Key)
+	Cast_ChronoStructure(A_unitID.Forge)
+Else if (UserPressedHotkey = Cast_ChronoNexus_Key)
+	Cast_ChronoStructure(A_unitID.Nexus)
+	BufferInputFast.disableBufferingAndBlocking()
+	Critical Off	
+return
+
+
+
+
+Cast_ChronoStructure(StructureToChrono)
+{	GLOBAL A_unitID, CG_control_group, chrono_key, CG_nexus_Ctrlgroup_key, CG_chrono_remainder, ChronoBoostSleep
+	, HumanMouse, HumanMouseTimeLo, HumanMouseTimeHi
+	
+	oStructureToChrono := []
+	MouseGetPos, start_x, start_y
+	HighlightedGroup := getSelectionHighlightedGroup()
+	send % "^" CG_control_group
+	send % CG_nexus_Ctrlgroup_key
+	sleep(5) ;needs a few ms to update the selection buffer
+
+	numGetUnitSelectionObject(oSelection)
+	for index, object in oSelection.units
+	{
+		if (object.type = A_unitID.Nexus && !isUnderConstruction(unit))
+			nexus_chrono_count += Floor(getUnitEnergy(object.UnitIndex)/25)
+		if !isUnitAStructure(object.unitIndex) ; as units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
+		{
+			dspeak("Error in Base Control Group.")
+			return 
+		}
+	}
+
+	IF nexus_chrono_count
+	{
+
+		Unitcount := DumpUnitMemory(MemDump)
+		while (A_Index <= Unitcount)
+		{
+			unit := A_Index - 1
+			if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(numgetUnitOwner(MemDump, Unit))
+			|| isTargetUnderConstruction(TargetFilter)
+		       Continue
+	    	Type := numgetUnitModelType(numgetUnitModelPointer(MemDump, Unit))
+	    	IF ( type = StructureToChrono && !isUnitChronoed(unit) ) 
+			{	
+				progress :=  getBuildStats(unit, QueueSize)	; need && QueueSize as if progress reports 0 when idle it will be added to the list
+				if ( (progress < .95 && QueueSize) || QueueSize > 1) ; as queue size of 1 means theres only 1 item being produced
+					oStructureToChrono.insert({Unit: unit, QueueSize: QueueSize, progress: progress})
+			}
+		}
+		;	structures with the longest queues will be chronoed first
+		; 	if queue size is equal, chronoed by progress (least progressed chronoed 1st)
+
+		Sort2DArray(oStructureToChrono, "progress", 1) ; so the strucutes with least progress gets chronoed (providing have same queue size)
+		Sort2DArray(oStructureToChrono, "QueueSize", 0) ; so One with the longest queue gets chronoed first
+		
+		max_chronod := nexus_chrono_count - CG_chrono_remainder
+		
+		for  index, oject in oStructureToChrono
+		{
+			If (A_index > max_chronod)
+				Break	
+			if ChronoBoostSleep
+				sleep(ChronoBoostSleep)
+			getMiniMapMousePos(oject.unit, click_x, click_y)
+			send % chrono_key
+			If HumanMouse
+				MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
+			send {click Left %click_x%, %click_y%}
+		}
+		If HumanMouse
+			MouseMoveHumanSC2("x" start_x "y" start_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
+		else MouseMove, start_x, start_y
+	}
+	send % CG_control_group
+	while (A_Index <= HighlightedGroup)
+		send {Tab}
+	Return 
+}
+
+
+
+
+
+
+
+
+
 
 
 Auto_Group:
@@ -1063,7 +1162,6 @@ cast_inject:
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
 
-
 	;	BufferInput(aButtons.List, "Buffer", 0)
 	BufferInputFast.BufferInput()
 
@@ -1176,7 +1274,7 @@ return
 getBurrowedQueenCountInControlGroup(Group, ByRef UnburrowedCount="")
 {	GLOBAL A_unitID
 	UnburrowedCount := BurrowedCount := 0
-	numGetControlGroupnObject(oControlGroup, Group)
+	numGetControlGroupObject(oControlGroup, Group)
 	for index, unit in oControlGroup.units
 		if (unit.type = A_unitID.QueenBurrowed)
 			BurrowedCount ++
@@ -2485,16 +2583,23 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, delay_warpgate_warn_followup, %config_file%, %section%, follow_up_time_delay, 15
 	IniRead, w_warpgate, %config_file%, %section%, spoken_warning, "WarpGate"
 
+	; ive just added the forge and stargate here as, the warpages already here
 	;[Chrono Boost Gateway/Warpgate]
 	section := "Chrono Boost Gateway/Warpgate"
 	IniRead, CG_Enable, %config_file%, %section%, enable, 1
 	IniRead, Cast_ChronoGate_Key, %config_file%, %section%, Cast_ChronoGate_Key, F5
 	IniRead, CG_control_group, %config_file%, %section%, CG_control_group, 9
-
 	IniRead, CG_nexus_Ctrlgroup_key, %config_file%, %section%, CG_nexus_Ctrlgroup_key, 4
 	IniRead, chrono_key, %config_file%, %section%, chrono_key, c
 	IniRead, CG_chrono_remainder, %config_file%, %section%, CG_chrono_remainder, 2
-	IniRead, Chrono_Gate_Sleep, %config_file%, %section%, Chrono_Gate_Sleep, 50
+	IniRead, ChronoBoostSleep, %config_file%, %section%, ChronoBoostSleep, 50
+	IniRead, ChronoBoostEnableForge, %config_file%, %section%, ChronoBoostEnableForge, 0
+	IniRead, ChronoBoostEnableStargate, %config_file%, %section%, ChronoBoostEnableStargate, 0
+	IniRead, ChronoBoostEnableNexus, %config_file%, %section%, ChronoBoostEnableNexus, 0
+	IniRead, Cast_ChronoForge_Key, %config_file%, %section%, Cast_ChronoForge_Key, ^F5
+	IniRead, Cast_ChronoStargate_Key, %config_file%, %section%, Cast_ChronoStargate_Key, +F5
+	IniRead, Cast_ChronoNexus_Key, %config_file%, %section%, Cast_ChronoNexus_Key, >!F5
+
 	
 	;[Advanced Auto Inject Settings]
 	IniRead, auto_inject_sleep, %config_file%, Advanced Auto Inject Settings, auto_inject_sleep, 50
@@ -2867,6 +2972,12 @@ ini_settings_write:
 			hotkey, %F_InjectOff_Key%, Cast_DisableInject, on	
 			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, %Cast_ChronoGate_Key%, off
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableForge && time && !BufferInputFast.isInputBlockedOrBuffered()
+			hotkey, %Cast_ChronoForge_Key%, off
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableStargate && time && !BufferInputFast.isInputBlockedOrBuffered()
+			hotkey, %Cast_ChronoStargate_Key%, off		
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableNexus && time && !BufferInputFast.isInputBlockedOrBuffered()
+			hotkey, %Cast_ChronoNexus_Key%, off
 			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()	
 			hotkey, %ToggleAutoWorkerState_Key%, off		
 			Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
@@ -2968,7 +3079,13 @@ ini_settings_write:
 	IniWrite, %CG_nexus_Ctrlgroup_key%, %config_file%, %section%, CG_nexus_Ctrlgroup_key
 	IniWrite, %chrono_key%, %config_file%, %section%, chrono_key
 	IniWrite, %CG_chrono_remainder%, %config_file%, %section%, CG_chrono_remainder
-	IniWrite, %Chrono_Gate_Sleep%, %config_file%, %section%, Chrono_Gate_Sleep
+	IniWrite, %ChronoBoostSleep%, %config_file%, %section%, ChronoBoostSleep
+	IniWrite, %ChronoBoostEnableForge%, %config_file%, %section%, ChronoBoostEnableForge
+	IniWrite, %ChronoBoostEnableStargate%, %config_file%, %section%, ChronoBoostEnableStargate
+	IniWrite, %ChronoBoostEnableNexus%, %config_file%, %section%, ChronoBoostEnableNexus
+	IniWrite, %Cast_ChronoForge_Key%, %config_file%, %section%, Cast_ChronoForge_Key
+	IniWrite, %Cast_ChronoStargate_Key%, %config_file%, %section%, Cast_ChronoStargate_Key
+	IniWrite, %Cast_ChronoNexus_Key%, %config_file%, %section%, Cast_ChronoNexus_Key
 	
 	;[Auto Control Group]
 	Short_Race_List := "Terr|Prot|Zerg"
@@ -3844,21 +3961,9 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vBug_TAB, Report B
 	Gui, Add, Edit, x+20 yp w250 h200 vReport_TXT,
 	Gui, Add, Button, vB_Report gB_Report xp+80 y+20 w80 h50, Report
 
-Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB, WarpGates
-	Gui, Add, GroupBox, w200 h190 section, Settings
-		Gui, Add, Checkbox, xp+10 yp+25 vCG_Enable checked%CG_Enable%, Enable
-		Gui, Add, Text, yp+35 w40,Hotkey:
-			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoGate_Key , %Cast_ChronoGate_Key%
-				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoGate_Key,  Edit				
-		tmpx := MenuTabX + 25
-		Gui, Add, Text, X%tmpx% yp+35, Sleep time (ms):
-		Gui, Add, Edit, Number Right xp+120 yp-2 w45 vTT_Chrono_Gate_Sleep 
-			Gui, Add, UpDown,  Range0-1000 vChrono_Gate_Sleep, %Chrono_Gate_Sleep%						
-		Gui, Add, Text, X%tmpx% yp+35, Chrono Remainder:`n    (1 = 25 mana)
-		Gui, Add, Edit, Number Right xp+120 yp-2 w45 vTT_CG_chrono_remainder 
-			Gui, Add, UpDown,  Range0-1000 vCG_chrono_remainder, %CG_chrono_remainder%		
-
-	Gui, Add, GroupBox, ys x+25  w200 h190 section, SC2 Keys && Control Groups
+Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vChronoBoost_TAB, Settings||Structures
+Gui, Tab, Settings	
+	Gui, Add, GroupBox, w200 h190 y+20 section, SC2 Keys && Control Groups			
 		Gui, Add, Text, xp+10 yp+25 , Stored Selection Control Group:
 			Gui, Add, Edit, Readonly xp+25 y+10  w100  center vCG_control_group , %CG_control_group%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#CG_control_group,  Edit				
@@ -3868,10 +3973,47 @@ Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vChrono_Gate_TAB,
 		Gui, Add, Text, xs+10 yp+35 ,Chrono Boost Key:
 			Gui, Add, Edit, Readonly xp+25 y+10  w100  center vchrono_key , %chrono_key%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#chrono_key,  Edit	
+	
+	Gui, Add, GroupBox, ys x+40  w200 h190 section, Misc. Settings				
+		tmpx := MenuTabX + 25
+		Gui, Add, Text, xp+10 yp+35, Sleep time (ms):
+		Gui, Add, Edit, Number Right xp+120 yp-2 w45 vTT_ChronoBoostSleep 
+			Gui, Add, UpDown,  Range0-1000 vChronoBoostSleep, %ChronoBoostSleep%						
+		Gui, Add, Text, xs+10 yp+35, Chrono Remainder:`n    (1 = 25 mana)
+		Gui, Add, Edit, Number Right xp+120 yp-2 w45 vTT_CG_chrono_remainder 
+			Gui, Add, UpDown,  Range0-1000 vCG_chrono_remainder, %CG_chrono_remainder%		
+
+
+
+
+Gui, Tab, Structures	
+	Gui, Add, GroupBox, w285 h60 y+20 section, Warpgates && Gateways
+		Gui, Add, Checkbox, xp+10 yp+25 vCG_Enable checked%CG_Enable%, Enable
+		Gui, Add, Text, x+20 yp w40,Hotkey:
+			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoGate_Key , %Cast_ChronoGate_Key%
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoGate_Key,  Edit				
+	
+	Gui, Add, GroupBox, w285 h60 xs yp+55 section, Forges	
+		Gui, Add, Checkbox, xp+10 yp+25 vChronoBoostEnableForge checked%ChronoBoostEnableForge%, Enable
+		Gui, Add, Text, x+20 yp w40,Hotkey:
+			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoForge_Key , %Cast_ChronoForge_Key%
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoForge_Key,  Edit	
+
+	Gui, Add, GroupBox, w285 h60 xs yp+55 section, Stargates	
+		Gui, Add, Checkbox, xp+10 yp+25 vChronoBoostEnableStargate checked%ChronoBoostEnableStargate%, Enable
+		Gui, Add, Text, x+20 yp w40,Hotkey:
+			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoStargate_Key , %Cast_ChronoStargate_Key%
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoStargate_Key,  Edit	
+
+
+	Gui, Add, GroupBox, w285 h60 xs yp+55 section, Nexi	
+		Gui, Add, Checkbox, xp+10 yp+25 vChronoBoostEnableNexus checked%ChronoBoostEnableNexus%, Enable
+		Gui, Add, Text, x+20 yp w40,Hotkey:
+			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoNexus_Key , %Cast_ChronoNexus_Key%
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoNexus_Key,  Edit	
 
 		Gui, Add, Text, X%tmpx% y+85 cRed, Note:
 		Gui, Add, Text, x+10 yp+0, If gateways exist, they will be chrono boosted after the warpgates. 
-
 
 Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoGroup_TAB, Terran||Protoss|Zerg|Delay|Info	
 Short_Race_List := "Terr|Prot|Zerg"
@@ -4351,7 +4493,7 @@ GuiControl, Hide, Home_TAB
 GuiControl, Hide, Injects_TAB 
 GuiControl, Hide, AutoGroup_TAB 
 GuiControl, Hide, AutoWorker_TAB 
-GuiControl, Hide, Chrono_Gate_TAB 
+GuiControl, Hide, ChronoBoost_TAB 
 GuiControl, Hide, AutoMine_TAB 
 GuiControl, Hide, MiscAutomation_TAB 
 GuiControl, Hide, Keys_TAB
@@ -4499,7 +4641,7 @@ TT_FInjectHatchFrequency_TT := FInjectHatchFrequency_TT := "How often the larva 
 
 
 TT_AM_KeyDelay_TT := AM_KeyDelay_TT := TT_I_KeyDelay_TT := I_KeyDelay_TT := TT_CG_KeyDelay_TT := CG_KeyDelay_TT := "This sets the delay between key/mouse events`nLower numbers are faster, but they may cause problems.`n0-10`n`nWith regards to speed, changing the 'sleep' time will generally have a larger impact."
-TT_Chrono_Gate_Sleep_TT := Chrono_Gate_Sleep_TT  := Auto_Mine_Sleep2_TT := TT_Auto_Mine_Sleep2_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'."
+TT_ChronoBoostSleep_TT := ChronoBoostSleep_TT  := Auto_Mine_Sleep2_TT := TT_Auto_Mine_Sleep2_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'."
 CG_chrono_remainder_TT := TT_CG_chrono_remainder_TT := "This is how many full chronoboosts will remain afterwards between all your nexi.`nA setting of 1 will leave 1 full chronoboost (or 25 energy) on one of your nexi."
 CG_control_group_TT := Inject_control_group_TT := #CG_control_group_TT := #Inject_control_group_TT := "This stores the currently selected units into a temporary control group, so that the current unit selection may be restored after the automated cycle.`nNote: Ensure that this is set to a control group you do not use."
 WorkerSplitType_TT := "Defines how many workers are rallied to each mineral patch."
@@ -4715,8 +4857,8 @@ OptionsTree:
 	}
 	ELSE IF ( Menu_TXT = "Chrono Boost" )
 	{
-		GUIcontrol, Show, Chrono_Gate_TAB
-		unhidden_menu := "Chrono_Gate_TAB"
+		GUIcontrol, Show, ChronoBoost_TAB
+		unhidden_menu := "ChronoBoost_TAB"
 	}
 	ELSE IF ( Menu_TXT = "Auto Mine" )
 	{
@@ -5971,7 +6113,7 @@ SetupColourArrays(ByRef HexColour, Byref MatrixColour)
 ; when a unit dies and is replaced by a local unit of same type it obviously wont respond or be 'ctrl grouped'
 ; so dont have to worry about that scenario
 
-numGetControlGroupnObject(Byref oControlGroup, Group)
+numGetControlGroupObject(Byref oControlGroup, Group)
 {	GLOBAL
 	oControlGroup := []
 	LOCAL GroupSize := getControlGroupCount(Group)
@@ -6067,11 +6209,15 @@ if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !T
 }
 return
 
+
+
 autoWorkerProductionCheck()
 {	GLOBAl A_unitID, a_LocalPlayer, Base_Control_Group_T_Key, AutoWorkerStorage_P_Key, AutoWorkerStorage_T_Key, Base_Control_Group_P_Key
 	, AutoWorkerMakeWorker_T_Key, AutoWorkerMakeWorker_P_Key, AutoWorkerMaxWorkerTerran, AutoWorkerMaxWorkerPerBaseTerran
 	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached
 	, aResourceLocations, aButtons, EventKeyDelay
+;	, EnableAutoWorkerTerran, EnableAutoWorkerProtoss
+
 	static TickCountRandomSet := 0, randPercent
 
 	if (a_LocalPlayer["Race"] = "Terran") 
@@ -6102,7 +6248,7 @@ autoWorkerProductionCheck()
 	if isGamePaused() || ( isMenuOpen() && !(ChatStatus := isChatOpen()) ) ;chat is 0 when  menu is in focus
 		return ;as let the timer continue to check
 
-	numGetControlGroupnObject(oMainbaseControlGroup, mainControlGroup)
+	numGetControlGroupObject(oMainbaseControlGroup, mainControlGroup)
 	workersInProduction := Basecount := almostComplete := idleBases := halfcomplete := nearHalfComplete := 0 ; in case there are no idle bases
 
 
@@ -6116,6 +6262,12 @@ autoWorkerProductionCheck()
 
 	for index, object in oMainbaseControlGroup.units
 	{
+		if !isUnitAStructure(object.unitIndex) ; as units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
+		{										; as the macro will tell that unit e.g. probe to 'make a worker' and cause it to bug out
+			dspeak("Error in Base Control Group. Auto Worker")
+			gosub g_UserToggleAutoWorkerState ; this will say 'off' Hence Will speak Auto worker Off	
+			return 
+		}
 
 		if ( object.type = A_unitID["CommandCenter"] || object.type = A_unitID["OrbitalCommand"]
 		|| object.type = A_unitID["PlanetaryFortress"] || object.type = A_unitID["Nexus"] )
@@ -6213,21 +6365,27 @@ autoWorkerProductionCheck()
 		Sleep(1) ; give time for the selection buffer to update
 		
 
-
-
 		HighlightedGroup := getSelectionHighlightedGroup()
 		numGetUnitSelectionObject(oSelection)
+		If !oSelection.Count  ; = 0 as nothing is selected so cant restore this/control group it
+		{
+			BufferInputFast.send()
+			SetBatchLines, %BatchLines%
+			Thread, NoTimers, false ; dont think is required as the thread is about to end
+			return 
 
+		}
 		for index, object in oSelection.units
 		{
 			L_SelectionIndexes .= "," object.unitIndex
 			if (object.owner != a_LocalPlayer.slot) 	; as cant restore unit selection. Need to work out how to detect allied leaver
-			{
-			;	BufferInput(aButtons.List, "Send", 0) ; allow the mouse to move for the saved co-ordinates
+			{ 										
+				BufferInputFast.send()
 				SetBatchLines, %BatchLines%
 				Thread, NoTimers, false ; dont think is required as the thread is about to end
 				return 
 			}
+
 		}
 
 		If (ChatStatus := isChatOpen())
@@ -6238,9 +6396,10 @@ autoWorkerProductionCheck()
 
 		if (L_SelectionIndexes != L_ctrlGroupIndexes) ; hence if the 'main base' control group is already selected, it wont bother control grouping them (and later restoring them)
 		{
-			numGetControlGroupnObject(oControlstorage, controlstorageGroup) 	; this checks if the currently selected units match those
+			numGetControlGroupObject(oControlstorage, controlstorageGroup) 	; this checks if the currently selected units match those
 			for index, object in oControlstorage.units 							; already stored in the ctrl group
 				L_ControlstorageIndexes .= "," object.unitIndex 				; if they do, it wont bother sending the store control group command
+
 			if (L_SelectionIndexes != L_ControlstorageIndexes)
 				send % "^" controlstorageGroup
 			send % mainControlGroup
@@ -6252,6 +6411,10 @@ autoWorkerProductionCheck()
 			loop % tabrepreat ;get tab selection back to 0 ;too hard and too many things can go wrong and slow it down if i try to tab to all user possible locations
 				send {tab}  ; as there are still building / priority rules i dont understand e.g. planetary fortress is last even though it has higher Unitindex than ebay
 		}					; and its much faster as dont have to double sort an array
+
+		;should search for a memory value to use to test of a main base is selected 
+		; other function gets spammed when user incorrectly adds a unit to the main control group (as it will take group 0) and for terran tell that unit to 'stop' when sends s
+
 
 		while (A_Index <= MaxWokersTobeMade)
 			send % makeWorkerKey
@@ -6770,6 +6933,11 @@ isUnderConstruction(building) ; starts @ 0 and only for BUILDINGS!
 { 	global  ; 0 means its completed
 ;	Return ReadMemory(B_uStructure + (building * S_uStructure) + O_uBuildStatus, GameIdentifier) ;- worked fine
 	return getUnitTargetFilterFast(building) & a_UnitTargetFilter.UnderConstruction
+}
+
+isUnitAStructure(unit)
+{	GLOBAL 
+	return getUnitTargetFilterFast(unit) & a_UnitTargetFilter.Structure
 }
 
 getUnitEnergy(unit)
@@ -7801,6 +7969,9 @@ CreateHotkeys()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Zerg") && (auto_inject <> "Disabled") && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableForge && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableStargate && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableNexus && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace% && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable && !BufferInputFast.isInputBlockedOrBuffered()
@@ -7858,6 +8029,12 @@ CreateHotkeys()
 		hotkey, %F_InjectOff_Key%, Cast_DisableInject, on			
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoGates, on	
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableForge && time && !BufferInputFast.isInputBlockedOrBuffered()
+		hotkey, %Cast_ChronoForge_Key%, Cast_ChronoStructure, on	
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableStargate && time && !BufferInputFast.isInputBlockedOrBuffered()
+		hotkey, %Cast_ChronoStargate_Key%, Cast_ChronoStructure, on
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableNexus && time && !BufferInputFast.isInputBlockedOrBuffered()
+		hotkey, %Cast_ChronoNexus_Key%, Cast_ChronoStructure, on	
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()	
 		hotkey, %ToggleAutoWorkerState_Key%, g_UserToggleAutoWorkerState, on	
 	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace% && !BufferInputFast.isInputBlockedOrBuffered() ; cant use !ischatopen() - as esc will close chat before memory reads value so wont see chat was open
@@ -9863,8 +10040,15 @@ groupMinerals(minerals)
 	return averagedMinerals
 }
 
+/*
 
+f2::
+unit := getSelectedUnitIndex()
+progress :=  getBuildStats(unit, QueueSize)
+msgbox % progress "`n" QueueSize "`n" isUnitChronoed(unit)
+return
 
+/*
 f1::
 
 	SetBatchLines, -1
@@ -9883,19 +10067,6 @@ BufferInputFast.send()
 soundplay *48
 return
 
-f2::
-msgbox % getSystemTimerResolutions(min, max) "`n" min "`n" max 
-return 
-	SetBatchLines, -1
-	Thread, NoTimers, true
-var := ""
-time := A_TickCount
-loop 25
-{
-	sleep(1)
-	var .= A_TickCount - time "`n"
-}
-msgbox % var
 return
 !f2::
 
