@@ -4536,8 +4536,10 @@ AutoWorkerProtectionDelay_TT := TT_AutoWorkerProtectionDelay_TT := "After a roun
 TT_AutoWorkerAPMProtection_TT := AutoWorkerAPMProtection_TT
 := TT_FInjectAPMProtection_TT := FInjectAPMProtection_TT := "Automations will be delayed while your INSTANTANEOUS APM is greater than this value.`n"
 		. "This helps reduce the likelihood of interfering with your game play.`n`nNote: If you're a chronic key spammer who constantly has high APM you may need to increase this value,`n"
-		. "otherwise actions may be delayed for too long."
-
+		. "otherwise actions may be delayed for too long.`n`n"
+		. "Note: With the various program changes and improvements which have been made, this setting is no longer required for automations to function seamlessly `n"
+		. "as automations should not interfere with your game play even if you have very high APM.`n"
+		. "This is now included as an simple additional user option."
 
 EnableAutoWorkerTerranStart_TT := EnableAutoWorkerProtossStart_TT := "Enables/Disables this function."
 AutoWorkerStorage_T_Key_TT := #AutoWorkerStorage_T_Key_TT := AutoWorkerStorage_P_Key_TT := #AutoWorkerStorage_P_Key_TT := "During an automation cycle your selected units will be temporarily stored in this control group.`n`nSpecify a control group that you do NOT use in game."
@@ -4579,7 +4581,10 @@ overall_program_TT := "The overall program volume. This affects both the speech 
 speaker_volume_up_key_TT := speaker_volume_down_key_TT := "Changes the windows master volume."
 speech_volume_down_key_TT := speech_volume_up_key_TT := "Changes the programs TTS volume."
 program_volume_up_key_TT := program_volume_down_key_TT := "Changes the programs overall volume."
-input_method_TT := "Sets the method of artificial input.`n""Event"" is the most 'reliable' across systems, but ""Input"" offers better performance and key buffering.`n Hence, use ""Input"" if it works."
+input_method_TT := "Sets the method of artificial input.`n"
+	. "Technically ""Event"" is the most 'reliable' across systems, but ""Input"" offers considerably better performance, key buffering and will work with almost all systems.`n"
+	. "Using ""Input"" will also reduce the likelihood of the program interfering with user game play during automations`n`n"
+	. "Hence, use ""Input"" unless it doesn't work."
 TT_EventKeyDelay_TT := EventKeyDelay_TT := "Sets the mouse and key delay (in ms) used when in SendEvent mode.`nLower values sends keystrokes faster - but setting this too low MAY cause some strokes to be missed.`nCommon values are (-1 to 10).`nNote: These delays are accumulative, and for functions which require numerous keystrokes e.g. split this delay can become quite substantial`n`nSendInput is faster and generally more reliable, hence SendInput should be used if it works on your system."
 
 auto_update_TT := "While enabled the program will automatically check for new versions during startup."
@@ -4598,7 +4603,9 @@ TT_FInjectHatchFrequency_TT := FInjectHatchFrequency_TT := "How often the larva 
 
 
 TT_AM_KeyDelay_TT := AM_KeyDelay_TT := TT_I_KeyDelay_TT := I_KeyDelay_TT := TT_CG_KeyDelay_TT := CG_KeyDelay_TT := "This sets the delay between key/mouse events`nLower numbers are faster, but they may cause problems.`n0-10`n`nWith regards to speed, changing the 'sleep' time will generally have a larger impact."
-TT_ChronoBoostSleep_TT := ChronoBoostSleep_TT  := Auto_Mine_Sleep2_TT := TT_Auto_Mine_Sleep2_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'."
+TT_ChronoBoostSleep_TT := ChronoBoostSleep_TT := "Sets the amount of time that the program sleeps for during each automation cycle.`nThis has a large effect on the speed, and hence how 'human' the automation appears'.`n`n"
+		. "If you want instant chronoboosts, a value of 0 ms works reliably for me.`n"
+		. "If 0 ms is not reliable for you, try increasing the sleep time by one or two ms. (it doesn't require much)"
 CG_chrono_remainder_TT := TT_CG_chrono_remainder_TT := "This is how many full chronoboosts will remain afterwards between all your nexi.`nA setting of 1 will leave 1 full chronoboost (or 25 energy) on one of your nexi."
 CG_control_group_TT := Inject_control_group_TT := #CG_control_group_TT := #Inject_control_group_TT := "This stores the currently selected units into a temporary control group, so that the current unit selection may be restored after the automated cycle.`nNote: Ensure that this is set to a control group you do not use."
 WorkerSplitType_TT := "Defines how many workers are rallied to each mineral patch."
@@ -6079,11 +6086,17 @@ SetupColourArrays(ByRef HexColour, Byref MatrixColour)
 
 ; this is a buffer which is only written to when issuing ctrl/shift grouping actions
 ; therefore the units it refers to may change as units die
-; and their index reused. 
+; and their unit indexs are reused!!!!!  So must use this CAREFULLY and only in certain situations!!!! 
 ; have to check if unit is alive  and control group buffer isn't updated
+
 ; unit dies and is replaced with own local unit
-; when a unit dies and is replaced by a local unit of same type it obviously wont respond or be 'ctrl grouped'
+; when a unit dies and is replaced by a local unit of same type it obviously wont respond or the 'ctrl grouped' command group
 ; so dont have to worry about that scenario
+
+; BUT still need to worry about the fact that the wrong units will be READ as alive
+; so if you know what unit should be in this control group, then just check unit type matches, is local unit and is alive
+; and this should work for most scenarios (or at least the chances of it causing a problem are quite low)
+
 
 numGetControlGroupObject(Byref oControlGroup, Group)
 {	GLOBAL
@@ -6117,6 +6130,12 @@ numGetControlGroupObject(Byref oControlGroup, Group)
 	}
 	return oControlGroup["Count"]
 }
+
+
+; On a side note, I discovered that there is a value 2-byte which represents of units in each subgroup
+; for both the current selection and control groups
+; the following subgroup count will be at +0x8
+
 
 ; there is an 'if' section in the bufferinput send that checks if the user pressed the Esc key
 ; if they did, it gosubs here
@@ -6237,13 +6256,6 @@ autoWorkerProductionCheck()
 
 	for index, object in oMainbaseControlGroup.units
 	{
-		if !isUnitAStructure(object.unitIndex) ; as units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
-		{										; as the macro will tell that unit e.g. probe to 'make a worker' and cause it to bug out
-			dspeak("Error in Base Control Group. Auto Worker")
-			gosub g_UserToggleAutoWorkerState ; this will say 'off' Hence Will speak Auto worker Off	
-			return 
-		}
-
 		if ( object.type = A_unitID["CommandCenter"] || object.type = A_unitID["OrbitalCommand"]
 		|| object.type = A_unitID["PlanetaryFortress"] || object.type = A_unitID["Nexus"] )
 		&& !isUnderConstruction(object.unitIndex) 
@@ -6255,7 +6267,7 @@ autoWorkerProductionCheck()
 					Basecount++
 					break
 				}
-
+			oBasesToldToBuildWorkers.insert({unitIndex: object.unitIndex, type: object.type})
 			if !isWorkerInProduction(object.unitIndex) ; also accounts for if morphing 
 				idleBases++
 			else 
@@ -6389,12 +6401,26 @@ autoWorkerProductionCheck()
 		;should search for a memory value to use to test of a main base is selected 
 		; other function gets spammed when user incorrectly adds a unit to the main control group (as it will take group 0) and for terran tell that unit to 'stop' when sends s
 
-
 		while (A_Index <= MaxWokersTobeMade)
 			send % makeWorkerKey
-		if (L_SelectionIndexes != L_ctrlGroupIndexes)
-		{		
-			Sleep(4) 					; I think sc2 needs a sleep as otherwise this gets ignored every now and then ; but this could have been due to the other previous stuffups
+									; 	When checking for a non-structure error (below) i don't think it's possible for the selection index to match the basecontrol group 
+									;	i.e. if a dead nexus is in the control group, the selection group can't match the base control group and
+									; 	it must enter the below 'if (L_SelectionIndexes != L_ctrlGroupIndexes) ''	
+									;	but if the user still has the erroneous grouped unit along with the base control group selected, this error wont
+									;	 get picked up, but the instant the user clicks something else it will, so it's not a real issue
+									;	(which includes a dead nexus - which could be another local unit) 
+									; 	as Its written so the nexus control group should never be added/grouped to the storage control group
+									; 	As the selection buffer can only contain living units
+
+		if (L_SelectionIndexes != L_ctrlGroupIndexes) 	
+		{												
+			Sleep(3) 					; I think sc2 needs a sleep as otherwise the send controlgroup storate gets ignored every now and then  (it worked well with 4)
+			
+			numGetUnitSelectionObject(oSelection) 	; can't use numgetControlGroup - as when nexus dies and is replaced with a local owned unit it will cause a warning
+			for index, object in oSelection.units
+				if !isUnitAStructure(object.unitIndex)	; as units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
+					BaseCtrlGroupError := 1					; as the macro will tell that unit e.g. probe to 'make a worker' and cause it to bug out	
+
 			send % controlstorageGroup
 		}
 
@@ -6408,6 +6434,15 @@ autoWorkerProductionCheck()
 
 		SetBatchLines, %BatchLines%
 		Thread, NoTimers, false ; dont think is required as the thread is about to end
+		
+							; With the BaseCtrlGroupError if the user still has the erroneous grouped unit along with the base control group selected, this error wont
+							; get picked up, but the instant the user clicks something else it will, so it's not a real issue
+		if BaseCtrlGroupError ; as non-structure units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
+		{	; as the macro will tell that unit e.g. probe to 'make a worker' and cause it to bug out
+			dspeak("Error in Base Control Group. Auto Worker")
+			gosub g_UserToggleAutoWorkerState ; this will say 'off' Hence Will speak Auto worker Off	
+			return 
+		}
 		sleep, 800 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
 											; so will send another build event and queueing more workers
 	}
@@ -10026,12 +10061,13 @@ groupMinerals(minerals)
 }
 
 f2::
-sleep 500
-soundplay *-1
+msgbox % getSelectedUnitIndex()
+msgbox % dectohex(getSelectedUnitIndex() * S_uStructure + B_uStructure)
 
-BufferInputFast.BufferInput()
-sleep 2000
-BufferInputFast.send()
+
+return
+numGetControlGroupObject(oControlGroup, 1)
+objtree(oControlGroup, "oControlGroup")
 return
 /*
 
