@@ -13,6 +13,7 @@
 ; compiled using AHK 1.1.09.03 - the later version have changed how soundset works. Cant be bothered working it out and nothing beneficial in the updates 
 
 /*	Things to do
+	Check if chrono structures are powered - It seems to be a behaviour ' Power User (Queue) '
 	Team send warn message after clicking building..maybe
 	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
 */
@@ -93,6 +94,7 @@ url := []
 url.vr := "http://www.users.on.net/~jb10/macro_trainer_version.txt"
 url.changelog := "http://www.users.on.net/~jb10/MT_ChangeLog.html"
 url.HelpFile := "http://www.users.on.net/~jb10/MTSite/helpfulAdvice.html"
+url.ChronoRules := "http://www.users.on.net/~jb10/MTSite/chronoBoost.html"
 url.Homepage := "http://www.users.on.net/~jb10/MTSite/overview.html"
 url.buyBeer := "http://www.users.on.net/~jb10/MTSite/buyBeer.html"
 url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
@@ -389,13 +391,9 @@ ReleaseModifiersOld(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = 
 
 ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "", timeout := "") ;timout in ms
 {
-	GLOBAL HotkeysZergBurrow
 	PreviousBatchLines := A_BatchLines
 	SetBatchLines, -1
 	startTime := A_Tickcount
-
-	startReleaseModifiers:	
-;	while readModifierState() 		;double check the modifiers extra safety. AHk detects changes faster than SC2 Actually it seems when using logical state theyre the same... herp derp im so stupid!
 
 	While getkeystate("Shift", "P") || getkeystate("Control", "P") || getkeystate("Alt", "P")
 	|| getkeystate("LWin", "P") || getkeystate("RWin", "P")		
@@ -403,34 +401,18 @@ ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "",
 	|| getkeystate("LWin", "L") || getkeystate("RWin", "L")
 	|| getkeystate("LButton", "P") || getkeystate("LButton", "L")
 	|| getkeystate("RButton", "P") || getkeystate("RButton", "L")
-	||  AdditionalKeys && (ExtraKeysDown := isaKeyPhysicallyOrLogicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
+	||  (AdditionalKeys && isaKeyPhysicallyOrLogicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
 	|| (isPerformingAction := CheckIfUserPerformingAction && isUserPerformingAction()) ; have this function last as it can take the longest if lots of units selected
 	{
-		loopCount++
-		ModifierDown := 1
 		if (timeout && A_Tickcount - startTime >= timeout)
 			return 1 ; was taking too long
-		if (loopCount = 1 && Beep && !isPerformingAction && !ExtraKeysDown)	;wont beep if casting or burrow AKA 'extra key' is down
+		if (A_Index = 1 && Beep && !isPerformingAction)	;wont beep if casting or burrow AKA 'extra key' is down
 			SoundPlay, %A_Temp%\ModifierDown.wav	
-		if ExtraKeysDown
-			LastExtraKeyHeldDown := ExtraKeysDown ; as ExtraKeysDown will get blanked in the loop preventing detection in the below if
-		else LastExtraKeyHeldDown := ""
 		sleep(5)
 	}
-;	if ModifierDown
-;	{
-;		ModifierDown := 0
-;		if (LastExtraKeyHeldDown = HotkeysZergBurrow)
-;			sleep 50 ;as burrow can 'buffer' within sc2
-;		else sleep, 5 	; I tried not having this here since adding the readmodifier state - but hard to judge difference 
-;						; I think its a good idea to have a sleep to allow the selection buffer to update in case the user changes selection i.e mouse down then up
-;		Goto, startReleaseModifiers
-;	}
 	SetBatchLines, %PreviousBatchLines%
 	return
 }
-
-
 
 isaKeyPhysicallyOrLogicallyDown(Keys)
 {
@@ -811,113 +793,31 @@ return
 ;	End of Game 'Setup'
 ;-------------------------
 
-Cast_ChronoGates:
+Cast_ChronoStructure:
+	UserPressedHotkey := A_ThisHotkey ; as this variable can get changed very quickly
 	ReleaseModifiers()
 	Critical 		;just blocking here so can use critical, otherwise would need nothread timers if wanted to track input then re-send
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
-
 	BufferInputFast.BlockInput()
-	CastChronoWarpgates()
-	BufferInputFast.disableBufferingAndBlocking()
-	Critical Off	
-Return
-
-CastChronoWarpgates()	
-{	global A_unitID, CG_control_group, chrono_key, CG_nexus_Ctrlgroup_key, CG_chrono_remainder, ChronoBoostSleep
-	, HumanMouse, HumanMouseTimeLo, HumanMouseTimeHi
-	a_warpgates := [], a_gateways := [],
-	a_WarpgatesOnCoolDown := [], a_Result := []
-
-	MouseGetPos, start_x, start_y
-	HighlightedGroup := getSelectionHighlightedGroup()
-	send % "^" CG_control_group
-	send % CG_nexus_Ctrlgroup_key
-;	sleep % ChronoBoostSleep/2 ;needs a few ms to update the selection buffer
-	sleep(5) ;needs a few ms to update the selection buffer
-	SelectionCount := getSelectionCount()
-	While (A_index <= SelectionCount)
-	{
-		unit := getSelectedUnitIndex(A_Index -1)
-		IF (A_unitID["Nexus"] = getUnitType(Unit) && !isUnderConstruction(unit))
-			nexus_chrono_count += Floor(getUnitEnergy(unit)/25)	
-	}
-
-	IF nexus_chrono_count
-	{
-
-		Unitcount := DumpUnitMemory(MemDump)
-		while (A_Index <= Unitcount)
-		{
-			unit := A_Index - 1
-			if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(owner := numgetUnitOwner(MemDump, Unit))
-		       Continue
-	    	Type := numgetUnitModelType(numgetUnitModelPointer(MemDump, Unit))
-	    	IF ( type = A_unitID["WarpGate"] && !isUnitChronoed(unit)) && (cooldown := getWarpGateCooldown(unit))
-				a_WarpgatesOnCoolDown.insert({"Unit": unit, "Cooldown": cooldown})
-			Else IF (type = A_unitID["Gateway"] AND !isTargetUnderConstruction(TargetFilter) 
-												&& isGatewayProducingOrConvertingToWarpGate(unit) && !isUnitChronoed(unit)) ; 0 means its completed 
-				a_gateways.insert(unit)   
-		}
-
-		if a_WarpgatesOnCoolDown.MaxIndex()
-			Sort2DArray(a_WarpgatesOnCoolDown, "Cooldown", 0)	;so warpgates with longest cooldown get chronod first
-		if a_gateways.MaxIndex()	
-			RandomiseSimpleArray(a_gateways)
-
-		for index, Warpgate in a_WarpgatesOnCoolDown
-			a_Result.insert(Warpgate.Unit)	
-		for index, Gateways in a_gateways
-			a_Result.insert(Gateways)
-
-		max_chronod := nexus_chrono_count - CG_chrono_remainder
-		for  index, unit in a_Result
-		{
-			If (A_index > max_chronod)
-				Break	
-			if ChronoBoostSleep
-				sleep(ChronoBoostSleep)
-			getMiniMapMousePos(unit, click_x, click_y)
-			send % chrono_key
-			If HumanMouse
-				MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
-			send {click Left %click_x%, %click_y%}
-		}
-		If HumanMouse
-			MouseMoveHumanSC2("x" start_x "y" start_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
-		else MouseMove, start_x, start_y
-	}
-	send % CG_control_group
-	while (A_Index <= HighlightedGroup)
-		send {Tab}
-	Return 
-}
-
-Cast_ChronoStructure:
-UserPressedHotkey := A_ThisHotkey ; as this variable can get changed very quickly
-ReleaseModifiers()
-	Critical 		;just blocking here so can use critical, otherwise would need nothread timers if wanted to track input then re-send
-	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
-	SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
-; BufferInputFast.BlockInput()
-if (UserPressedHotkey = Cast_ChronoStargate_Key)
-	Cast_ChronoStructure(A_unitID.Stargate)
-Else if (UserPressedHotkey = Cast_ChronoForge_Key)
-	Cast_ChronoStructure(A_unitID.Forge)
-Else if (UserPressedHotkey = Cast_ChronoNexus_Key)
-	Cast_ChronoStructure(A_unitID.Nexus)
+	if (UserPressedHotkey = Cast_ChronoStargate_Key)
+		Cast_ChronoStructure(A_unitID.Stargate)
+	Else if (UserPressedHotkey = Cast_ChronoForge_Key)
+		Cast_ChronoStructure(A_unitID.Forge)
+	Else if (UserPressedHotkey = Cast_ChronoNexus_Key)
+		Cast_ChronoStructure(A_unitID.Nexus)
+	Else If (UserPressedHotkey = Cast_ChronoGate_Key)
+		Cast_ChronoStructure(A_unitID.WarpGate) ; this will also do gateways
 	BufferInputFast.disableBufferingAndBlocking()
 	Critical Off	
 return
-
-
 
 
 Cast_ChronoStructure(StructureToChrono)
 {	GLOBAL A_unitID, CG_control_group, chrono_key, CG_nexus_Ctrlgroup_key, CG_chrono_remainder, ChronoBoostSleep
 	, HumanMouse, HumanMouseTimeLo, HumanMouseTimeHi
 	
-	oStructureToChrono := []
+	oStructureToChrono := [], a_gateways := [], a_gatewaysConvertingToWarpGates := [], a_WarpgatesOnCoolDown := []
 	MouseGetPos, start_x, start_y
 	HighlightedGroup := getSelectionHighlightedGroup()
 	send % "^" CG_control_group
@@ -940,25 +840,73 @@ Cast_ChronoStructure(StructureToChrono)
 	{
 
 		Unitcount := DumpUnitMemory(MemDump)
-		while (A_Index <= Unitcount)
-		{
-			unit := A_Index - 1
-			if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(numgetUnitOwner(MemDump, Unit))
-			|| isTargetUnderConstruction(TargetFilter)
-		       Continue
-	    	Type := numgetUnitModelType(numgetUnitModelPointer(MemDump, Unit))
-	    	IF ( type = StructureToChrono && !isUnitChronoed(unit) ) 
-			{	
-				progress :=  getBuildStats(unit, QueueSize)	; need && QueueSize as if progress reports 0 when idle it will be added to the list
-				if ( (progress < .95 && QueueSize) || QueueSize > 1) ; as queue size of 1 means theres only 1 item being produced
-					oStructureToChrono.insert({Unit: unit, QueueSize: QueueSize, progress: progress})
-			}
-		}
-		;	structures with the longest queues will be chronoed first
-		; 	if queue size is equal, chronoed by progress (least progressed chronoed 1st)
 
-		Sort2DArray(oStructureToChrono, "progress", 1) ; so the strucutes with least progress gets chronoed (providing have same queue size)
-		Sort2DArray(oStructureToChrono, "QueueSize", 0) ; so One with the longest queue gets chronoed first
+		if (StructureToChrono = A_UnitID.WarpGate)
+		{
+			while (A_Index <= Unitcount)
+			{
+				unit := A_Index - 1
+				if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(numgetUnitOwner(MemDump, Unit))
+				|| isTargetUnderConstruction(TargetFilter)
+			       Continue
+		    	Type := numgetUnitModelType(numgetUnitModelPointer(MemDump, Unit))
+		    	IF ( type = A_unitID["WarpGate"] && !isUnitChronoed(unit)) && (cooldown := getWarpGateCooldown(unit))
+					a_WarpgatesOnCoolDown.insert({"Unit": unit, "Cooldown": cooldown})
+				Else IF (type = A_unitID["Gateway"] AND !isTargetUnderConstruction(TargetFilter) && !isUnitChronoed(unit))
+				{
+					if isGatewayConvertingToWarpGate(unit)
+						a_gatewaysConvertingToWarpGates.insert(unit) 
+					else 
+					{		
+						progress :=  getBuildStats(unit, QueueSize)	; need && QueueSize as if progress reports 0 when idle it will be added to the list
+						if ( (progress < .95 && QueueSize) || QueueSize > 1) ; as queue size of 1 means theres only 1 item being produced
+							a_gateways.insert({Unit: unit, QueueSize: QueueSize, progress: progress})
+					}	
+
+				}															  
+			}	
+
+				if a_WarpgatesOnCoolDown.MaxIndex()
+					Sort2DArray(a_WarpgatesOnCoolDown, "Cooldown", 0)	;so warpgates with longest cooldown get chronoed first
+				if a_gatewaysConvertingToWarpGates.MaxIndex()	
+					RandomiseSimpleArray(a_gatewaysConvertingToWarpGates)
+				if a_gateways.MaxIndex()
+				{
+					Sort2DArray(a_gateways, "progress", 1) ; so the strucutes with least progress gets chronoed (providing have same queue size)
+					Sort2DArray(a_gateways, "QueueSize", 0) ; so One with the longest queue gets chronoed first
+				}
+
+				for index, Warpgate in a_WarpgatesOnCoolDown 			; so Warpgates will get chronoed 1st
+					oStructureToChrono.insert({Unit: Warpgate.Unit})			; among warpgates longest cooldown gets done first
+
+				for index, gateway in a_gatewaysConvertingToWarpGates 	; gateways converting to warpgates get chronoed next
+					oStructureToChrono.insert({Unit:gateway}) 					; among these gateways, order is random
+
+				for index, object in a_gateways 						; gateways producing a unit come last
+					oStructureToChrono.insert({Unit: object.Unit})				; among these it goes first by queue size, then progress
+		}
+		else 
+		{
+			while (A_Index <= Unitcount)
+			{
+				unit := A_Index - 1
+				if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(numgetUnitOwner(MemDump, Unit))
+				|| isTargetUnderConstruction(TargetFilter)
+			       Continue
+		    	Type := numgetUnitModelType(numgetUnitModelPointer(MemDump, Unit))
+		    	IF ( type = StructureToChrono && !isUnitChronoed(unit) ) 
+				{	
+					progress :=  getBuildStats(unit, QueueSize)	; need && QueueSize as if progress reports 0 when idle it will be added to the list
+					if ( (progress < .95 && QueueSize) || QueueSize > 1) ; as queue size of 1 means theres only 1 item being produced
+						oStructureToChrono.insert({Unit: unit, QueueSize: QueueSize, progress: progress})
+				}
+			}
+			;	structures with the longest queues will be chronoed first
+			; 	if queue size is equal, chronoed by progress (least progressed chronoed 1st)
+
+			Sort2DArray(oStructureToChrono, "progress", 1) ; so the strucutes with least progress gets chronoed (providing have same queue size)
+			Sort2DArray(oStructureToChrono, "QueueSize", 0) ; so One with the longest queue gets chronoed first
+		}
 		
 		max_chronod := nexus_chrono_count - CG_chrono_remainder
 		
@@ -983,15 +931,6 @@ Cast_ChronoStructure(StructureToChrono)
 		send {Tab}
 	Return 
 }
-
-
-
-
-
-
-
-
-
 
 
 Auto_Group:
@@ -1056,18 +995,21 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 		Loop, Parse, CtrlGroupSet, |
 			AG_Temp_count := A_Index	;this counts the number of different ctrl groups ie # 1's  and 2's etc - must be only 1
 		If (AG_Temp_count = 1) && !isMenuOpen()
-		&& !getkeystate("Shift", "P") && !getkeystate("Control", "P") && !getkeystate("Alt", "P")
-		&& !getkeystate("LWin", "P") && !getkeystate("RWin", "P")		
-		&& !getkeystate("Shift", "L") && !getkeystate("Control", "L") && !getkeystate("Alt", "L")
-		&& !getkeystate("LWin", "L") && !getkeystate("RWin", "L")
+		;&& !getkeystate("Shift", "P") && !getkeystate("Control", "P") && !getkeystate("Alt", "P")
+		;&& !getkeystate("LWin", "P") && !getkeystate("RWin", "P")		
+		;&& !getkeystate("Shift", "L") && !getkeystate("Control", "L") && !getkeystate("Alt", "L")
+		;&& !getkeystate("LWin", "L") && !getkeystate("RWin", "L")
 		{
-			; testing without blocking user input
+			if ReleaseModifiers(0, 0, "", 20)
+				return
+			BufferInputFast.BufferInput()
 			Sleep(1) ; give time for selection buffer to update. This along with blocking input should cover pre- and post-selection delay buffer changes
 			numGetUnitSelectionObject(oSelection)
 			for index, Unit in oSelection.Units
 				PostDelaySelected .= "," unit.UnitIndex
 			if (CurrentlySelected = PostDelaySelected)
 				send, +%Player_Ctrl_GroupSet%
+			BufferInputFast.Send()
 		}
 			
 	}
@@ -2596,9 +2538,11 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, ChronoBoostEnableForge, %config_file%, %section%, ChronoBoostEnableForge, 0
 	IniRead, ChronoBoostEnableStargate, %config_file%, %section%, ChronoBoostEnableStargate, 0
 	IniRead, ChronoBoostEnableNexus, %config_file%, %section%, ChronoBoostEnableNexus, 0
+	IniRead, ChronoBoostEnableRoboticsFacility, %config_file%, %section%, ChronoBoostEnableRoboticsFacility, 0
 	IniRead, Cast_ChronoForge_Key, %config_file%, %section%, Cast_ChronoForge_Key, ^F5
 	IniRead, Cast_ChronoStargate_Key, %config_file%, %section%, Cast_ChronoStargate_Key, +F5
 	IniRead, Cast_ChronoNexus_Key, %config_file%, %section%, Cast_ChronoNexus_Key, >!F5
+	IniRead, Cast_ChronoRoboticsFacility_Key, %config_file%, %section%, Cast_ChronoRoboticsFacility_Key, >!F6
 
 	
 	;[Advanced Auto Inject Settings]
@@ -2978,6 +2922,8 @@ ini_settings_write:
 			hotkey, %Cast_ChronoStargate_Key%, off		
 			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableNexus && time && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, %Cast_ChronoNexus_Key%, off
+			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableRoboticsFacility && time && !BufferInputFast.isInputBlockedOrBuffered()
+			hotkey, %Cast_ChronoRoboticsFacility_Key%, off
 			Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()	
 			hotkey, %ToggleAutoWorkerState_Key%, off		
 			Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
@@ -3083,9 +3029,11 @@ ini_settings_write:
 	IniWrite, %ChronoBoostEnableForge%, %config_file%, %section%, ChronoBoostEnableForge
 	IniWrite, %ChronoBoostEnableStargate%, %config_file%, %section%, ChronoBoostEnableStargate
 	IniWrite, %ChronoBoostEnableNexus%, %config_file%, %section%, ChronoBoostEnableNexus
+	IniWrite, %ChronoBoostEnableRoboticsFacility%, %config_file%, %section%, ChronoBoostEnableRoboticsFacility	
 	IniWrite, %Cast_ChronoForge_Key%, %config_file%, %section%, Cast_ChronoForge_Key
 	IniWrite, %Cast_ChronoStargate_Key%, %config_file%, %section%, Cast_ChronoStargate_Key
 	IniWrite, %Cast_ChronoNexus_Key%, %config_file%, %section%, Cast_ChronoNexus_Key
+	IniWrite, %Cast_ChronoRoboticsFacility_Key%, %config_file%, %section%, Cast_ChronoRoboticsFacility_Key
 	
 	;[Auto Control Group]
 	Short_Race_List := "Terr|Prot|Zerg"
@@ -4003,7 +3951,13 @@ Gui, Tab, Structures
 		Gui, Add, Checkbox, xp+10 yp+25 vChronoBoostEnableStargate checked%ChronoBoostEnableStargate%, Enable
 		Gui, Add, Text, x+20 yp w40,Hotkey:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoStargate_Key , %Cast_ChronoStargate_Key%
-				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoStargate_Key,  Edit	
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoStargate_Key,  Edit
+
+		Gui, Add, GroupBox, w285 h60 xs yp+55 section, RoboticsFacility	
+		Gui, Add, Checkbox, xp+10 yp+25 vChronoBoostEnableRoboticsFacility checked%ChronoBoostEnableRoboticsFacility%, Enable
+		Gui, Add, Text, x+20 yp w40,Hotkey:
+			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoRoboticsFacility_Key , %Cast_ChronoRoboticsFacility_Key%
+				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoRoboticsFacility_Key,  Edit					
 
 
 	Gui, Add, GroupBox, w285 h60 xs yp+55 section, Nexi	
@@ -4011,6 +3965,8 @@ Gui, Tab, Structures
 		Gui, Add, Text, x+20 yp w40,Hotkey:
 			Gui, Add, Edit, Readonly yp-2 x+5 w100  center vCast_ChronoNexus_Key , %Cast_ChronoNexus_Key%
 				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#Cast_ChronoNexus_Key,  Edit	
+
+	Gui, Add, Button, x460 y430 gg_ChronoRulesURL w130, Rules/Criteria
 
 		Gui, Add, Text, X%tmpx% y+85 cRed, Note:
 		Gui, Add, Text, x+10 yp+0, If gateways exist, they will be chrono boosted after the warpgates. 
@@ -4074,7 +4030,7 @@ Gui, Tab, Delay
 
 Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vAutoWorker_TAB, Auto||Info		
 Gui, Tab, Auto
-	Gui, Add, Text, x+25 y+55 section, Toggle State:
+	Gui, Add, Text, x+25 y+35 section, Toggle State:
 
 		Gui, Add, Edit, Readonly yp-2 x+10 center w65 vToggleAutoWorkerState_Key gedit_hotkey, %ToggleAutoWorkerState_Key%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#ToggleAutoWorkerState_Key,  Edit ;have to use a trick eg '#' as cant write directly to above edit var, or it will activate its own label!
@@ -4136,16 +4092,16 @@ Gui, Tab, Info
 		Gui, Add, Text, X%OriginTabX% y+15 cFF0000, Note:
 		gui, font, norm s11
 
-		gui, Add, Text, w400 y+20, When trying to a lift a Command Centre or Orbital, or convert a Command Centre into an orbital, an SCV will likely already be queued.
+		gui, Add, Text, w400 y+15, When trying to lift a Command Centre or Orbital, or convert a Command Centre into an orbital, an SCV will likely already be queued.
 		gui, Add, Text, w400 y+15, There's no need to toggle (turn off) this function, simply  select the building/base (so that only ONE unit is selected e.g. the CC) and press the 'ESCAPE' button to cancel the queued worker.
 		gui, Add, Text, w400 y+15, This will temporarily disable the function for four seconds - providing adequate time to convert or lift the Command Centre.
 		gui, Add, Text, w400 y+15, This also works if you need to cancel a probe to make a mumma ship core.
 		
-		gui, Add, Text, w400 y+25, Although you will most likely not notice this, workers will not be produced while:
+		gui, Add, Text, w400 y+20, Although you will most likely not notice this, workers will not be produced while:
 		gui, Add, Text, w400 y+5, • The control, alt, shift, or windows keys are held down.
 		gui, Add, Text, w400 y+5, • A spell is being cast (includes attack)
 		gui, Add, Text, w400 y+5, • The construction card i.e. the basic or advanced building card is displayed.
-		gui, Add, Text, w400 y+5, • A non-self unit is selected e.g. a mineral patch or an enemy/allied unit.
+		gui, Add, Text, w400 y+5, • A non-self unit is selected e.g. a mineral patch or an enemy/allied unit (or no unit is selected).
 
 		gui, font, norm s10
 		gui, font, 		
@@ -4636,7 +4592,8 @@ TT_F_Max_Injects_TT := F_Max_Injects_TT := "The max. number of 'forced' injects 
 TT_F_Alert_PreTime_TT := F_Alert_PreTime_TT := "The alert will sound X seconds before the forced inject."
 TT_F_Sleep_Time_TT := F_Sleep_Time_TT := "The amount of time spent idle after injecting each hatch.`n"
 		. "This should be set as low as reliably possible so that the inject rounds are shorter and there is less chance of it affecting your gameplay.`n`n"
-		. "This will vary for users, but 0 ms works reliably for me."
+		. "This will vary for users, but 0 ms works reliably for me.`n"
+		. "If 0 ms is not reliable, try increasing this value in increments of 1 ms."
 TT_FInjectHatchFrequency_TT := FInjectHatchFrequency_TT := "How often the larva state of the hatcheries are checked. (In ms/real-time)`nAny uninjected hatches will then be injected.`n`nIncreasing this value will delay injects, that is, a hatch will remain uninjected for longer."
 
 
@@ -4789,6 +4746,9 @@ B_HelpFile:
 	run % url.HelpFile
 	Return
 
+g_ChronoRulesURL:
+	run % url.ChronoRules
+	Return
 
 B_ChangeLog:
 	IfWinExist, ChangeLog Vr: %version%
@@ -4821,10 +4781,15 @@ B_Report:
 	}
 	return
 
+f1::
+msgbox % Menu_TXT
+return
+
 OptionsTree:
 	TV_GetText(Menu_TXT, TV_GetSelection())
 	;could hide everything each time, then unhide once, but that causes every so slightly more blinking on gui changes
 	GUIcontrol, Hide, %unhidden_menu%
+
 	IF ( Menu_TXT = "Home" )
 	{
 		GUIcontrol, Show, Home_TAB
@@ -4900,7 +4865,14 @@ OptionsTree:
 		GUIcontrol, Show, Bug_TAB
 		unhidden_menu := "Bug_TAB"
 	}
-	Else	RETURN
+	else Return
+
+	; There is some weird bug that occurs after the user clicks 'apply'
+	; After this when ever the user single clicks the treeview, the selection wont change
+	; user has to double click to get it to change, then it works fine.
+	; This is a workaround for this bug
+	if (A_GuiEvent = "D" && !GetKeyState("LButton", "P")) ; the gui event says its a drag when the error occurs (but its not really)
+		send {click 2}
 	;WinSet, Redraw,, Macro Trainer V%version% Settings
  	GUIControl, MoveDraw, GUIListViewIdentifyingVariableForRedraw 	; this is the same as redraw (but just for a control? - although it still seems to flicker the entire thing)
  	Return															; this prevents the problem where some of the icons would remain selected
@@ -6146,7 +6118,11 @@ numGetControlGroupObject(Byref oControlGroup, Group)
 	return oControlGroup["Count"]
 }
 
-
+; there is an 'if' section in the bufferinput send that checks if the user pressed the Esc key
+; if they did, it gosubs here
+g_temporarilyDisableAutoWorkerProductionOriginUserInputBufferSend:	
+If !(WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace%)
+		return
 ; So will turn off autoworker for 5 seconds only if user presses esc and only that main is selected
 g_temporarilyDisableAutoWorkerProduction:
 if EnableAutoWorker%LocalPlayerRace% ; dont check TmpDisableAutoWorker so if cancels another builder a few seconds later it will still update it 
@@ -6216,7 +6192,6 @@ autoWorkerProductionCheck()
 	, AutoWorkerMakeWorker_T_Key, AutoWorkerMakeWorker_P_Key, AutoWorkerMaxWorkerTerran, AutoWorkerMaxWorkerPerBaseTerran
 	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached
 	, aResourceLocations, aButtons, EventKeyDelay
-;	, EnableAutoWorkerTerran, EnableAutoWorkerProtoss
 
 	static TickCountRandomSet := 0, randPercent
 
@@ -6280,7 +6255,6 @@ autoWorkerProductionCheck()
 					Basecount++
 					break
 				}
-
 
 			if !isWorkerInProduction(object.unitIndex) ; also accounts for if morphing 
 				idleBases++
@@ -7972,6 +7946,7 @@ CreateHotkeys()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableForge && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableStargate && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableNexus && time && !BufferInputFast.isInputBlockedOrBuffered()
+	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableRoboticsFacility && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace% && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && time && !isMenuOpen() && SelectArmyEnable && !BufferInputFast.isInputBlockedOrBuffered()
@@ -8028,13 +8003,15 @@ CreateHotkeys()
 		hotkey, %cast_inject_key%, cast_inject, on	
 		hotkey, %F_InjectOff_Key%, Cast_DisableInject, on			
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && CG_Enable && time && !BufferInputFast.isInputBlockedOrBuffered()
-		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoGates, on	
+		hotkey, %Cast_ChronoGate_Key%, Cast_ChronoStructure, on	
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableForge && time && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %Cast_ChronoForge_Key%, Cast_ChronoStructure, on	
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableStargate && time && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %Cast_ChronoStargate_Key%, Cast_ChronoStructure, on
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableNexus && time && !BufferInputFast.isInputBlockedOrBuffered()
 		hotkey, %Cast_ChronoNexus_Key%, Cast_ChronoStructure, on	
+	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Protoss") && ChronoBoostEnableRoboticsFacility && time && !BufferInputFast.isInputBlockedOrBuffered()
+		hotkey, %Cast_ChronoRoboticsFacility_Key%, Cast_ChronoStructure, on	
 	Hotkey, If, WinActive(GameIdentifier) && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss")  && time && !BufferInputFast.isInputBlockedOrBuffered()	
 		hotkey, %ToggleAutoWorkerState_Key%, g_UserToggleAutoWorkerState, on	
 	Hotkey, If, WinActive(GameIdentifier) && time && !isMenuOpen() && EnableAutoWorker%LocalPlayerRace% && !BufferInputFast.isInputBlockedOrBuffered() ; cant use !ischatopen() - as esc will close chat before memory reads value so wont see chat was open
@@ -9868,7 +9845,7 @@ return
 
 */
 
-
+; can check if producing by checking queue size via buildstats()
 isGatewayProducingOrConvertingToWarpGate(Gateway)
 { 
 ;	gateway 
@@ -9882,6 +9859,14 @@ isGatewayProducingOrConvertingToWarpGate(Gateway)
 	GLOBAL GameIdentifier
 	state := readmemory(getUnitAbilityPointer(Gateway) + 0x8, GameIdentifier, 1)
 	if (state = 0x0F || state = 0x21)
+		return 1
+	else return 0
+}
+isGatewayConvertingToWarpGate(Gateway)
+{ 
+	GLOBAL GameIdentifier
+	state := readmemory(getUnitAbilityPointer(Gateway) + 0x8, GameIdentifier, 1)
+	if (state = 0x21)
 		return 1
 	else return 0
 }
@@ -10040,6 +10025,14 @@ groupMinerals(minerals)
 	return averagedMinerals
 }
 
+f2::
+sleep 500
+soundplay *-1
+
+BufferInputFast.BufferInput()
+sleep 2000
+BufferInputFast.send()
+return
 /*
 
 f2::

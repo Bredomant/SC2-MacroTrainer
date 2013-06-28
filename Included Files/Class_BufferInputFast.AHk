@@ -95,6 +95,11 @@ Class BufferInputFast
 				Button := Button.Button 
 			}
 			send % Button
+			; apparently sendevent should be able to trigger the scripts own hotkeys
+			; but this didn't seem to be the case when testing
+			; so not going to bother to do an if Sendevent check
+			if Button contains Esc ; this is a local function which disables auto worker
+				gosub g_temporarilyDisableAutoWorkerProductionOriginUserInputBufferSend
 		}
 		if !GetKeyState("Lbutton", "P") && GetKeyState("Lbutton") 	; so if the button is up, but the game thinks it down
 			send {click Up}  										; send and up command to unstick it - but doesnt seem to work here
