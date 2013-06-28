@@ -11,7 +11,7 @@
 ;-----------------------
 
 ; compiled using AHK 1.1.09.03 - the later version have changed how soundset works. Cant be bothered working it out and nothing beneficial in the updates 
-
+; if script re-copied from github should save it using UTF-8 with BOM (otherwise some of the ascii symbols like • wont be displayed correctly)
 /*	Things to do
 	Check if chrono structures are powered - It seems to be a behaviour ' Power User (Queue) '
 	Team send warn message after clicking building..maybe
