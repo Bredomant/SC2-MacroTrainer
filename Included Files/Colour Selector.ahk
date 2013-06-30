@@ -2,7 +2,9 @@ Goto, ColourSector>
 ColourSelectorSave:
 %LaunchedColour% := TransparencySlider colour ;save the new colour to the variable stored in the variablde :(
 LaunchedColour := "_"  LaunchedColour	;get the handle name
-paintPictureControl(%LaunchedColour%, colour, TransparencySlider, 300,22)
+if ( LaunchedColour = "_UnitHighlightInvisibleColour" || LaunchedColour = "_UnitHighlightHallucinationsColour")
+	paintPictureControl(%LaunchedColour%, colour, TransparencySlider, 50,22) ; draw it with a width of 50, as I'm not sure how to make the function get the controls width from the other gui
+Else paintPictureControl(%LaunchedColour%, colour, TransparencySlider, 300,22)
 Gui, Options:-Disabled  
 Gui, Destroy
 Return

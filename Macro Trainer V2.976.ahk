@@ -745,7 +745,7 @@ return
 
 setupMiniMapUnitLists()
 {	local list, unitlist, ListType
-	list := "UnitHighlightList1,UnitHighlightList2,UnitHighlightList3,UnitHighlightList4,UnitHighlightList5,UnitHighlightExcludeList"
+	list := "UnitHighlightList1,UnitHighlightList2,UnitHighlightList3,UnitHighlightList4,UnitHighlightList5,UnitHighlightList6,UnitHighlightList7,UnitHighlightExcludeList"
 	Loop, Parse, list, `,
 	{	
 		ListType := A_LoopField
@@ -1003,12 +1003,13 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 			if ReleaseModifiers(0, 0, "", 20)
 				return
 			BufferInputFast.BufferInput()
-			Sleep(1) ; give time for selection buffer to update. This along with blocking input should cover pre- and post-selection delay buffer changes
+			Sleep(2) ; give time for selection buffer to update. This along with blocking input should cover pre- and post-selection delay buffer changes
 			numGetUnitSelectionObject(oSelection)
 			for index, Unit in oSelection.Units
 				PostDelaySelected .= "," unit.UnitIndex
 			if (CurrentlySelected = PostDelaySelected)
 				send, +%Player_Ctrl_GroupSet%
+	;		sleep(1) ; not sure if a sleep here would help prevent ctrl problems or cause issues notices 1 missrally after doing this, but that could have been a missclick
 			BufferInputFast.Send()
 		}
 			
@@ -1196,7 +1197,7 @@ g_ForceInjectSuccessCheck:
 					while (getPlayerCurrentAPM() > FInjectAPMProtection)
 					{
 						sleep 10
-						if (A_index > 1500) ; so its been longer then 15 seconds
+						if (A_index > 1100) ; so its been longer then 11 seconds
 							return 
 					}
 					AttemptCorrectInjection := 1
@@ -2816,13 +2817,22 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, UnitHighlightList3, %config_file%, %section%, UnitHighlightList3, %A_Space%
 	IniRead, UnitHighlightList4, %config_file%, %section%, UnitHighlightList4, %A_Space%
 	IniRead, UnitHighlightList5, %config_file%, %section%, UnitHighlightList5, %A_Space%
+	IniRead, UnitHighlightList6, %config_file%, %section%, UnitHighlightList6, %A_Space%
+	IniRead, UnitHighlightList7, %config_file%, %section%, UnitHighlightList7, %A_Space%
 
 	IniRead, UnitHighlightList1Colour, %config_file%, %section%, UnitHighlightList1Colour, 0xFFFFFFFF  ;the colour
 	IniRead, UnitHighlightList2Colour, %config_file%, %section%, UnitHighlightList2Colour, 0xFFFF00FF 
 	IniRead, UnitHighlightList3Colour, %config_file%, %section%, UnitHighlightList3Colour, 0xFF09C7CA 
 	IniRead, UnitHighlightList4Colour, %config_file%, %section%, UnitHighlightList4Colour, 0xFFFFFF00
 	IniRead, UnitHighlightList5Colour, %config_file%, %section%, UnitHighlightList5Colour, 0xFF00FFFF
+	IniRead, UnitHighlightList6Colour, %config_file%, %section%, UnitHighlightList6Colour, 0xFFFFC663
+	IniRead, UnitHighlightList7Colour, %config_file%, %section%, UnitHighlightList7Colour, 0xFF21FBFF
+	
+	IniRead, HighlightInvisible, %config_file%, %section%, HighlightInvisible, 1
+	IniRead, UnitHighlightInvisibleColour, %config_file%, %section%, UnitHighlightInvisibleColour, 0xFFB7FF00
 
+	IniRead, HighlightHallucinations, %config_file%, %section%, HighlightHallucinations, 1
+	IniRead, UnitHighlightHallucinationsColour, %config_file%, %section%, UnitHighlightHallucinationsColour, 0xFF808080
 
 	IniRead, UnitHighlightExcludeList, %config_file%, %section%, UnitHighlightExcludeList, CreepTumor, CreepTumorBurrowed
 	IniRead, DrawMiniMap, %config_file%, %section%, DrawMiniMap, 1
@@ -3284,12 +3294,22 @@ ini_settings_write:
 	IniWrite, %UnitHighlightList3%, %config_file%, %section%, UnitHighlightList3
 	IniWrite, %UnitHighlightList4%, %config_file%, %section%, UnitHighlightList4
 	IniWrite, %UnitHighlightList5%, %config_file%, %section%, UnitHighlightList5
+	IniWrite, %UnitHighlightList6%, %config_file%, %section%, UnitHighlightList6
+	IniWrite, %UnitHighlightList7%, %config_file%, %section%, UnitHighlightList7
 
 	IniWrite, %UnitHighlightList1Colour%, %config_file%, %section%, UnitHighlightList1Colour ;the colour
 	IniWrite, %UnitHighlightList2Colour%, %config_file%, %section%, UnitHighlightList2Colour
 	IniWrite, %UnitHighlightList3Colour%, %config_file%, %section%, UnitHighlightList3Colour
 	IniWrite, %UnitHighlightList4Colour%, %config_file%, %section%, UnitHighlightList4Colour
 	IniWrite, %UnitHighlightList5Colour%, %config_file%, %section%, UnitHighlightList5Colour
+	IniWrite, %UnitHighlightList6Colour%, %config_file%, %section%, UnitHighlightList6Colour
+	IniWrite, %UnitHighlightList7Colour%, %config_file%, %section%, UnitHighlightList7Colour
+	
+	IniWrite, %HighlightInvisible%, %config_file%, %section%, HighlightInvisible
+	IniWrite, %UnitHighlightInvisibleColour%, %config_file%, %section%, UnitHighlightInvisibleColour
+
+	IniWrite, %HighlightHallucinations%, %config_file%, %section%, HighlightHallucinations
+	IniWrite, %UnitHighlightHallucinationsColour%, %config_file%, %section%, UnitHighlightHallucinationsColour
 
 	IniWrite, %UnitHighlightExcludeList%, %config_file%, %section%, UnitHighlightExcludeList
 	IniWrite, %DrawMiniMap%, %config_file%, %section%, DrawMiniMap
@@ -3458,8 +3478,13 @@ Gui, Add, GroupBox, w200 h61 y+10 xs,
 
 Gui, Add, GroupBox, xs y+20 w200 h140, MiniMap && Backspace Ctrl Group
 		Gui, Add, Text, xs+10 yp+25, Queen Control Group:
-			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vMI_Queen_Group, %MI_Queen_Group%
-				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#MI_Queen_Group,  Edit			
+			if (MI_Queen_Group = 0)
+				droplist_var := 10
+			else 
+				droplist_var := MI_Queen_Group  	; i have a dropdown menu now so user has to put a number, cant use another key as I use this to check the control groups
+			Gui, Add, DropDownList,  x+30 w45 center vMI_Queen_Group Choose%droplist_var%, 1|2|3|4|5|6|7||8|9|0
+		;	Gui, Add, Edit, Readonly y+10 xs+60 w90 center vMI_Queen_Group, %MI_Queen_Group%
+		;		Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#MI_Queen_Group,  Edit			
 
 		Gui, Add, Text, xs+10 yp+40, Max Queen Distance:`n%A_Space% %A_Space% (From Hatch)
 			Gui, Add, Edit, Number Right xp+132 yp w45 vTT2_MI_QueenDistance
@@ -4044,12 +4069,19 @@ Gui, Tab, Auto
 		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerTerranStart Checked%EnableAutoWorkerTerranStart%, Enable
 
 		Gui, Add, Text, X%thisXTabX% y+15 w100, Base Ctrl Group:
-		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vBase_Control_Group_T_Key, %Base_Control_Group_T_Key%
-			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#Base_Control_Group_T_Key,  Edit
-		
+			if (Base_Control_Group_T_Key = 0)
+				droplist_var := 10
+			else 
+				droplist_var := Base_Control_Group_T_Key  	; i have a dropdown menu now so user has to put a number, cant use another key as I use this to check the control groups
+			Gui, Add, DropDownList,  xs+130 yp w45 center vBase_Control_Group_T_Key Choose%droplist_var%, 1|2|3|4||5|6|7|8|9|0
+	
 		Gui, Add, Text, X%thisXTabX% yp+35 w100, Storage Ctrl Group:
-		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vAutoWorkerStorage_T_Key, %AutoWorkerStorage_T_Key%
-			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#AutoWorkerStorage_T_Key,  Edit
+			if (AutoWorkerStorage_T_Key = 0)
+				droplist_var := 10
+			else 
+				droplist_var := AutoWorkerStorage_T_Key  	; i have a dropdown menu now so user has to put a number, cant use another key as I use this to check the control groups
+			Gui, Add, DropDownList,  xs+130 yp w45 center vAutoWorkerStorage_T_Key Choose%droplist_var%, 1|2|3|4|5|6|7||8|9|0
+
 		
 		Gui, Add, Text, X%thisXTabX% yp+35 w100, Make SCV Key:
 		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vAutoWorkerMakeWorker_T_Key, %AutoWorkerMakeWorker_T_Key%
@@ -4068,12 +4100,18 @@ Gui, Tab, Auto
 		Gui, Add, Checkbox, xp+10 yp+25 vEnableAutoWorkerProtossStart Checked%EnableAutoWorkerProtossStart%, Enable
 
 		Gui, Add, Text, X%thisXTabX% y+15 w100, Base Ctrl Group:
-		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vBase_Control_Group_P_Key, %Base_Control_Group_P_Key%
-			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#Base_Control_Group_P_Key,  Edit
+			if (Base_Control_Group_P_Key = 0)
+				droplist_var := 10
+			else 
+				droplist_var := Base_Control_Group_P_Key  	; i have a dropdown menu now so user has to put a number, cant use another key as I use this to check the control groups
+			Gui, Add, DropDownList, xs+130 yp w45 center vBase_Control_Group_P_Key Choose%droplist_var%, 1|2|3|4||5|6|7|8|9|0
 		
 		Gui, Add, Text, X%thisXTabX% yp+35 w100, Storage Ctrl Group:
-		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vAutoWorkerStorage_P_Key, %AutoWorkerStorage_P_Key%
-			Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#AutoWorkerStorage_P_Key,  Edit
+			if (AutoWorkerStorage_P_Key = 0)
+				droplist_var := 10
+			else 
+				droplist_var := AutoWorkerStorage_P_Key  	; i have a dropdown menu now so user has to put a number, cant use another key as I use this to check the control groups
+			Gui, Add, DropDownList,  xs+130 yp w45 center vAutoWorkerStorage_P_Key Choose%droplist_var%, 1|2|3|4|5|6|7||8|9|0	
 		
 		Gui, Add, Text, X%thisXTabX% yp+35 w100, Make Probe Key:
 		Gui, Add, Edit, Readonly yp-2 x+1 w65 center vAutoWorkerMakeWorker_P_Key, %AutoWorkerMakeWorker_P_Key%
@@ -4279,7 +4317,7 @@ Gui, Tab, Emergency
 	Gui, Font, norm 
 	Gui, Font,
 
-Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||Overlays|Hotkeys|Info
+Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||MiniMap2|Overlays|Hotkeys|Info
 
 Gui, Tab, MiniMap
 
@@ -4340,6 +4378,32 @@ Gui, Tab, MiniMap
 	Gui, Add, Edit, Readonly yp-2 xp+80 center w90 vTempHideMiniMapKey gedit_hotkey, %TempHideMiniMapKey%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#TempHideMiniMapKey,  Edit 		
 
+Gui, Tab, MiniMap2
+	Gui, Add, Checkbox, X%CurrentGuiTabX% Y+15 vHighlightInvisible Checked%HighlightInvisible%, Highlight Invisible units
+		
+		Gui, add, text, y+12 Xp+20, Colour:
+		Gui, Add, Picture, xp+60 yp-4 w50 h22 0xE HWND_UnitHighlightInvisibleColour v#UnitHighlightInvisibleColour gColourSelector ;0xE required for GDI
+		paintPictureControl(_UnitHighlightInvisibleColour, UnitHighlightInvisibleColour)	
+
+	Gui, Add, Checkbox, X%CurrentGuiTabX% Y+10 vHighlightHallucinations Checked%HighlightHallucinations%, Highlight hallucinated units
+		Gui, add, text, y+12 Xp+20, Colour:
+		Gui, Add, Picture, XP+60 yp-4 w50 h22 0xE HWND_UnitHighlightHallucinationsColour v#UnitHighlightHallucinationsColour gColourSelector ;0xE required for GDI
+		paintPictureControl(_UnitHighlightHallucinationsColour, UnitHighlightHallucinationsColour)	
+
+		Gui, add, text, y+40 X%CurrentGuiTabX%, Additional Custom Unit Highlights:
+		Gui, add, text, y+12 X%CurrentGuiTabX%, Highlight:
+		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightList6, %UnitHighlightList6%
+		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList6,  Edit
+		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
+		Gui, Add, Picture, xs yp-4 w300 h22 0xE HWND_UnitHighlightList6Colour v#UnitHighlightList6Colour gColourSelector ;0xE required for GDI
+		paintPictureControl(_UnitHighlightList6Colour, UnitHighlightList6Colour)	
+
+		Gui, add, text, y+12 X%CurrentGuiTabX%, Highlight:
+		Gui, Add, Edit, yp-2 x+10 w300  center r1 vUnitHighlightList7, %UnitHighlightList7%
+		Gui, Add, Button, yp-2 x+10 gEdit_AG v#UnitHighlightList7,  Edit
+		Gui, add, text, y+9 X%CurrentGuiTabX%, Colour:
+		Gui, Add, Picture, xs yp-4 w300 h22 0xE HWND_UnitHighlightList7Colour v#UnitHighlightList7Colour gColourSelector ;0xE required for GDI
+		paintPictureControl(_UnitHighlightList7Colour, UnitHighlightList7Colour)	
 
 Gui, Tab, Overlays
 		;Gui, add, text, y+20 X%XTabX%, Display Overlays:
@@ -4519,11 +4583,12 @@ DrawAlerts_TT := "While using the 'detection list' function an 'x' will be brief
 
 UnitHighlightExcludeList_TT := #UnitHighlightExcludeList_TT := "These units will not be displayed on the minimap."
 
-UnitHighlightList1_TT := UnitHighlightList2_TT := UnitHighlightList3_TT
-:= UnitHighlightList4_TT := UnitHighlightList5_TT 
-:= #UnitHighlightList1_TT := #UnitHighlightList2_TT := #UnitHighlightList3_TT
-:= #UnitHighlightList4_TT := #UnitHighlightList5_TT
-:= "Units of this type will be drawn using the specified colour"
+loop, 7
+{
+	UnitHighlightList%A_index%_TT := #UnitHighlightList%A_index%_TT
+	:= "Units of this type will be drawn using the specified colour"
+ 	#UnitHighlightList%A_Index%Colour_TT := "Click Me!`n`nUnits of this type will appear this colour."
+}
 
 DrawWorkerOverlay_TT := "Displays your current harvester count with a worker icon"
 DrawIdleWorkersOverlay_TT := "While idle workers exist, a worker icon will be displayed with the current idle count.`n`nThe size and position can be changed easily so that it grabs your attention."
@@ -4553,9 +4618,10 @@ AutoWorkerMakeWorker_P_Key_TT := #AutoWorkerMakeWorker_P_Key_TT := "The keyboard
 
 TT_AutoWorkerMaxWorkerTerran_TT := TT_AutoWorkerMaxWorkerProtoss_TT := AutoWorkerMaxWorkerTerran_TT := AutoWorkerMaxWorkerProtoss_TT := "Worker production will stop for the remainder of the game when this number of workers exist.`n"
 				. "Workers can then be 'sacked' and the function will remain off!`n`nIf you wish to turn it back on, simply use the 'toggle hotkey' twice."
-AutoWorkerMaxWorkerPerBaseTerran_TT := TT_AutoWorkerMaxWorkerPerBaseProtoss_TT := AutoWorkerMaxWorkerPerBaseTerran_TT := AutoWorkerMaxWorkerPerBaseProtoss_TT :=  "Worker production will stop when this number is exceeded by`n"
+TT_AutoWorkerMaxWorkerPerBaseTerran_TT := TT_AutoWorkerMaxWorkerPerBaseProtoss_TT := AutoWorkerMaxWorkerPerBaseTerran_TT := AutoWorkerMaxWorkerPerBaseProtoss_TT :=  "Worker production will stop when this number is exceeded by`n"
 			. "the current worker count per the number of fully constructed (and control grouped) main-bases`n"
-			. "WHICH are within 8 map units of a gas geyser."
+			. "WHICH are within 8 map units of a gas geyser.`n`n"
+			. "Note: A properly situated base is usually 7-7.5 map units from a geyser."
 
 Inject_spawn_larva_TT := #Inject_spawn_larva_TT := "This needs to correspond to your SC2 'spawn larva' button.`n`nThis key is sent during an inject to invoke Zerg's 'spawn larva' ability."
 
@@ -4620,7 +4686,7 @@ AM_MiniMap_PixelColourAlpha_TT := AM_MiniMap_PixelColourRed_TT := AM_MiniMap_Pix
 #FindPixelColour_TT := "This sets the pixel colour for your exact system."
 AM_MiniMap_PixelVariance_TT := TT_AM_MiniMap_PixelVariance_TT := "A match will result if  a pixel's colour lies within the +/- variance range.`n`nThis is a percent value 0-100%"
 TT_AGDelay_TT := AG_Delay_TT := "The program will wait this period of time before adding the select units to a control group.`nUse this if you want the function to look more 'human'.`n`nNote: An additional delay of up to 15ms is always present (even when set to 0)."
-TempHideMiniMapKey_TT := #TempHideMiniMapKey_TT := "This will temporarily disable the minimap overlay,`nthereby allowing you to determine if you have seen a unit or building legitimately."
+TempHideMiniMapKey_TT := #TempHideMiniMapKey_TT := "This will temporarily disable the minimap overlay,`nthereby allowing you to determine if you legitimately have vision of a unit or building."
 TT_UserMiniMapXScale_TT := TT_UserMiniMapYScale_TT := UserMiniMapYScale_TT := UserMiniMapXScale_TT := "Adjusts the relative size of units on the minimap."
 TT_MiniMapRefresh_TT := MiniMapRefresh_TT := "Dictates how frequently the minimap is redrawn"
 BlendUnits_TT := "This will draw the units 'blended together', like SC2 does.`nIn other words, units/buildings grouped together will only have one border around all of them"
@@ -4653,7 +4719,14 @@ F_Inject_ModifierBeep_TT := "If the modifier keys (Shift, Ctrl, or Alt) or Windo
 BlockingStandard_TT := BlockingFunctional_TT := BlockingNumpad_TT := BlockingMouseKeys_TT := BlockingMultimedia_TT := BlockingMultimedia_TT := BlockingModifier_TT := "During certain automations these keys will be buffered or blocked to prevent interruption to the automation and your game play."
 LwinDisable_TT := "Disables the Left Windows Key while in a SC2 match.`n`nMacro Trainer Left windows hotkeys (and non-overridden windows keybinds) will still function."
 
-#UnitHighlightList1Colour_TT := #UnitHighlightList2Colour_TT := #UnitHighlightList3Colour_TT := "Click Me!`n`nUnits of this type will appear this colour."
+
+
+HighlightInvisible_TT := #UnitHighlightInvisibleColour_TT := "All invisible, cloaked, and burrowed units will be drawn with this colour.`n"
+			. "This will instantly tell you if it's safe to look at the unit i.e. would you legitimately have vision of it."
+			. "`n`nNote: If a unit already has a custom colour highlight, then that unit will be drawn using its specific highlight colour."
+HighlightHallucinations_TT := #UnitHighlightHallucinationsColour_TT := "Hallucinated units will be drawn using this colour."
+
+
 Short_Race_List := "Terr|Prot|Zerg"
 loop, parse, l_races, `,
 	while (10 > i := A_index-1)
@@ -4692,32 +4765,54 @@ g_GuiSetupDrawMiniMapDisable:
 	if !Checked
 	{	GUIControl, Disable, DrawSpawningRaces
 		GUIControl, Disable, DrawAlerts
-
+		GUIControl, Disable, TT_MiniMapRefresh
+		GUIControl, Disable, TempHideMiniMapKey
+		GUIControl, Disable, #TempHideMiniMapKey
+		GUIControl, Disable, HostileColourAssist
+		GUIControl, Disable, HighlightInvisible
+		GUIControl, Disable, HighlightHallucinations
 		GUIControl, Disable, UnitHighlightExcludeList
 		GUIControl, Disable, #UnitHighlightExcludeList
 
-
 		list := "UnitHighlightList|#UnitHighlightList"
 		loop, parse, list, |
-			loop, 5 ; as 5 colour indexes
+			loop, 7 ; as 5 colour indexes
 			{
 				variable := A_LoopField A_Index
 				GUIControl, Disable, %variable%
+				GUIControl, Disable, #UnitHighlightList1Colour
 			}
+		loop, 7 
+			GUIControl, Disable, #UnitHighlightList%A_Index%Colour
 
+		GUIControl, Disable, #UnitHighlightInvisibleColour
+		GUIControl, Disable, #UnitHighlightHallucinationsColour
 	}
 	Else
 	{	GUIControl, Enable, DrawSpawningRaces
 		GUIControl, Enable, DrawAlerts
 		GUIControl, Enable, UnitHighlightExcludeList
 		GUIControl, Enable, #UnitHighlightExcludeList
+
+		GUIControl, Enable, TT_MiniMapRefresh
+		GUIControl, Enable, TempHideMiniMapKey
+		GUIControl, Enable, #TempHideMiniMapKey
+		GUIControl, Enable, HostileColourAssist
+		GUIControl, Enable, HighlightInvisible
+		GUIControl, Enable, HighlightHallucinations
+
 		list := "UnitHighlightList|#UnitHighlightList"
 		loop, parse, list, |
-			loop, 5 ; as 5 colour indexes
+			loop, 7 ; as 5 colour indexes
 			{
 				variable := A_LoopField A_Index
 				GUIControl, Enable, %variable%
 			}
+		loop, 7 
+			GUIControl, Enable, #UnitHighlightList%A_Index%Colour
+		GUIControl, Enable, #UnitHighlightInvisibleColour
+		GUIControl, Enable, #UnitHighlightHallucinationsColour
+
 	}
 Return	
 g_GuiSetupResetPixelColour:
@@ -4788,15 +4883,24 @@ B_Report:
 	}
 	return
 
-f1::
-msgbox % Menu_TXT
-return
-
+;could hide everything each time, then unhide once, but that causes every so slightly more blinking on gui changes
 OptionsTree:
+	OptionTreeEvent := A_GuiEvent
+	OptionTreeEventInfo := A_EventInfo
 	TV_GetText(Menu_TXT, TV_GetSelection())
-	;could hide everything each time, then unhide once, but that causes every so slightly more blinking on gui changes
-	GUIcontrol, Hide, %unhidden_menu%
 
+;	if (OptionTreeEvent = "F" || OptionTreeEvent = "E" || OptionTreeEvent = "K") ; so the menu doesnt get redrawn too frequenctly e.g. user key presses
+;		return  																; require altsubmit-g-label as need to monitor user right clicks
+;	if (OptionTreeEvent = "RightClick")  ; so right clicking will change the selection 
+;	{
+;		if !OptionTreeEventInfo ; there's a bug in AHK with the right click - have GUI on second monitor and right click, Menu_TXT will be blank
+;			send {click}  		; so force a left click on the item
+;		else TV_Modify(OptionTreeEventInfo, "Select") ; this will relaunch the OptionsTree-g-label and unhide the corrrect window
+;		return 
+;	}
+
+	if Menu_TXT  ; there's a bug in AHK with the right click - have GUI on second monitor and right click, Menu_TXT will be blank
+		GUIcontrol, Hide, %unhidden_menu%
 	IF ( Menu_TXT = "Home" )
 	{
 		GUIcontrol, Show, Home_TAB
@@ -4872,16 +4976,19 @@ OptionsTree:
 		GUIcontrol, Show, Bug_TAB
 		unhidden_menu := "Bug_TAB"
 	}
-	else Return
+	Else if (OptionTreeEvent != "D")	; due to my OCD making me allow right clicks on treeview item
+		return 							; there seems to be some possible bug/loop which maxs  and freezes AHK until the icon is clicked
+										; i Think having a return here will break this
+
 
 	; There is some weird bug that occurs after the user clicks 'apply'
 	; After this when ever the user single clicks the treeview, the selection wont change
 	; user has to double click to get it to change, then it works fine.
 	; This is a workaround for this bug
-	if (A_GuiEvent = "D" && !GetKeyState("LButton", "P")) ; the gui event says its a drag when the error occurs (but its not really)
-		send {click 2}
-	;WinSet, Redraw,, Macro Trainer V%version% Settings
- 	GUIControl, MoveDraw, GUIListViewIdentifyingVariableForRedraw 	; this is the same as redraw (but just for a control? - although it still seems to flicker the entire thing)
+;	if (OptionTreeEvent = "D" && !GetKeyState("LButton", "P")) ; the gui event says its a drag when the error occurs (but its not really)
+;		send {click 2}
+	WinSet, Redraw,, Macro Trainer V%version% Settings 				; redrawing whole thing as i noticed very very rarely (when a twitch stream open?) the save/canel/apply buttons disappear
+ 	; GUIControl, MoveDraw, GUIListViewIdentifyingVariableForRedraw ; this is the same as redraw (but just for a control? - although it still seems to flicker the entire thing)
  	Return															; this prevents the problem where some of the icons would remain selected
  																	; so multiple categories would have the blue background
  	
@@ -6428,7 +6535,10 @@ autoWorkerProductionCheck()
 			send {Tab}
 
 		If ChatStatus
+		{
 			send {Enter}
+			sleep(2)
+		}
 
 		BufferInputFast.send()
 
@@ -7188,17 +7298,19 @@ getEnemyUnitsMiniMap(byref A_MiniMapUnits)
      if  (a_Player[Owner, "Team"] <> a_LocalPlayer["Team"] && Owner && type >= A_unitID["Colossus"] && !ifTypeInList(type, l_Changeling)) 
      || (ifTypeInList(type, l_Changeling) && a_Player[Owner, "Team"] = a_LocalPlayer["Team"] ) ; as a changeling owner becomes whoever it is mimicking - its team also becomes theirs
      {
-           if (!Radius := aUnitInfo[Type, "Radius"])
+          if (!Radius := aUnitInfo[Type, "Radius"])
               Radius := aUnitInfo[Type, "Radius"] := numgetUnitModelMiniMapRadius(pUnitModel)
+          if (Radius < minimap.UnitMinimumRadius) ; probes and such
+           	Radius := minimap.UnitMinimumRadius
           
-          ; if (Radius < minimap.UnitMinimumRadius ) ; probes and such ;|| (Radius > minimap.UnitMaximumRadius ) I DONT believe this occurs for actual units
-           ;   Radius := minimap.UnitMinimumRadius 
-           x :=  numget(MemDump, UnitAddress + O_uX, "int")/4096
+	       x :=  numget(MemDump, UnitAddress + O_uX, "int")/4096
            y :=  numget(MemDump, UnitAddress + O_uY, "int")/4096
 
         ;  Radius += (minimap.AddToRadius/2)
            convertCoOrdindatesToMiniMapPos(x, y)
-           if type in %ActiveUnitHighlightList1%
+           if (HighlightInvisible && Filter & a_UnitTargetFilter.Hallucination) ; have here so even if non-halluc unit type has custom colour highlight, it will be drawn using halluc colour
+           	  Colour := UnitHighlightHallucinationsColour
+           Else if type in %ActiveUnitHighlightList1%
               Colour := UnitHighlightList1Colour
            Else If type in %ActiveUnitHighlightList2%
               Colour := UnitHighlightList2Colour                 
@@ -7207,7 +7319,13 @@ getEnemyUnitsMiniMap(byref A_MiniMapUnits)
            Else If type in %ActiveUnitHighlightList4%
               Colour := UnitHighlightList4Colour                    
            Else If type in %ActiveUnitHighlightList5%
-              Colour := UnitHighlightList5Colour    
+              Colour := UnitHighlightList5Colour   
+           Else If type in %ActiveUnitHighlightList6%
+              Colour := UnitHighlightList6Colour   
+           Else If type in %ActiveUnitHighlightList7%
+              Colour := UnitHighlightList7Colour
+           Else if (HighlightInvisible && Filter & a_UnitTargetFilter.Cloaked) ; this will include burrowed units (so dont need to check their flags)
+           	  Colour := UnitHighlightInvisibleColour 				; Have this at bot so if an invis unit has a custom highlight it will be drawn with that colour
            Else if PlayerColours
               Colour := 0xcFF HexColour[a_Player[Owner, "Colour"]]   ;FF=Transparency
            Else Colour := 0xcFF HexColour["Red"]  
@@ -9464,7 +9582,7 @@ getEnemyUnitCount(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUn
 
  		unit := A_Index - 1
 	    TargetFilter := numgetUnitTargetFilter(MemDump, unit)
-	    if (TargetFilter & DeadFilterFlag)
+	    if (TargetFilter & DeadFilterFlag || TargetFilter & a_UnitTargetFilter.Hallucination)
 	       Continue
 		owner := numgetUnitOwner(MemDump, Unit) 
 
@@ -9849,37 +9967,6 @@ readModifierState()
 	return ReadMemory(B_ModifierKeys, GameIdentifier, 1)
 }
 
-
-
-;f1::
-/*
-mousegetpos, mx, my 
-unit := getSelectedUnitIndex()
-clipboard := dectohex(  unit * S_uStructure + B_uStructure  )
-loop 
-{
-	unit := getSelectedUnitIndex()
-	text := isUnitHoldingXelnaga(unit) "`n| " unit "`n|" ReadMemory(B_uStructure + unit * S_uStructure + O_XelNagaActive, GameIdentifier)
-	sleep 50
-		ToolTip,  %Text%, mX, mY, 
-}
-
-
-
-
-RETURN
-msgbox % unit "`n| " isUnitHoldingXelnaga(unit) "`n| " ReadMemory(B_uStructure + unit * S_uStructure + O_XelNagaActive, GameIdentifier)
-clipboard := dectohex(  unit * S_uStructure + B_uStructure  )
-msgbox % "f"
-clipboard :=  dectohex(((ReadMemory(B_uStructure + (Unit * S_uStructure) 
-				+ O_uModelPointer, GameIdentifier)) << 5))
-msgbox %  	clipboard := dectohex(((ReadMemory(B_uStructure + (Unit * S_uStructure) 
-				+ O_uModelPointer, GameIdentifier)) << 5) + O_mUnitID) 
-return
-
-
-*/
-
 ; can check if producing by checking queue size via buildstats()
 isGatewayProducingOrConvertingToWarpGate(Gateway)
 { 
@@ -10060,15 +10147,7 @@ groupMinerals(minerals)
 	return averagedMinerals
 }
 
-f2::
-msgbox % getSelectedUnitIndex()
-msgbox % dectohex(getSelectedUnitIndex() * S_uStructure + B_uStructure)
 
-
-return
-numGetControlGroupObject(oControlGroup, 1)
-objtree(oControlGroup, "oControlGroup")
-return
 /*
 
 f2::
