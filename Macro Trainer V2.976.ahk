@@ -102,7 +102,7 @@ url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 program := []
 program.info := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
 
-version := 2.975
+version := 2.976
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -1190,7 +1190,6 @@ g_ForceInjectSuccessCheck:
 			For Index, Queen in aControlGroup.Queens
 				if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && Queen.Energy >= 25  && !isHatchInjected(CurrentHatch.Unit)) 
 				{
-					soundplay *-1
 					sleep % rand(0, 1000)
 					while (getPlayerCurrentAPM() > FInjectAPMProtection)
 					{
@@ -10188,7 +10187,6 @@ groupMinerals(minerals)
 	}
 	return averagedMinerals
 }
-
 
 /*
 f1::
