@@ -13,9 +13,9 @@
 ; compiled using AHK 1.1.09.03 - the later version have changed how soundset works. Cant be bothered working it out and nothing beneficial in the updates 
 ; if script re-copied from github should save it using UTF-8 with BOM (otherwise some of the ascii symbols like • wont be displayed correctly)
 /*	Things to do
+	Update unit panel structure so can add build progress and hallucination properties
 	Check if chrono structures are powered - It seems to be a behaviour ' Power User (Queue) '
 	Team send warn message after clicking building..maybe
-	Maybe need to find a bool value for queen laying tumour / or is check if already on a queued command
 */
 
 /*	
@@ -132,9 +132,6 @@ SAPI.volume := speech_volume
 ;	Startup
 ;-----------------------
 
-if HideTrayIcon
-	Menu, Tray, NoIcon
-
 InstallSC2Files()
 #include %A_ScriptDir%\Included Files\Gdip.ahk
 #include %A_ScriptDir%\Included Files\Colour Selector.ahk
@@ -144,7 +141,7 @@ CreatepBitmaps(a_pBitmap, a_unitID)
 aUnitInfo := []
 a_pBrush := []
 
-If (auto_update AND A_IsCompiled AND HideTrayIcon <> 1 AND CheckForUpdates(version, url.vr ))
+If (auto_update AND A_IsCompiled AND CheckForUpdates(version, url.vr ))
 {
 ;	changelog_text := Url2Var(url.changelog)
 	Gui, New
@@ -642,7 +639,7 @@ mt_pause_resume:
 	if (mt_on := !mt_on)	; 1st run mt_on blank so considered false and does else	
 	{
 		game_status := "lobby" ; with this clock = 0 when not in game 
-		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck")
+		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck", "g_ForceInjectSuccessCheck")
 		inject_timer := 0	;ie so know inject timer is off
 		DSpeak("Macro Trainer Paused")
 	}	
@@ -660,7 +657,7 @@ clock:
 	if (!time AND game_status = "game") OR (UpdateTimers) ; time=0 outside game
 	{	
 		game_status := "lobby" ; with this clock = 0 when not in game (while in game at 0s clock = 44)	
-		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck")
+		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck", "g_ForceInjectSuccessCheck")
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
@@ -1158,7 +1155,7 @@ Return
 
 g_ForceInjectSuccessCheck:
 
-	if isGamePaused()
+	if (isGamePaused() || !WinActive(GameIdentifier))
 		return 
 	if !F_Inject_Enable
 	{
@@ -1187,19 +1184,20 @@ g_ForceInjectSuccessCheck:
 
 ;For Index, CurrentHatch in oHatcheries
 ;	if (CurrentHatch.NearbyQueen && !isHatchInjected(CurrentHatch.Unit)) ;probably should check if hatch is alive and still a hatch...
-
-	If getGroupedQueensWhichCanInject(aControlGroup)
+	
+	If getGroupedQueensWhichCanInject(aControlGroup, 1) ; 1 so it checks their movestate
 		For Index, CurrentHatch in oHatcheries
 			For Index, Queen in aControlGroup.Queens
-				if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && Queen.Energy >= 25  && !isHatchInjected(CurrentHatch.Unit) && Winactive(GameIdentifier)) 
+				if (isQueenNearHatch(Queen, CurrentHatch, MI_QueenDistance) && Queen.Energy >= 25  && !isHatchInjected(CurrentHatch.Unit)) 
 				{
-					sleep % rand(0, 1.5)
+					soundplay *-1
+					sleep % rand(0, 1000)
 					while (getPlayerCurrentAPM() > FInjectAPMProtection)
 					{
 						sleep 10
 						if (A_index > 1100) ; so its been longer then 11 seconds
 							return 
-					}
+					}			
 					AttemptCorrectInjection := 1
 					Gosub, cast_ForceInject
 					AttemptCorrectInjection := 0
@@ -2144,7 +2142,7 @@ g_HideMiniMap:
 	if DrawMiniMap
 	{
 		Try Gui, MiniMapOverlay: Destroy 
-		sleep, 1500
+		sleep, 2500
 		ReDraw := 1
 	}
 return
@@ -2648,10 +2646,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, additional_delay_worker_production, %config_file%, Additional Warning Delay, worker_production, 25 ;sc2time
 	IniRead, additional_idle_workers, %config_file%, Additional Warning Delay, idle_workers, 10
 
-	;[Stealth Mode]
-	IniRead, HideTrayIcon, %config_file%, Stealth Mode, HideTrayIcon, 0
-	IniRead, exit_hotkey, %config_file%, Stealth Mode, exit_hotkey, Lwin & Esc
-	
+
 	;[Misc Hotkey]
 	IniRead, worker_count_local_key, %config_file%, Misc Hotkey, worker_count_key, F8
 	IniRead, worker_count_enemy_key, %config_file%, Misc Hotkey, enemy_worker_count, Lwin & F8
@@ -2886,8 +2881,6 @@ ini_settings_write:
 	{
 		Try 
 		{
-			Try Hotkey,	%exit_hotkey%, off
-
 			Hotkey, If, WinActive(GameIdentifier) && !BufferInputFast.isInputBlockedOrBuffered() 						
 														; 	deactivate the hotkeys
 			hotkey, %speaker_volume_up_key%, off		; 	so they can be updated with their new keys
@@ -3155,9 +3148,6 @@ ini_settings_write:
 	IniWrite, %additional_delay_worker_production%, %config_file%, Additional Warning Delay, worker_production ;sc2time
 	IniWrite, %additional_idle_workers%, %config_file%, Additional Warning Delay, idle_workers
 
-	;[Stealth Mode]
-	IniWrite, %HideTrayIcon%, %config_file%, Stealth Mode, HideTrayIcon
-	IniWrite, %exit_hotkey%, %config_file%, Stealth Mode, exit_hotkey
 	
 		;[Auto Mine]
 	section := "Auto Mine"
@@ -3887,13 +3877,9 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Set
 		Gui, Add, Edit, Number Right x+25 yp-2 w45 vTT_DeselectSleepTime
 			Gui, Add, UpDown,  Range0-300 vDeselectSleepTime, %DeselectSleepTime%,
 
-	Gui, Add, GroupBox, Xs+171 ys w245 h110, Stealth Mode (Hide Icons/Menus)
-		Gui, Add, Checkbox,xp+10 yp+25 VHideTrayIcon checked%HideTrayIcon%, Enable	
-		Gui, Add, Text, yp+30 w80, Exit Hotkey:
-			Gui, Add, Edit, Readonly yp-2 x+5 w100  center Vexit_hotkey , %exit_hotkey%
-				Gui, Add, Button, yp-2 x+5 gEdit_hotkey v#exit_hotkey,  Edit
+	Gui, Add, GroupBox, Xs+171 ys w245 h110, ; hidetray icon was previously here
 
-	Gui, Add, GroupBox, Xs+171 yp+65 w245 h185, Debugging
+	Gui, Add, GroupBox, Xs+171 yp+116 w245 h185, Debugging
 		Gui, Add, Button, xp+10 yp+30  Gg_ListVars w75 h25,  List Variables
 		Gui, Add, Button, xp yp+30  Gg_GetDebugData w75 h25,  Debug Data
 
@@ -4657,7 +4643,6 @@ auto_update_TT := "While enabled the program will automatically check for new ve
 launch_settings_TT := "Display the options menu on startup."
 
 HideTrayIcon_TT := "Hides the tray icon and all popups/menus."
-exit_hotkey_TT := "Can be used to exit the program while stealth mode is enabled."
 TT2_MI_QueenDistance_TT := MI_QueenDistance_TT := "The edge of the hatchery creep is approximately 14`nThis helps prevent queens injecting on remote hatches - It works better with lower numbers"
 TT_F_Max_Injects_TT := F_Max_Injects_TT := "The max. number of 'forced' injects which can occur after a user 'F5'/auto-inject.`nSet this to a high number if you want the program to inject for you."
 TT_F_Alert_PreTime_TT := F_Alert_PreTime_TT := "The alert will sound X seconds before the forced inject."
@@ -6319,7 +6304,7 @@ autoWorkerProductionCheck()
 	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached
 	, aResourceLocations, aButtons, EventKeyDelay
 
-	static TickCountRandomSet := 0, randPercent
+	static TickCountRandomSet := 0, randPercent,  UninterruptedWorkersMade
 
 	if (a_LocalPlayer["Race"] = "Terran") 
 	{
@@ -6344,6 +6329,7 @@ autoWorkerProductionCheck()
 	if (workers >= maxWorkers)
 	{ 
 		AW_MaxWorkersReached := 1
+		UninterruptedWorkersMade := 0 
 		return 
 	}
 	if isGamePaused() || ( isMenuOpen() && !(ChatStatus := isChatOpen()) ) ;chat is 0 when  menu is in focus
@@ -6353,9 +6339,9 @@ autoWorkerProductionCheck()
 	workersInProduction := Basecount := almostComplete := idleBases := halfcomplete := nearHalfComplete := 0 ; in case there are no idle bases
 
 
-	; This will change the random percent every 14 seconds - otherwise
+	; This will change the random percent every 12 seconds - otherwise
 	; 200ms timer kind of negates the +/- variance on the progress meter
-	if (A_TickCount - TickCountRandomSet > 14 * 1000) 
+	if (A_TickCount - TickCountRandomSet > 12 * 1000) 
 	{
 		TickCountRandomSet := A_TickCount
 		randPercent := rand(-0.04, .15)
@@ -6371,7 +6357,7 @@ autoWorkerProductionCheck()
 			for index, geyser in aResourceLocations.geysers
 				if isUnitNearUnit(geyser, object, 7.9) ; also compares z but for 1 map unit ; so if the base is within 8 map units it counts. It seems geyers are generally no more than 7 or 7.5 away
 				{
-					Basecount++
+					Basecount++ ; for calculating max workers per base
 					break
 				}
 			oBasesToldToBuildWorkers.insert({unitIndex: object.unitIndex, type: object.type})
@@ -6394,15 +6380,20 @@ autoWorkerProductionCheck()
 				 }
 				 workersInProduction += QueueSize
 			}
-				}
+			TotalCompletedBasesInCtrlGroup++
+			L_ActualBasesIndexesInBaseCtrlGroup .= "," object.unitIndex
+		}
 		else if ( object.type = A_unitID["CommandCenterFlying"] || object.type = A_unitID["OrbitalCommandFlying"] )
 		&& !isUnderConstruction(object.unitIndex) 
-			Basecount++ 	; so it will (account for flying base) and keep making workers at other bases if already at max worker/base	 	
-		L_ctrlGroupIndexes .= "," object.unitIndex ; this is just used as a means to check the selection
+			Basecount++ 	; so it will (account for flying base) and keep making workers at other bases if already at max worker/base	
+		L_BaseCtrlGroupIndexes .= "," object.unitIndex ; this is just used as a means to check the selection
 	}
 
 	if (workers / Basecount >= maxWorkersPerBase)
+	{	
+		UninterruptedWorkersMade := 0
 		return
+	}
 
 	MaxWokersTobeMade := howManyUnitsCanBeProduced(50, 0, 1)
 
@@ -6429,13 +6420,7 @@ autoWorkerProductionCheck()
 
 	if (MaxWokersTobeMade >= 1) && (idleBases || almostComplete || (halfcomplete && !nearHalfComplete)  ) ; i have >= 1 in case i stuffed the math and end up with a negative number or a fraction
 	{
-	;	numGetUnitSelectionObject(oSelection)
-	;	for index, object in oSelection.units  			; this is just a quick check even with the dirty selection buffer
-	;		if (object.owner != a_LocalPlayer.slot)  	; so if theres not a match it wont make the thread sleep 
-	;			return 
 
-;		if ReleaseModifiers(0, 1, makeWorkerKey, 60) ;times out after 60ms
-;			return ;as it timed out 
 		While getkeystate("Shift", "P") || getkeystate("Control", "P") || getkeystate("Alt", "P")
 		|| getkeystate("LWin", "P") || getkeystate("RWin", "P")		
 		|| getkeystate("Shift", "L") || getkeystate("Control", "L") || getkeystate("Alt", "L")
@@ -6452,9 +6437,20 @@ autoWorkerProductionCheck()
 		BatchLines := A_BatchLines
 		SetBatchLines, -1
 
+		
 		SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
 		SetMouseDelay, %EventKeyDelay%	;again, this wont affect send click (when input/play is in use) - I think some other commands may be affected?
 		BufferInputFast.BufferInput()
+		
+		; this should come before the sleep, as clicking on the screen could easily change the units selected!
+		; this could also change the user selection without them realising!!!
+		; perhaps this was the cause of the weird error in control group (ive moved its position now)
+		If (ChatStatus := isChatOpen())
+		{
+			Xscentre := A_ScreenWidth/2, Yscentre := A_ScreenHeight/2
+			send {click Left %Xscentre% %Yscentre%}
+		}
+
 		Sleep(1) ; give time for the selection buffer to update
 		
 
@@ -6468,6 +6464,7 @@ autoWorkerProductionCheck()
 			return 
 
 		}
+
 		for index, object in oSelection.units
 		{
 			L_SelectionIndexes .= "," object.unitIndex
@@ -6479,23 +6476,42 @@ autoWorkerProductionCheck()
 				return 
 			}
 
+			if (!varInMatchList(object.unitIndex, L_BaseCtrlGroupIndexes) || !isUnitAStructure(object.unitIndex)) ; so if a selected unit isnt in the base control group, or is a non-structure
+				BaseControlGroupNotSelected := 1
 		}
 
-		If (ChatStatus := isChatOpen())
+
+		; so even if the just the bases out of the base control group are selected (as other structures can be grouped with it)
+		; it wont send the base control group button as its not required
+		; Another scenario if there are 3 bases in ctrl group, and 1 is flying, if the user has the  two landed bases selected
+		; it still wont send the base control group, as its not required
+		if !BaseControlGroupNotSelected
 		{
-			Xscentre := A_ScreenWidth/2, Yscentre := A_ScreenHeight/2
-			send {click Left %Xscentre% %Yscentre%}
+			for index, object in oSelection.units
+				if varInMatchList(object.unitIndex, L_ActualBasesIndexesInBaseCtrlGroup)
+					SelectedBasesCount++
+			if (SelectedBasesCount < TotalCompletedBasesInCtrlGroup)
+				BaseControlGroupNotSelected := 1
+
 		}
 
-		if (L_SelectionIndexes != L_ctrlGroupIndexes) ; hence if the 'main base' control group is already selected, it wont bother control grouping them (and later restoring them)
+		; one thing to remember about these (L_SelectionIndexes != L_BaseCtrlGroupIndexes) 
+		; if a unit in the base group gets killed
+		; then these can never be Equal until the user re-issues the base control group
+		; so this may control group the units even when these bases are selected
+		; better to be safe than sorry!
+		; thats why im doing it slightly different now
+
+
+		if BaseControlGroupNotSelected ; hence if the 'main base' control group is already selected, it wont bother control grouping them (and later restoring them)
 		{
 			numGetControlGroupObject(oControlstorage, controlstorageGroup) 	; this checks if the currently selected units match those
 			for index, object in oControlstorage.units 							; already stored in the ctrl group
 				L_ControlstorageIndexes .= "," object.unitIndex 				; if they do, it wont bother sending the store control group command
 
-			if (L_SelectionIndexes != L_ControlstorageIndexes)
-				send % "^" controlstorageGroup
-			send % mainControlGroup
+			if (L_SelectionIndexes != L_ControlstorageIndexes)  ; safer and easier to do it this way for the storage control group - it may do it slightly more often than requried, but it should ALWAYS do it if it IS required
+				send % "^" controlstorageGroup   				; safer as units in this control group are very likely to die and change often
+			send % mainControlGroup 							; and by sending the ctrl grp command, the control buffer will get updated.
 
 		}
 		Else If HighlightedGroup ; != 0
@@ -6505,31 +6521,38 @@ autoWorkerProductionCheck()
 				send {tab}  ; as there are still building / priority rules i dont understand e.g. planetary fortress is last even though it has higher Unitindex than ebay
 		}					; and its much faster as dont have to double sort an array
 
-		;should search for a memory value to use to test of a main base is selected 
+		
 		; other function gets spammed when user incorrectly adds a unit to the main control group (as it will take group 0) and for terran tell that unit to 'stop' when sends s
 
 		while (A_Index <= MaxWokersTobeMade)
 			send % makeWorkerKey
-									; 	When checking for a non-structure error (below) i don't think it's possible for the selection index to match the basecontrol group 
-									;	i.e. if a dead nexus is in the control group, the selection group can't match the base control group and
-									; 	it must enter the below 'if (L_SelectionIndexes != L_ctrlGroupIndexes) ''	
-									;	but if the user still has the erroneous grouped unit along with the base control group selected, this error wont
-									;	 get picked up, but the instant the user clicks something else it will, so it's not a real issue
-									;	(which includes a dead nexus - which could be another local unit) 
-									; 	as Its written so the nexus control group should never be added/grouped to the storage control group
-									; 	As the selection buffer can only contain living units
 
-		if (L_SelectionIndexes != L_ctrlGroupIndexes) 	
-		{												
-			Sleep(3) 					; I think sc2 needs a sleep as otherwise the send controlgroup storate gets ignored every now and then  (it worked well with 4)
-			
+
+		; i tried checking the selection buffer for non.structure units and this worked well for 4 days, then all of a sudden it started giving false errors
+		; This may be possibly due to insufficient sleep time to update the selection buffer (3ms).....but im not convinced due to how frequently it 
+		; started giving errors ... but still very strange
+		; i cant be bothered looking into it
+		; so now im just checking if macro has ran too many times (as if worker is will/attempted  it will sleep for  800ms)
+		; this isnt perfect or fool proof, but it should work well enough, and quickly enough to prevent interrupting the user
+		; for longer than 4 or 5 seconds if they stuff up their base control group
+
+		; this slow checking allows the user to have as many bases as they want e.g. 7,8, 9 or more which could cause this function to run
+		; and make a worker 5 times in a row without any risk of falsely activating the the control group error routine
+		if (UninterruptedWorkersMade > 5) ; after 4 days this started giving an error, so now i have added an additional sleep time 
+		{
+			Sleep(12)  ; give heaps of time to update!
 			numGetUnitSelectionObject(oSelection) 	; can't use numgetControlGroup - as when nexus dies and is replaced with a local owned unit it will cause a warning
 			for index, object in oSelection.units
 				if !isUnitAStructure(object.unitIndex)	; as units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
-					BaseCtrlGroupError := 1					; as the macro will tell that unit e.g. probe to 'make a worker' and cause it to bug out	
+					BaseCtrlGroupError := 1					; as the macro will tell that unit e.g. probe to 'make a worker' and cause it to bug out
+		}	
 
+		if BaseControlGroupNotSelected
+		{												
+			Sleep(3) 					; I think sc2 needs a sleep as otherwise the send controlgroup storate gets ignored every now and then  (it worked well with 4)
 			send % controlstorageGroup
 		}
+
 
 		while (A_Index <= HighlightedGroup)
 			send {Tab}
@@ -6537,7 +6560,7 @@ autoWorkerProductionCheck()
 		If ChatStatus
 		{
 			send {Enter}
-			sleep(2)
+			sleep(3)
 		}
 
 		BufferInputFast.send()
@@ -6545,18 +6568,28 @@ autoWorkerProductionCheck()
 		SetBatchLines, %BatchLines%
 		Thread, NoTimers, false ; dont think is required as the thread is about to end
 		
-							; With the BaseCtrlGroupError if the user still has the erroneous grouped unit along with the base control group selected, this error wont
-							; get picked up, but the instant the user clicks something else it will, so it's not a real issue
 		if BaseCtrlGroupError ; as non-structure units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
 		{	; as the macro will tell that unit e.g. probe to 'make a worker' and cause it to bug out
 			dspeak("Error in Base Control Group. Auto Worker")
 			gosub g_UserToggleAutoWorkerState ; this will say 'off' Hence Will speak Auto worker Off	
 			return 
 		}
+
+		UninterruptedWorkersMade++ ; keep track of how many workers are made in a row
 		sleep, 800 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
+				 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
 											; so will send another build event and queueing more workers
+					; 400 worked find for stable connection, but on Kr sever needed more. 800 seems to work well
 	}
+	else UninterruptedWorkersMade := 0
 	return
+}
+
+varInMatchList(var, Matchlist)
+{
+	if var in %Matchlist%
+		return 1
+	else return 0
 }
 
 
@@ -8108,8 +8141,6 @@ CreateHotkeys()
 	#If, WinActive(GameIdentifier) && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If, WinActive(GameIdentifier) && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If
-	if HideTrayIcon
-		Hotkey,	%exit_hotkey%, Stealth_Exit, on 
 	Hotkey, If, WinActive(GameIdentifier) && !BufferInputFast.isInputBlockedOrBuffered() 														
 		hotkey, %speaker_volume_up_key%, speaker_volume_up, on		
 		hotkey, %speaker_volume_down_key%, speaker_volume_down, on
@@ -8290,7 +8321,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		Local SkipUsedQueen := []
 		local MissedHatcheries := []
 	    randomcount := 0
-			
+																			; ForceInject ie 1 or 0 so it will check move statte if a forceinject, but not if user presses button
 		If (Local QueenCount := getSelectedQueensWhichCanInject(oSelection, ForceInject)) ; this wont fetch burrowed queens!! so dont have to do a check below - as burrowed queens can make cameramove when clicking their hatch
 		{
 			For Index, CurrentHatch in oHatcheries
@@ -8532,13 +8563,13 @@ OldBackSpaceCtrlGroupInject()
  	while (A_Index <= Unitcount)
  	{
  		unit := A_Index - 1
- 		if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(owner := numgetUnitOwner(MemDump, Unit))
+ 		if isTargetDead(TargetFilter := numgetUnitTargetFilter(MemDump, unit)) || !isOwnerLocal(numgetUnitOwner(MemDump, Unit)) || isTargetUnderConstruction(TargetFilter) 
 	       Continue
 	    pUnitModel := numgetUnitModelPointer(MemDump, Unit)
 	    Type := numgetUnitModelType(pUnitModel)
 	    For index, buildingType in aZergMains
 		{	
-			IF (type = buildingType && !isTargetUnderConstruction(TargetFilter))
+			IF (type = buildingType)
 			{
 				MiniMapX := x := numGetUnitPositionXFromMemDump(MemDump, Unit)
 				MiniMapY := y := numGetUnitPositionYFromMemDump(MemDump, Unit)
@@ -8561,9 +8592,9 @@ OldBackSpaceCtrlGroupInject()
 
 
 
- getGroupedQueensWhichCanInject(ByRef aControlGroup)
+ getGroupedQueensWhichCanInject(ByRef aControlGroup,  CheckMoveState := 0)
  {	GLOBAL A_unitID, O_scTypeCount, O_scTypeHighlighted, S_CtrlGroup, O_scUnitIndex, GameIdentifier, B_CtrlGroupStructure
- 	, S_uStructure, GameIdentifier, MI_Queen_Group, S_scStructure
+ 	, S_uStructure, GameIdentifier, MI_Queen_Group, S_scStructure, uMovementFlags
 	aControlGroup := []
 	group := MI_Queen_Group
 	groupCount := getControlGroupCount(Group)
@@ -8578,19 +8609,22 @@ OldBackSpaceCtrlGroupInject()
 	loop % groupCount
 	{
 		unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
+		if isUnitDead(unit) ; as this is being reead from control group buffer so dead units can still be included!
+			continue 
 		type := getUnitType(unit)
-		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25) && getUnitMoveState(unit) = -1) ; so queen is not moving/patrolling/a-moving/holdposition
-			aControlGroup.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aControlGroup.Queens[aControlGroup.Queens.MaxIndex(), "Type"] := Type
-
-	}
-	aControlGroup["QueenCount"] := 	aControlGroup.Queens.maxIndex() ; as "SelectedUnitCount" will contain total selected queens + other units in group
+		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25)) 
+		&& (!CheckMoveState 
+			||  (CheckMoveState && (  (  (MoveState := getUnitMoveState(unit)) = uMovementFlags.Idle) || MoveState = uMovementFlags.HoldPosition)  )   )  ; I do this because my blocking of keys isnt 100% and if the user is pressing H e.g. hold posistion army or make hydras 
+			aControlGroup.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aControlGroup.Queens[aControlGroup.Queens.MaxIndex(), "Type"] := Type 		; and so can accidentally put queen on hold position thereby stopping injects!!!
+	} 																																					; so queen is not moving/patrolling/a-moving
+	aControlGroup["QueenCount"] := 	aControlGroup.Queens.maxIndex() ? aControlGroup.Queens.maxIndex() : 0 ; as "SelectedUnitCount" will contain total selected queens + other units in group
 	return 	aControlGroup.Queens.maxindex()
  }
 
 	; CheckMoveState for forced injects
  getSelectedQueensWhichCanInject(ByRef aSelection, CheckMoveState := 0)
  {	GLOBAL A_unitID, O_scTypeCount, O_scTypeHighlighted, S_scStructure, O_scUnitIndex, GameIdentifier, B_SelectionStructure
- 	, S_uStructure, GameIdentifier 
+ 	, S_uStructure, GameIdentifier, uMovementFlags 
 	aSelection := []
 	selectionCount := getSelectionCount()
 	ReadRawMemory(B_SelectionStructure, GameIdentifier, MemDump, selectionCount * S_scStructure + O_scUnitIndex)
@@ -8603,11 +8637,13 @@ OldBackSpaceCtrlGroupInject()
 	{
 		unit := numget(MemDump,(A_Index-1) * S_scStructure + O_scUnitIndex , "Int") >> 18
 		type := getUnitType(unit)
-		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25)) && (!CheckMoveState || (CheckMoveState && getUnitMoveState(unit) = -1) )
-			aSelection.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aSelection.Queens[aSelection.Queens.MaxIndex(), "Type"] := Type
+		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25)) 
+		&& (!CheckMoveState 
+			||  (CheckMoveState && (  (  (MoveState := getUnitMoveState(unit)) = uMovementFlags.Idle) || MoveState = uMovementFlags.HoldPosition)  )   )  ; I do this because my blocking of keys isnt 100% and if the user is pressing H e.g. hold posistion army or make hydras
+			aSelection.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aSelection.Queens[aSelection.Queens.MaxIndex(), "Type"] := Type 					; and so can accidentally put queen on hold position thereby stopping injects!!!
 
 	}
-	aSelection["Count"] := 	aSelection.Queens.maxIndex() ; as "SelectedUnitCount" will contain total selected queens + other units in group
+	aSelection["Count"] :=  aSelection.Queens.maxIndex() ? aSelection.Queens.maxIndex() : 0 ; as "SelectedUnitCount" will contain total selected queens + other units in group
 	return 	aSelection.Queens.maxindex()
  }
 
@@ -8649,7 +8685,7 @@ isUnitNearUnit(Queen, Hatch, MaxXYdistance) ; takes objects which must have keys
  }
  numGetIsHatchInjectedFromMemDump(ByRef MemDump, Unit)
  {	global ; 1 byte = 18h chrono for protoss structures, 48h when injected for zerg -  10h normal state
- 	return (48 = numget(MemDump, Unit * S_uStructure + O_uChronoAndInjectState, "UChar")/4096) ? 1 : 0
+ 	return (48 = numget(MemDump, Unit * S_uStructure + O_uChronoAndInjectState, "UChar")) ? 1 : 0
  }
 
 
@@ -8853,7 +8889,8 @@ LoadMemoryAddresses(SC2EXE)
 		O_mRight := B_MapStruct + 0xE4	    ; MapRight 157.999756 (akilon wastes) after dividing 4096                     
 		O_mTop := B_MapStruct + 0xE8	   	; MapTop: 622591 (akilon wastes) before dividing 4096  
 
-	uMovementFlags := {Amove: 0 		;these arent really flags !! cant '&' them!
+	uMovementFlags := {Idle: -1  ; ** Note this isn't actually a read in game type/value its just what my funtion will return if it is idle
+	, Amove: 0 		;these arent really flags !! cant '&' them!
 	, Patrol: 1
 	, HoldPosition: 2
 	, Move: 256
@@ -9568,6 +9605,11 @@ isHatchOrLairMorphing(unit)
 
 */
 
+; an easier way to do this would just to create an array containg an object of each unit
+; each unit object would then have type, owner, priorty property
+; and it could then be sorted by each property in turn to get the order correct
+; but tipple sorting an array would take 'considerable' time, at least relative to not sorthing it
+; so i would rather do it without sorting the array
 
 getEnemyUnitCount(byref aEnemyUnits, byref aEnemyBuildingConstruction, byref aUnitID)
 {
@@ -10147,6 +10189,36 @@ groupMinerals(minerals)
 	return averagedMinerals
 }
 
+
+/*
+f1::
+unit := getSelectedUnitIndex()
+msgbox %  getUnitMoveState(unit)
+
+return 
+
+f2::
+settimer, g_TTTest, 200
+getGroupedQueensWhichCanInject(1Group, 1)
+getGroupedQueensWhichCanInject(0Group, 0)
+getSelectedQueensWhichCanInject(oSelection, 1)
+objtree(oSelection, "oSelection")
+objtree(1Group, "1")
+objtree(0Group, "0")
+return 
+
+g_TTTest:
+
+testtime := A_TickCount - testtime
+;ToolTip, % isUserBusyBuilding() "`n" pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction), (mx+10), (my+10)
+var := getPlayerCurrentAPM(a_LocalPlayer.slot)"`n"
+var .= getPlayerCurrentAPM(1) "`n"
+var .= getPlayerCurrentAPM(2) "`n"
+var .= getPlayerCurrentAPM(3) "`n"
+var .= getPlayerCurrentAPM(4) "`n"
+
+ToolTip, %  var	, (mx+10), (my+10)
+return 
 
 /*
 
