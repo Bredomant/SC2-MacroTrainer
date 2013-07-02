@@ -187,9 +187,8 @@ g_BufferInputFastLabel:
 return
 g_ReturnFastLabel:
 return
-#If, !BufferInputFast.isInputBlockedOrBuffered() 
+#If, (!BufferInputFast.isInputBlockedOrBuffered() && WinActive(GameIdentifier))  ; need this here as AHK tree view goes crazy! it needs like 200 ms sleep or something
 ~Lbutton Up::
-sleep(1)
 if !GetKeyState("Lbutton", "P") && GetKeyState("Lbutton") 
 	send {click left up}
 return
