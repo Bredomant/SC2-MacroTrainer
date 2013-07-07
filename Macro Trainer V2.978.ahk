@@ -1147,8 +1147,8 @@ cast_inject:
 
 	If F_Inject_Enable
 		settimer, g_ForceInjectSuccessCheck, %FInjectHatchFrequency%	
-	If (Inject_Label = "cast_inject")
-		KeyWait, %cast_inject_key%, T4	
+	If (Inject_Label = "cast_inject" && GetKeyState(cast_inject_key, "P"))
+		KeyWait, %cast_inject_key%, T.25	; have to have this short, as sometimes the script sees this key as down when its NOT and so waits for the entire time for it to be let go - so if a user presses  this key multiple times to inject (as hatches arent ready) some of those presses will be ingnored
 Return
 
 	;should probably add a blockinput for the burrow check
@@ -1314,7 +1314,7 @@ isUserPerformingAction()
 ;	if ( type = A_UnitID[Worker] && isUserBusyBuilding() )  || IsUserMovingCamera() || IsMouseButtonActive() ; so it wont do anything if user is holding down a mousebutton! eg dragboxing
 	
 	if ( isUserBusyBuilding() || IsUserMovingCamera() || IsMouseButtonActive() 	; so it wont do anything if user is holding down a mousebutton! eg dragboxing
-	||  pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ) ; this gives 1 when reticle/cast cursor is present
+	||  pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ) ; this gives 256 when reticle/cast cursor is present
 		return 1
 	else return 0
 }
@@ -1322,11 +1322,16 @@ isUserPerformingAction()
 isUserPerformingActionIgnoringCamera()
 {	GLOBAL
 	if ( isUserBusyBuilding() || IsMouseButtonActive() 	; so it wont do anything if user is holding down a mousebutton! eg dragboxing
-	||  pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ) ; this gives 1 when reticle/cast cursor is present
+	||  pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction) ) ; this gives 256 when reticle/cast cursor is present
 		return 1
 	else return 0
 }
 
+; this gives 256 when reticle/casting cursor is present (includes attacking)
+isCastingReticleActive()
+{	GLOBAL
+	return pointer(GameIdentifier, P_IsUserPerformingAction, O1_IsUserPerformingAction)
+}
 
 
 ; for the second old pointer
@@ -2838,7 +2843,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	;[Hidden Options]
 	section := "Hidden Options"
 	IniRead, AutoGroupTimer, %config_file%, %section%, AutoGroupTimer, 30
-	
+		AutoGroupTimer := 10
 	
 	; Resume Warnings
 	Iniread, ResumeWarnings, %config_file%, Resume Warnings, Resume, 0
@@ -8489,8 +8494,9 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		loop, % getBaseCameraCount()	
 		{
 			send % base_camera
-
-			sleep(sleepTime/2)	;need a sleep somerwhere around here to prevent walkabouts...sc2 not registerings box drag?
+			sleep(round(sleepTime/2))	;need a sleep somerwhere around here to prevent walkabouts...sc2 not registerings box drag?
+			if isCastingReticleActive() ; i.e. cast larva
+				send % Escape ; (deselects queen larva) (useful on an already injected hatch) this is actually a variable
 			If (drag_origin = "Right" OR drag_origin = "R") And HumanMouse ;so left origin - not case sensitive
 				Dx1 := A_ScreenWidth-15-rand(0,(360/1920)*A_ScreenWidth), Dy1 := 45+rand(5,(200/1080)*A_ScreenHeight), Dx2 := 40+rand((-5/1920)*A_ScreenWidth,(300/1920)*A_ScreenWidth), Dy2 := A_ScreenHeight-240-rand((-5/1080)*A_ScreenHeight,(140/1080)*A_ScreenHeight)
 			Else If (drag_origin = "Left" OR drag_origin = "L") AND HumanMouse ;left origin
@@ -8505,7 +8511,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 			Else 
 				send {click down %Dx1%, %Dy1%}{click up, %Dx2%, %Dy2%} 
 		;	Sleep, sleepTime/2	;sleep needs to be here (to give time to update selection buffer?)	
-			sleep(sleepTime/2)
+			sleep(round(sleepTime/2))
 			if (QueenIndex := filterSlectionTypeByEnergy(25, A_unitID["Queen"]))
 			{																	
 				send % Inject_spawn_larva							;have to think about macro hatch though
@@ -8517,7 +8523,6 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 					send {click Left %click_x%, %click_y%}
 				}
 				Else send {click Left %click_x%, %click_y%}
-				send % Escape ; (deselects queen larva) (useful on an already injected hatch) this is actually a variable
 			}	
 
 		}
