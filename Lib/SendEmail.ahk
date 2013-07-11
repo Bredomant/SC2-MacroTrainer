@@ -1,4 +1,4 @@
-SendEmail(p_to, p_subject, p_message, user="Macro.Trainer@gmail.com", pass="PublicPasswordfwnk322rf2")
+SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gmail.com", pass="PublicPasswordfwnk322rf2")
 {
 	pmsg          := ComObjCreate("CDO.Message")
 	pmsg.From       := "MT BugReport@mail.com" ; """AHKUser"" <...@gmail.com>"
@@ -8,12 +8,37 @@ SendEmail(p_to, p_subject, p_message, user="Macro.Trainer@gmail.com", pass="Publ
 	pmsg.Subject    := p_subject
 
 	;You can use either Text or HTML body like
+
+	getSystemTimerResolutions(MinTimer, MaxTimer)
+	p_message 	.= "`n`n`n"
+				. "General System Info:`n`n"
+				. "OSVersion: " A_OSVersion "`n"
+				. "Is64bitOS: " A_Is64bitOS "`n"
+				. "Language Code: " A_Language "`n"
+				. "Language: " getSystemLanguage() "`n"
+				. "Scipt & Path: " A_ScriptFullPath "`n"
+				. "Screen Width: " A_ScreenWidth "`n"
+				. "Screen Height: " A_ScreenHeight "`n"
+				. "Screen DPI: " A_ScreenDPI "`n"
+				. "MinTimer: " MinTimer "`n"
+				. "MaxTimer: " MaxTimer "`n"
+
 	pmsg.TextBody    := p_message
 	;OR
 	;pmsg.HtmlBody := "<html><head><title>Hello</title></head><body><h2>Hello</h2><br /><p>Testing!</p></body></html>"
 
 
 	;sAttach         := "Path_Of_Attachment" ; can add multiple attachments, the delimiter is |
+
+
+	if (oAttachments && isobject(oAttachments))
+	{
+		for index, attachmentPath in  oAttachments
+			sAttach .= attachmentPath "|"
+	}
+	else if oAttachments
+		sAttach := oAttachments
+	sAttach := Trim(sAttach, "`t |")
 
 	fields := Object()
 	fields.smtpserver   := "smtp.gmail.com" ; specify your SMTP server

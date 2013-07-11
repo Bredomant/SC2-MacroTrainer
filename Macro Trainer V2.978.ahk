@@ -10,7 +10,7 @@
 ;	git push
 ;-----------------------
 
-; compiled using AHK 1.1.09.03 - the later version have changed how soundset works. Cant be bothered working it out and nothing beneficial in the updates 
+
 ; if script re-copied from github should save it using UTF-8 with BOM (otherwise some of the ascii symbols like • wont be displayed correctly)
 /*	Things to do
 	Update unit panel structure so can add build progress and hallucination properties
@@ -61,11 +61,12 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #UseHook
 #Persistent
 #NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
+#MaxThreads 20 ; don't know if this will affect anything
 SetStoreCapslockMode, off ; needed in case a user bind something to the capslock key in sc2 - other AHK always sends capslock to adjust for case.
 OnExit, ShutdownProcedure
 
 Menu, Tray, Icon 
-if not A_IsAdmin 
+if !A_IsAdmin 
 {
 	try  Run *RunAs "%A_ScriptFullPath%"
 	ExitApp
@@ -75,7 +76,7 @@ Menu Tray, Add, &Settings && Options, options_menu
 Menu Tray, Add, &Check For Updates, TrayUpdate
 Menu Tray, Add, &Homepage, Homepage
 Menu Tray, Add, &Reload, g_reload
-Menu Tray, Add, Exit, ShutdownProcedure
+Menu Tray, Add, Exit, ExitApp ;this is actually a label not the command!
 Menu Tray, Default, &Settings && Options
 If A_IsCompiled
 	Menu Tray, NoStandard
@@ -125,8 +126,19 @@ If InStr(A_ScriptDir, old_backup_DIR)
 		ExitApp
 }
 Gosub, pre_startup ; go read the ini file
-SoundSet, %overall_program%
+SetProgramWaveVolume(programVolume)
 SAPI.volume := speech_volume
+
+;	this is required to enable drag and drop on vista and above systems while running with admin privileges 
+; 	also should read up on the security aspects of these commands
+; 	this has a 'process wide' scope (tested it, and it seems to mean what it says i.e. 
+;	only for this process and so reverts on closing)
+
+	if A_OSVersion in WIN_8,WIN_7,WIN_VISTA
+	{  
+		DllCall("ChangeWindowMessageFilter", uint, 0x49, uint, 1) 	; 1 allows message to be received 
+		DllCall("ChangeWindowMessageFilter", uint, 0x233, uint, 1)
+	}
 
 ;-----------------------
 ;	Startup
@@ -207,9 +219,9 @@ Process, wait, %GameExe%	; waits for starcraft to exist
 while (!(B_SC2Process := getProcessBaseAddress(GameIdentifier)) || B_SC2Process < 0)		;using just the window title could cause problems if a folder had the same name e.g. sc2 folder
 	sleep 250				; required to prevent memory read error - Handle closed: error 		
 LoadMemoryAddresses(B_SC2Process)	
-settimer, clock, 200
-settimer, timer_exit, 5000
-SetTimer, OverlayKeepOnTop, 1000, -10	;better here, as since WOL 2.0.4 having it in the "clock" section isn't reliable 	
+settimer, clock, 250
+settimer, timer_exit, 5000, -100
+SetTimer, OverlayKeepOnTop, 1000, -20	;better here, as since WOL 2.0.4 having it in the "clock" section isn't reliable 	
 
 l_Changeling := A_unitID["ChangelingZealot"] "," A_unitID["ChangelingMarineShield"] ","  A_unitID["ChangelingMarine"] 
 				. ","  A_unitID["ChangelingZerglingWings"] "," A_unitID["ChangelingZergling"]
@@ -228,7 +240,7 @@ g_EmergencyRestart:
 		SetKeyDelay, 10			
 		releaseAllModifiers() 					;This will be active irrespective of the window
 		RestoreModifierPhysicalState("Unblock")		;input on ; this doesnt really do anything now - not needed
-		settimer, EmergencyInputCountReset, 5000	
+		settimer, EmergencyInputCountReset, 5000, -100	
 		EmergencyInputCount ++		 
 		If EmergencyInputCount >= 3
 		{
@@ -248,6 +260,13 @@ EmergencyInputCountReset:
 	settimer, EmergencyInputCountReset, off
 	EmergencyInputCount := 0
 	Return
+
+; this is required as the 'exit' on the tray icon can only launch labels
+; and if it actually goes to " ShutdownProcedure: " the shudown procedure will actually get run twice! (not a big deal....)
+; Once from the label, and a second time due to the first use of ExitApp command 
+ExitApp:
+	ExitApp ; invokes the shutdown procedure
+return 
 
 g_ListVars:
 	ListVars
@@ -285,41 +304,6 @@ g_GiveLocalPalyerResources:
 	SetPlayerMinerals()
 	SetPlayerGas()
 return	
-
-
-speaker_volume_up:
-	Send {Volume_Up 2}
-	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
-	return
-
-speaker_volume_down:
-	Send {Volume_Down 2}
-	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
-	return
-
-speech_volume_up:
-	if (100 <  speech_volume := SAPI.volume + 2)
-		speech_volume := 100
-	SAPI.volume := speech_volume
-	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
-	return
-
-speech_volume_down:
-	if (0 > speech_volume := SAPI.volume - 2)
-		speech_volume := 0
-	SAPI.volume := speech_volume
-	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
-	return
-
-program_volume_up:
-	SoundSet, +2
-	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
-	Return
-
-program_volume_down:	
-	SoundSet, -2
-	SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
-	Return
 
 g_GLHF:
 	ReleaseModifiers(0)
@@ -558,9 +542,9 @@ Adjust_overlay:
 	Dragoverlay := 0	 	
 	{
 		SetBatchLines, %SetBatchLines%
-		SetTimer, OverlayKeepOnTop, 1000, -10
-		SetTimer, overlay_timer, %OverlayRefresh%, -11
-		SetTimer, g_unitPanelOverlay_timer, %UnitOverlayRefresh%, -11
+		SetTimer, OverlayKeepOnTop, 1000, -20
+		SetTimer, overlay_timer, %OverlayRefresh%, -8
+		SetTimer, g_unitPanelOverlay_timer, %UnitOverlayRefresh%, -9
 		SoundPlay, %A_Temp%\Off.wav
 		WinActivate, %GameIdentifier%
 	}
@@ -639,13 +623,13 @@ mt_pause_resume:
 	if (mt_on := !mt_on)	; 1st run mt_on blank so considered false and does else	
 	{
 		game_status := "lobby" ; with this clock = 0 when not in game 
-		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck", "g_ForceInjectSuccessCheck")
+		timeroff("clock", "money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "AutoGroupIdle", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck", "g_ForceInjectSuccessCheck")
 		inject_timer := 0	;ie so know inject timer is off
 		DSpeak("Macro Trainer Paused")
 	}	
 	Else
 	{
-		settimer, clock, 200
+		settimer, clock, 250
 		DSpeak("Macro Trainer Resumed")
 	}
 return
@@ -657,7 +641,7 @@ clock:
 	if (!time AND game_status = "game") OR (UpdateTimers) ; time=0 outside game
 	{	
 		game_status := "lobby" ; with this clock = 0 when not in game (while in game at 0s clock = 44)	
-		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck", "g_ForceInjectSuccessCheck")
+		timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "AutoGroupIdle", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck", "g_ForceInjectSuccessCheck")
 		inject_timer := TimeReadRacesSet := UpdateTimers := Overlay_RunCount := PrevWarning := WinNotActiveAtStart := ResumeWarnings := 0 ;ie so know inject timer is off
 		Try DestroyOverlays()
 	}
@@ -672,11 +656,11 @@ clock:
 		if WinActive(GameIdentifier)
 			ReDraw := ReDrawIncome := ReDrawResources := ReDrawArmySize := ReDrawWorker := RedrawUnit := ReDrawIdleWorkers := ReDrawLocalPlayerColour := 1
 		if idle_enable	;this is the idle AFK
-			settimer, user_idle, 1000
-;		if (MaxWindowOnStart && !Auto_Mine && time < 5)  ;as automine has its own
-		if (MaxWindowOnStart && time < 5)  ; automine currently disabled
-		{	MouseMove A_ScreenWidth/2, A_ScreenHeight/2	;which has a longer sleep
+			settimer, user_idle, 1000, -5
+		if (MaxWindowOnStart && time < 5 && !WinActive(GameIdentifier)) 
+		{	
 			WinActivate, %GameIdentifier%
+			MouseMove A_ScreenWidth/2, A_ScreenHeight/2
 			WinNotActiveAtStart := 1
 		}
 		Gosub, player_team_sorter
@@ -691,38 +675,42 @@ clock:
 		}
 		aResourceLocations := getMapInforMineralsAndGeysers()
 		if	mineralon
-			settimer, money, 500
+			settimer, money, 500, -5
 		if	gas_on
-			settimer, gas, 1000
+			settimer, gas, 1000, -5
 		if idleon		;this is the idle worker
-			settimer, scvidle, 500	; the idle scv pointer changes every game
+			settimer, scvidle, 500, -5	; the idle scv pointer changes every game
 		if supplyon
-			settimer, supply, 200
+			settimer, supply, 200, -5
 		if workeron
-			settimer, worker, 1000
-		LocalPlayerRace := a_LocalPlayer["Race"] ; another messy lazy veriable
+			settimer, worker, 1000, -5
+		LocalPlayerRace := a_LocalPlayer["Race"] ; another messy lazy variable
 		if (EnableAutoWorker%LocalPlayerRace%Start && (a_LocalPlayer["Race"] = "Terran" || a_LocalPlayer["Race"] = "Protoss") )
 		{
 			SetTimer, g_autoWorkerProductionCheck, 200
 			EnableAutoWorker%LocalPlayerRace% := 1
 		}
-		else SetTimer, g_autoWorkerProductionCheck, off ; this has to be here incase user changes state via options during game
-
 		if ( Auto_Read_Races AND race_reading ) && 	!((ResumeWarnings || UserSavedAppliedSettings) && time > 12)
-			SetTimer, find_races_timer, 1000
+			SetTimer, find_races_timer, 1000, -20
 		If (a_LocalPlayer["Race"] = "Terran")
 			SupplyType := A_unitID["SupplyDepot"]
 		Else If (a_LocalPlayer["Race"] = "Protoss")
 			SupplyType := A_unitID["Pylon"]		
 		if (alert_array[GameType, "Enabled"] || warpgate_warn_on || supplyon) 
-			settimer, unit_bank_read, %UnitDetectionTimer_ms%			
+			settimer, unit_bank_read, %UnitDetectionTimer_ms%, -5		
 		SetMiniMap(minimap)
 		setupMiniMapUnitLists()
 		l_ActiveDeselectArmy := setupSelectArmyUnits(l_DeselectArmy, A_unitID)
 		ShortRace := substr(LongRace := a_LocalPlayer["Race"], 1, 4) ;because i changed the local race var from prot to protoss i.e. short to long - MIGHT NO be needed  now
 		setupAutoGroup(a_LocalPlayer["Race"], A_AutoGroup, A_unitID, A_UnitGroupSettings)
 		If A_UnitGroupSettings["AutoGroup", a_LocalPlayer["Race"], "Enabled"]
-			settimer, Auto_Group, %AutoGroupTimer%
+		{
+			settimer, Auto_Group, %AutoGroupTimer% 						; set to 30 ms via config ini default
+																		; WITH Normal 1 priority so it should run once every 30 ms
+			settimer, AutoGroupIdle, %AutoGroupTimerIdle%, -99999 		; default ini value 5 ms - Lowest priority so will only run when script is idle! And wont interrupt any other timer
+																		; and so wont prevent the minimap or overlay being drawn
+																		; note may delay some timers from launching for a fraction of a ms while its in thread, no timers interupt mode (but it takes less than 1 ms to run anyway)
+		} 																; Hence with these two timers running autogroup will occur at least once every 30 ms, but generally much more frequently
 		CreateHotkeys()
 		if (a_LocalPlayer["Name"] == "Kalamity")
 		{
@@ -731,9 +719,9 @@ clock:
 			Hotkey, If
 		}	
 		If (DrawMiniMap OR DrawAlerts OR DrawSpawningRaces)
-			SetTimer, MiniMap_Timer, %MiniMapRefresh%, -10		
-		SetTimer, overlay_timer, %OverlayRefresh%, -11	;lowest priority
-		SetTimer, g_unitPanelOverlay_timer, %UnitOverlayRefresh%, -11	;lowest priority
+			SetTimer, MiniMap_Timer, %MiniMapRefresh%, -7		
+		SetTimer, overlay_timer, %OverlayRefresh%, -8	
+		SetTimer, g_unitPanelOverlay_timer, %UnitOverlayRefresh%, -9	
 
 		EnemyBaseList := GetEBases()		
 		UserSavedAppliedSettings := 0		
@@ -773,17 +761,17 @@ setupSelectArmyUnits(l_input, A_unitID)
 player_team_sorter:
 a_player := [], a_LocalPlayer := []
 ;LocalPlayerNumber := ReadMemory_Str(local_ID_off, , , , "#")
-Loop, 8	;doing it this way allows for custom games with blank slots ;can get weird things if 16
+Loop, 16	;doing it this way allows for custom games with blank slots ;can get weird things if 16 (but filtering them for nonplayers)
 {
-	if (!getPlayerName(A_Index)) ;empty slot custom games?
-	OR IsInList(getPlayerType(A_Index), 5, 6) ; 0=EmptySlot 3=Neut 5=ref 6=spec
+	if !getPlayerName(A_Index) ;empty slot custom games?
+	|| IsInList(getPlayerType(A_Index), "None", "Neutral", "Hostile", "Referee", "Spectator")
 		Continue
-	a_player[A_Index] :=  new c_Player(A_Index)   
-	If (A_Index = getLocalPlayerNumber())  OR (debug AND getPlayerName(A_Index) == debug_name)
+	a_player.insert( new c_Player(A_Index) )   
+	If (A_Index = getLocalPlayerNumber()) OR (debug AND getPlayerName(A_Index) == debug_name)
 		a_LocalPlayer :=  new c_Player(A_Index)
 }
-IF (IsInList(a_LocalPlayer.Type, 5, 6) OR (A_IsCompiled AND a_LocalPlayer.Type = 16))
-	timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer") ;Pause all warnings. Clock still going so will resume next game
+IF (IsInList(a_LocalPlayer.Type, "Referee", "Spectator") OR (A_IsCompiled AND getLocalPlayerNumber() = 16 )) ; dont really need this 16 check, as timer wont activate as clock label checks if local player != 16 (so this will cause issues if it really is a 16 player game as local payer number is 16, but this prevents announcements during replays)
+	timeroff("money", "gas", "scvidle", "supply", "worker", "inject", "unit_bank_read", "Auto_mine", "Auto_Group", "AutoGroupIdle", "MiniMap_Timer", "overlay_timer", "g_unitPanelOverlay_timer", "g_autoWorkerProductionCheck", "g_ForceInjectSuccessCheck") ;Pause all warnings. Clock still going so will resume next game
 GameType := GetGameType(a_Player)
 return
 ;-------------------------
@@ -928,7 +916,10 @@ Cast_ChronoStructure(StructureToChrono)
 		send {Tab}
 	Return 
 }
-
+AutoGroupIdle:
+	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
+	AutoGroup(A_AutoGroup, AG_Delay)
+	Return
 
 Auto_Group:
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
@@ -2338,19 +2329,9 @@ ShutdownProcedure:
 	Closed := ReadMemory_Str()
 	Gdip_Shutdown(pToken)
 	sleep("Off") ; this resets the timeEndPeriod/timeBeginPeriod
-	If A_IsCompiled
-	{	
-		SoundGet, volume
-		volume := Round(volume, 0)
-		Iniwrite, %volume%, %config_file%, Volume, program
-		if SAPI ; needed as simple work around if user exits script b4 5 second wait
-		{ 	
-			speech_volume := Round(SAPI.volume, 0)
-			Iniwrite, %speech_volume%, %config_file%, Volume, speech
-		}
-	}
+	Iniwrite, % round(GetProgramWaveVolume()), %config_file%, Volume, program
+	
 	ExitApp
-
 Return
 
 ;------------
@@ -2625,13 +2606,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	;[ Volume]
 	section := "Volume"
 	IniRead, speech_volume, %config_file%, %section%, speech, 100
-	IniRead, overall_program, %config_file%, %section%, program, 100
-	IniRead, speaker_volume_up_key, %config_file%, %section%, +speaker_volume_key, Lwin & =
-	IniRead, speaker_volume_down_key, %config_file%, %section%, -speaker_volume_key, Lwin & -
-	IniRead, speech_volume_up_key, %config_file%, %section%, +speech_volume_key, Lwin & PgUp
-	IniRead, speech_volume_down_key, %config_file%, %section%, -speech_volume_key, Lwin & PgDn
-	IniRead, program_volume_up_key, %config_file%, %section%, +program_volume_key, Lwin & Up
-	IniRead, program_volume_down_key, %config_file%, %section%, -program_volume_key, Lwin & Down
+	IniRead, programVolume, %config_file%, %section%, program, 100
 	; theres an iniwrite volume in the exit routine
 
 	;[Warnings]-----sets the audio warning
@@ -2842,8 +2817,8 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	
 	;[Hidden Options]
 	section := "Hidden Options"
-	IniRead, AutoGroupTimer, %config_file%, %section%, AutoGroupTimer, 30
-		AutoGroupTimer := 10
+	IniRead, AutoGroupTimer, %config_file%, %section%, AutoGroupTimer, 30 		; care with this setting this below 20 stops the minimap from drawing properly wasted hours finding this problem!!!!
+	IniRead, AutoGroupTimerIdle, %config_file%, %section%, AutoGroupTimerIdle, 5	; have to carefully think about timer priorities and frequency
 	
 	; Resume Warnings
 	Iniread, ResumeWarnings, %config_file%, Resume Warnings, Resume, 0
@@ -2886,14 +2861,14 @@ ini_settings_write:
 		Try 
 		{
 			Hotkey, If, WinActive(GameIdentifier) && !BufferInputFast.isInputBlockedOrBuffered() 						
-														; 	deactivate the hotkeys
-			hotkey, %speaker_volume_up_key%, off		; 	so they can be updated with their new keys
-			hotkey, %speaker_volume_down_key%, off		;	
-			hotkey, %speech_volume_up_key%, off			; 
-			hotkey, %speech_volume_down_key%, off		; Anything with a try command has an 'if setting is on' section in the
-			hotkey, %program_volume_up_key%, off		; create hotkeys section
-			hotkey, %program_volume_down_key%, off		; still left the overall try just incase i missed something
-			hotkey, %warning_toggle_key%, off			; gives the user a friendlier error
+			hotkey, %warning_toggle_key%, off			; 	deactivate the hotkeys
+														; 	so they can be updated with their new keys
+														;	
+														; 
+														; Anything with a try command has an 'if setting is on' section in the
+														; create hotkeys section
+														; still left the overall try just incase i missed something
+														; gives the user a friendlier error
 
 			Hotkey, If, WinActive(GameIdentifier) && time && !BufferInputFast.isInputBlockedOrBuffered()	
 			hotkey, %worker_count_local_key%, off
@@ -3126,14 +3101,8 @@ ini_settings_write:
 	;[ Volume]
 	section := "Volume"
 	IniWrite, %speech_volume%, %config_file%, %section%, speech
-	IniWrite, %overall_program%, %config_file%, %section%, program
-	SoundSet, %overall_program%
-	IniWrite, %speaker_volume_up_key%, %config_file%, %section%, +speaker_volume_key
-	IniWrite, %speaker_volume_down_key%, %config_file%, %section%, -speaker_volume_key
-	IniWrite, %speech_volume_up_key%, %config_file%, %section%, +speech_volume_key
-	IniWrite, %speech_volume_down_key%, %config_file%, %section%, -speech_volume_key
-	IniWrite, %program_volume_up_key%, %config_file%, %section%, +program_volume_key
-	IniWrite, %program_volume_down_key%, %config_file%, %section%, -program_volume_key
+	IniWrite, %programVolume%, %config_file%, %section%, program
+	SetProgramWaveVolume(programVolume)
 	; theres an iniwrite volume in the exit routine
 
 	;[Warnings]-----sets the audio warning
@@ -3387,9 +3356,9 @@ IfWinExist, Macro Trainer V%version% Settings
 }
 Gui, Options:New
 gui, font, norm s9	;here so if windows user has +/- font size this standardises it. But need to do other menus one day
-;Gui, +ToolWindow  +E0x40000 ; E0x40000 gives it a icon on taskbar
-options_menu := "home32.png|radarB32.png|map32.png|Inject32.png|Group32.png|Worker32.png|reticule32.png|Robot32.png|key.png|warning32.ico|miscB32.png|speakerB32.png|bug32.png|settings.ico"
-optionsMenuTitles := "Home|Detection List|MiniMap/Overlays|Injects|Unit Grouping|Auto Worker|Chrono Boost|Misc Automation|SC2 Keys|Warnings|Misc Abilities|Volume|Report Bug|Settings"
+;Gui, +ToolWindow  +E0x40000 ; E0x40000 gives it a icon on taskbar (+ToolWindow doesn't have an icon)
+options_menu := "home32.png|radarB32.png|map32.png|Inject32.png|Group32.png|Worker32.png|reticule32.png|Robot32.png|key.png|warning32.ico|miscB32.png|bug32.png|settings.ico"
+optionsMenuTitles := "Home|Detection List|MiniMap/Overlays|Injects|Unit Grouping|Auto Worker|Chrono Boost|Misc Automation|SC2 Keys|Warnings|Misc Abilities|Report Bug|Settings"
 Gosub, g_CreateUnitListsAndObjects ; used for some menu items, and for the custom unit filter gui
 
 ImageListID := IL_Create(10, 5, 1)  ; Create an ImageList with initial capacity for 10 icons, grows it by 5 if need be, and 1=large icons
@@ -3817,42 +3786,6 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMisc_TAB, Misc Ab
 			Gui, Add, UpDown,  Range1-300 vHumanMouseTimeHi, %HumanMouseTimeHi%, ;these belong to the above edit
 
 
-Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vVolume_TAB, Volume
-	Gui, Add, GroupBox, w265 h310 section, Volume
-
-		Gui, Add, Text,X%XTabX% yp+30 w90, Speech:
-			Gui, Add, Slider, ToolTip  NoTicks w120 x+2 yp-2  Vspeech_volume, %speech_volume%
-				Gui, Add, Button, xp+123 0 yp w30 h23 vTest_VOL_Speech gTest_VOL, Test
-
-		Gui, Add, Text,X%XTabX% y+15 w90, Overall Program:
-			Gui, Add, Slider, ToolTip  NoTicks w120 x+2 yp-2  Voverall_program, %overall_program%
-				Gui, Add, Button, xp+123 yp w30 h23 vTest_VOL_All gTest_VOL, Test
-
-		Gui, Add, Text, X%XTabX% yp+35 w90, +Speaker Volume: 
-			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vspeaker_volume_up_key , %speaker_volume_up_key%
-				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#speaker_volume_up_key,  Edit
-
-		Gui, Add, Text, X%XTabX% yp+40 w90, -Speaker Volume:
-			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vspeaker_volume_down_key , %speaker_volume_down_key%
-				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#speaker_volume_down_key,  Edit
-
-		Gui, Add, Text, X%XTabX% yp+40 w90, +Speech Volume:
-			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vspeech_volume_up_key , %speech_volume_up_key%
-				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#speech_volume_up_key,  Edit
-
-		Gui, Add, Text, X%XTabX% yp+40 w90, -Speech Volume:
-			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vspeech_volume_down_key , %speech_volume_down_key%
-				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#speech_volume_down_key,  Edit
-
-		Gui, Add, Text, X%XTabX% yp+40 w90, +Program Volume:
-			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vprogram_volume_up_key , %program_volume_up_key%
-				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#program_volume_up_key,  Edit
-
-		Gui, Add, Text, X%XTabX% yp+40 w90, -Program Volume:
-			Gui, Add, Edit, Readonly yp-2 x+10 w105  center Vprogram_volume_down_key , %program_volume_down_key%
-				Gui, Add, Button, yp-2 x+10 w30 h23 gEdit_hotkey v#program_volume_down_key,  Edit
-
-
 
 Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Settings				
 	Gui, Add, GroupBox, xs ys+5 w161 h110 section, Misc. Settings
@@ -3888,9 +3821,16 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Set
 		Gui, Add, Edit, Number Right x+25 yp-2 w45 vTT_DeselectSleepTime
 			Gui, Add, UpDown,  Range0-300 vDeselectSleepTime, %DeselectSleepTime%,
 
-	Gui, Add, GroupBox, Xs+171 ys w245 h110, ; hidetray icon was previously here
+	Gui, Add, GroupBox, Xs+171 ys w245 h110, Volume
+		Gui, Add, Text, xp+10 yp+30 w45, Speech:
+			Gui, Add, Slider, ToolTip  NoTicks w140 x+2 yp-2  Vspeech_volume, %speech_volume%
+				Gui, Add, Button, x+5 yp w30 h23 vTest_VOL_Speech gTest_VOL, Test
 
-	Gui, Add, GroupBox, Xs+171 yp+116 w245 h185, Debugging
+		Gui, Add, Text, xs+181 y+15 w45, Overall:
+			Gui, Add, Slider, ToolTip  NoTicks w140 x+2 yp-2  VprogramVolume, %programVolume%
+				Gui, Add, Button, x+5 yp w30 h23 vTest_VOL_All gTest_VOL, Test
+
+	Gui, Add, GroupBox, Xs+171 ys+116 w245 h185, Debugging
 		Gui, Add, Button, xp+10 yp+30  Gg_ListVars w75 h25,  List Variables
 		Gui, Add, Button, xp yp+30  Gg_GetDebugData w75 h25,  Debug Data
 
@@ -3925,11 +3865,31 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vDetection_TAB, De
 	Gui, Font,
 
 Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vBug_TAB, Report Bug
-	Gui, Add, Text, y+30 section w100 , Your Email Address:`n%A_Space%%A_Space%%A_Space%%A_Space%%A_Space%(optional) 
-	Gui, Add, Edit, x+20 yp w250 vReport_Email,
-	Gui, Add, Text, xs ys+40 w100, Problem Description:
-	Gui, Add, Edit, x+20 yp w250 h200 vReport_TXT,
-	Gui, Add, Button, vB_Report gB_Report xp+80 y+20 w80 h50, Report
+	Gui, Add, Text, y+20 section, Your Email Address:%A_Space%%A_Space%%A_Space%%A_Space%%A_Space%(optional) 
+	Gui, Add, Edit, xp+50 y+10 w350 vReport_Email,
+	Gui, Add, Text, xp-50 y+10, Problem Description:
+	
+
+	BugText =  
+(
+
+A return email address is REQUIRED if you are looking for a follow up to your query.
+
+Bugs may not occur on all systems, so please be as SPECIFIC as possible when describing the problem.
+
+Screenshots and replays may be attached below.
+
+(please remove this text when filling in this form).
+
+)
+	Gui, Add, Edit, xp+50 y+10 w350 h160 vReport_TXT, %BugText%
+
+	GUI, Add, ListView, xp y+15 w350 H100 vEmailAttachmentListViewID, Attachments
+	LV_Add("", A_ScriptDir "\" config_file) ;includes the MT_Config.ini file ; this can not be removed by the user	
+	LV_ModifyCol()  ; Auto-size all columns to fit their contents
+	Gui, Add, Button, xp-40 yp+30 w25 h25 gg_AddEmailAttachment, +
+	Gui, Add, Button, xp yp+35 w25 h25 gg_RemoveEmailAttachment, -
+	Gui, Add, Button, vB_Report gB_Report xp+180 y+18 w80 h50, Report
 
 Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vChronoBoost_TAB, Settings||Structures
 Gui, Tab, Settings	
@@ -3952,8 +3912,6 @@ Gui, Tab, Settings
 		Gui, Add, Text, xs+10 yp+35, Chrono Remainder:`n    (1 = 25 mana)
 		Gui, Add, Edit, Number Right xp+120 yp-2 w45 vTT_CG_chrono_remainder 
 			Gui, Add, UpDown,  Range0-1000 vCG_chrono_remainder, %CG_chrono_remainder%		
-
-
 
 
 Gui, Tab, Structures	
@@ -4516,7 +4474,6 @@ GuiControl, Hide, MiscAutomation_TAB
 GuiControl, Hide, Keys_TAB
 GuiControl, Hide, Warnings_TAB
 GuiControl, Hide, Misc_TAB 
-GuiControl, Hide, Volume_TAB
 GuiControl, Hide, Detection_TAB
 GuiControl, Hide, Settings_TAB
 GuiControl, Hide, Bug_TAB
@@ -4559,9 +4516,9 @@ above_upperdelta_TT := TT_above_upperdelta_TT := "A warning will be heard when t
 minimum_supply_TT := TT_minimum_supply_TT := "Alerts are only active while your supply is above this number."
 
 w_supply_TT := w_warpgate_TT := w_workerprod_T_TT := w_workerprod_P_TT := w_workerprod_Z_TT := w_gas_TT := w_idle_TT := w_mineral_TT := "This text is spoken during a warning."
-TT_sec_workerprod_TT := sec_workerprod_TT := sec_idle_TT := sec_gas_TT := sec_mineral_TT := sec_supply_TT := TT_sec_supply_TT := TT_sec_mineral := TT_sec_gas_TT := TT_sec_idle_TT := TT_sec_warpgate_TT := sec_warpgate_TT := "Set how many additional warnings are to be given after the first initial warning (assuming the resource does not fall below the inciting value) - the warnings then turn off."
+TT_sec_workerprod_TT := sec_workerprod_TT := sec_idle_TT := sec_gas_TT := sec_mineral_TT := sec_supply_TT := TT_sec_supply_TT := TT_sec_mineral_TT := TT_sec_gas_TT := TT_sec_idle_TT := TT_sec_warpgate_TT := sec_warpgate_TT := "Set how many additional warnings are to be given after the first initial warning (assuming the resource does not fall below the inciting value) - the warnings then turn off."
 additional_delay_supply_TT := TT_additional_delay_supply_TT := additional_delay_minerals_TT := additional_delay_gas_TT := additional_idle_workers_TT 
-:= TT_additional_delay_minerals := TT_additional_delay_gas_TT := TT_additional_idle_workers_TT := TT_delay_warpgate_warn_followup_TT := delay_warpgate_warn_followup_TT := "This sets the delay between the initial warning, and the additional/follow-up warnings. (in real seconds)"
+:= TT_additional_delay_minerals_TT := TT_additional_delay_gas_TT := TT_additional_idle_workers_TT := TT_delay_warpgate_warn_followup_TT := delay_warpgate_warn_followup_TT := "This sets the delay between the initial warning, and the additional/follow-up warnings. (in real seconds)"
 TT_additional_delay_worker_production_TT := additional_delay_worker_production_TT := "This sets the delay between the initial warning, and the additional/follow-up warnings. (in SC2 seconds)"
 TT_workerproduction_time_TT := workerproduction_time_TT := "This only applies to Zerg.`nA warning will be heard if a drone has not been produced in this amount of time (SC2 seconds)."
 delay_warpgate_warn_TT := "If a gateway has been unconverted for this period of time (real seconds) then a warning will be made."
@@ -4640,7 +4597,7 @@ TTUserIdle_LoLimit_TT  := UserIdle_LoLimit_TT := "The game can't be paused befor
 TTUserIdle_HiLimit_TT := UserIdle_HiLimit_TT := "The game will not be paused after this (in game/SC2) time."
 
 speech_volume_TT := "The relative volume of the speech engine."
-overall_program_TT := "The overall program volume. This affects both the speech volume and the 'beeps'."
+programVolume_TT := "The overall program volume. This affects both the speech volume and the 'beeps'.`n`nNote: This probably has no effect on WindowsXP and below."
 speaker_volume_up_key_TT := speaker_volume_down_key_TT := "Changes the windows master volume."
 speech_volume_down_key_TT := speech_volume_up_key_TT := "Changes the programs TTS volume."
 program_volume_up_key_TT := program_volume_down_key_TT := "Changes the programs overall volume."
@@ -4863,16 +4820,36 @@ Return
 B_Report:
 	GuiControlGet, Report_Email,
 	GuiControlGet, Report_TXT,
-	R_check:= ltrim(Report_TXT, "`n `t") ;remove tabs and new lines (and spaces)
+	R_check:= trim(Report_TXT, "`n `t") ;remove tabs and new lines (and spaces)
 	R_length := StrLen(R_check)
-	if (R_check = "")
+
+	BugText =  ; this needs to equal the txt i use in txt field of the bug report
+(
+
+A return email address is REQUIRED if you are looking for a follow up to your query.
+
+Bugs may not occur on all systems, so please be as SPECIFIC as possible when describing the problem.
+
+Screenshots and replays may be attached below.
+
+(please remove this text when filling in this form).
+
+)	
+	if (R_check = "" || R_check = trim(BugText, "`n `t") )
 		msgbox, 48, Why Spam?, You didn't write anything.`nPlease don't spam this function.
 	Else if ( R_length < 18 )
 		msgbox, 32, Don't Spam, Please provide more information.
 	Else
 	{
+		Gui, ListView, EmailAttachmentListViewID ;note all future and current threads now refer to this listview!
+		oEmailAttachmentFilePaths := []
+		loop % LV_GetCount()
+		{
+			LV_GetText(AttachmentPath, A_Index) ; start at 1 as 0 retrieves the column header
+			oEmailAttachmentFilePaths.insert(AttachmentPath)
+		}
 		GuiControl, Disable, B_Report
-		SendEmail("Macro.Trainer@gmail.com", "Bug Report", "Return Email: " Report_Email "`n" "Problem: `n`n" Report_TXT )
+		SendEmail("Macro.Trainer@gmail.com", "Bug Report", "Return Email: " Report_Email "`n" "Problem: `n`n" Report_TXT, oEmailAttachmentFilePaths)
 		msgbox, 64, , Report Sent, 10
 		GuiControl, ,Report_Email,
 		GuiControl, ,Report_TXT, `n`n`n`n`n`n%a_tab%%a_tab%Thank You!
@@ -4960,11 +4937,6 @@ OptionsTree:
 		GUIcontrol, Show, Misc_TAB 
 		unhidden_menu := "Misc_TAB"
 	}
-	ELSE IF ( Menu_TXT = "Volume" )
-	{
-		GUIcontrol, Show, Volume_TAB
-		unhidden_menu := "Volume_TAB"
-	}	
 	ELSE IF ( Menu_TXT = "Settings" )
 	{
 		GUIcontrol, Show, Settings_TAB
@@ -4992,18 +4964,96 @@ OptionsTree:
  																	; so multiple categories would have the blue background
  	
  	
+;can arrive here from the GUI +/add button, or via the GuiDropFiles: label which is activated when a user drags and drops files onto a control
+g_AddEmailAttachment:
+if (A_GuiControl = "EmailAttachmentListViewID") 
+	FilePath := A_GuiEvent 		; contains the names separated by `n each file has its full directory path
+else 							; this is different to the multi file select, where the directory folder is only in A_index 1
+{
+	FileSelectFile, FilePath, M1, , Attach Files 
+	if (errorlevel || !FilePath) ; is set to 1 if the user dismissed the dialog without selecting a file (such as by pressing the Cancel button).
+		return 
+	Else
+	{
+		Loop, parse, FilePath, `n ;`n is used to separate multiple selected files
+			AttachmentCount := A_Index
+
+		; this acts to convert the multi-selected files so that each one has a full directory listing
+		; and is separated from the next by `n - so it should now be identical to the syntax used if a user had dragged
+		; and dropped the files
+
+		if (AttachmentCount > 1)
+		{
+			Loop, parse, FilePath, `n
+			{	
+				if (A_Index = 1) 	; when multiple files are selected (they all must come from the same folder)
+				{					; This folder path is only included in Index 1
+					tmpFilePaths := ""
+					BaseDirectory := A_LoopField
+					if (SubStr(BaseDirectory, 0, 1) != "\") ; as root directories will contain '\' but other ending directories wont
+						BaseDirectory .= "\" 
+					continue
+				}
+				else tmpFilePaths .= BaseDirectory A_LoopField "`n"
+			}		
+			FilePath := RTrim(tmpFilePaths, "`n") ; remove the `n from the final path, so dont get an empty list view filed  
+		}
+
+	}
+}
+Gui, ListView, EmailAttachmentListViewID ;note all future and current threads now refer to this listview!
+Loop, parse, FilePath, `n
+	LV_Add("", A_LoopField)
+LV_ModifyCol()  ; Auto-size all columns to fit their contents
+return 
+
+
+return
+g_RemoveEmailAttachment:
+
+Gui, ListView, EmailAttachmentListViewID ;note all future and current threads now refer to this listview!
+EmailRowNumber := 0
+UserTriedToRemoveIniAttachment := False  
+Loop
+{
+    EmailRowNumber := LV_GetNext(EmailRowNumber)  ; Resume the search at the row after that found by the previous iteration.
+    if !EmailRowNumber  ; The above returned zero, so there are no more selected rows.
+        break
+    LV_GetText(RowText, EmailRowNumber)
+    if instr(RowText, "MT_Config.ini")
+    	UserTriedToRemoveIniAttachment := True
+    else 
+    {
+    	LV_Delete(EmailRowNumber)
+    	goto g_RemoveEmailAttachment ; otherwise some items wont get deleted as lv_next gets confused in loop
+    }
+}
+LV_ModifyCol()  ; Auto-size all columns to fit their contents
+if UserTriedToRemoveIniAttachment
+	msgbox Your config file is always attached to a bugreport.`nIt can not be removed.
+return 
+
+; activated when a user drags and drops files onto a control
+; so far only used for email attachments
+
+;Note GuiDropFiles: is the general label, but Have changed the options menu label to Options hence 'OptionsGuiDropFiles'
+OptionsGuiDropFiles: 
+if (A_GuiControl = "EmailAttachmentListViewID")
+	Gosub, g_AddEmailAttachment 
+return 
+
 
 Test_VOL:
-	original_overall_program := overall_program
+	original_programVolume := programVolume
 	original_speech_volume := speech_volume
 	GuiControlGet, TmpSpeechVol,, speech_volume
 	speech_volume:= TmpSpeechVol := Round(TmpSpeechVol, 0)
-	GuiControlGet, TmpTotalVolume,, overall_program
-	overall_program := Round(TmpTotalVolume, 0)
+	GuiControlGet, TmpTotalVolume,, programVolume
+	programVolume := Round(TmpTotalVolume, 0)
 
 	If ( A_GuiControl = "Test_VOL_All")
 	{
-		SoundSet, overall_program
+		SetProgramWaveVolume(programVolume)
 		loop, 2
 		{
 			SoundPlay, %A_Temp%\Windows Ding.wav  ;SoundPlay *-1
@@ -5055,9 +5105,9 @@ Test_VOL:
 		DSpeak("All three of them, and Ten patches")	
 		rand_joke := 0
 	}
-	overall_program := original_overall_program
+	programVolume := original_programVolume
 	speech_volume := original_speech_volume
-	SoundSet, %overall_program%
+	SetProgramWaveVolume(programVolume)
 	SAPI.volume := speech_volume
 return
 
@@ -6758,38 +6808,14 @@ GetEBases()
 	Return SubStr(list, 1, -1)	; remove last "|"	
 }
 
-
-
-dSpeakOldMethod(Message, fSapi_vol="", fOverall_vol="")
-{	global overall_program, speech_volume
-	if (fSapi_vol = "")
-		fSapi_vol := speech_volume
-	if (fOverall_vol = "")
-		fOverall_vol := overall_program
-	DynaRun(CreateScript("<DSpeak:Dspeak>", "overall_program := """ fOverall_vol """", "speech_volume := """ fSapi_vol """", "Message := """ Message """"), "MT_Speech.AHK", A_Temp "\AHK.exe")
-	Return ; the below lines cant take spaces at start or comments at end
-
-<DSpeak:
-#NoTrayIcon 
-_Replace_line1_:
-_Replace_line2_:
-_Replace_line3_:
-SAPI := ComObjCreate("SAPI.SpVoice")
-SAPI.volume := speech_volume
-SoundSet, %overall_program%
-Try SAPI.Speak(Message)
-ExitApp
-Dspeak>:
-}
-
 dSpeak(Message, fSapi_vol="", fOverall_vol="")
-{	global overall_program, speech_volume
+{	global programVolume, speech_volume
 
 	if !fSapi_vol
 		fSapi_vol := speech_volume
 	if !fOverall_vol
-		fOverall_vol := overall_program
-	Header := 	"overall_program := " fOverall_vol "`r`n"		; windows files require both `r`n to correctly signal end of line - but `n will work by itself....
+		fOverall_vol := programVolume
+	Header := 	"programVolume := " fOverall_vol "`r`n"		; windows files require both `r`n to correctly signal end of line - but `n will work by itself....
 				. "speech_volume := " fSapi_vol  "`r`n"
 				. "Message := """ Message """`r`n"			; ***note "" double consecutive quotes resolve to a literal "  quote!!!
 	static Footer := "
@@ -6797,7 +6823,11 @@ dSpeak(Message, fSapi_vol="", fOverall_vol="")
 						#NoTrayIcon
 						SAPI := ComObjCreate(""SAPI.SpVoice"")	; Unlike above, these lines can take comments and formatting!
 						SAPI.volume := speech_volume
-						SoundSet, %overall_program%
+						if A_OSVersion NOT in WIN_XP,WIN_2003,WIN_2000 	; below vista this sets system volume rather than
+						{										; process/program volume
+							v := programVolume*655.35
+						    DllCall(""winmm\waveOutSetVolume"", ""int"", device-1, ""uint"", v|(v<<16))
+						}						
 						Try SAPI.Speak(Message)
 						ExitApp
 					)"
@@ -7026,7 +7056,15 @@ getPlayerRace(i) ; start at 0
 
 getPlayerType(i)
 {	global
-	Return ReadMemory((B_pStructure + O_pType) + (i-1) * S_pStructure, GameIdentifier, 1)
+	static oPlayerType := {	  0: "None"
+							, 1: "User" 	; I believe all human players in a game have this type regardless if ally or on enemy team
+							, 2: "Computer"
+							, 3: "Neutral"
+							, 4: "Hostile"
+							, 5: "Referee"
+							, 6: "Spectator" }
+
+	Return oPlayerType[ ReadMemory((B_pStructure + O_pType) + (i-1) * S_pStructure, GameIdentifier, 1) ]
 }
 
 getPlayerTeam(player="") ;team begins at 0
@@ -7202,8 +7240,8 @@ GetGameType(a_Player)
 		Team_i := A_Index
 	If (Team_i > 2)
 		Return "FFA" 
-	Else	 ;sets game_type to 1v1,2v2,3v3,4v4 ;this helps with empty player slots - round up to the next game type
-		Return Round(Player_i/Team_i) "v" Round(Player_i/Team_i)
+	Else	 ;sets game_type to 1v1,2v2,3v3,4v4 ;this helps with empty player slots in custom games - round up to the next game type
+		Return Ceil(Player_i/Team_i) "v" Ceil(Player_i/Team_i)
 }
 
 isUnitLocallyOwned(Unit) ; 1 its local player owned
@@ -8169,12 +8207,6 @@ CreateHotkeys()
 	#If, WinActive(GameIdentifier) && time && !BufferInputFast.isInputBlockedOrBuffered()
 	#If
 	Hotkey, If, WinActive(GameIdentifier) && !BufferInputFast.isInputBlockedOrBuffered() 														
-		hotkey, %speaker_volume_up_key%, speaker_volume_up, on		
-		hotkey, %speaker_volume_down_key%, speaker_volume_down, on
-		hotkey, %speech_volume_up_key%, speech_volume_up, on
-		hotkey, %speech_volume_down_key%, speech_volume_down, on
-		hotkey, %program_volume_up_key%, program_volume_up, on
-		hotkey, %program_volume_down_key%, program_volume_down, on
 		hotkey, %warning_toggle_key%, mt_pause_resume, on		
 		hotkey, *~LButton, g_LbuttonDown, on
 	Hotkey, If, WinActive(GameIdentifier) && LwinDisable
@@ -8641,9 +8673,9 @@ OldBackSpaceCtrlGroupInject()
 		type := getUnitType(unit)
 		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25)) 
 		&& (!CheckMoveState 
-			||  (CheckMoveState && (  (  (MoveState := getUnitMoveState(unit)) = uMovementFlags.Idle) || MoveState = uMovementFlags.HoldPosition)  )   )  ; I do this because my blocking of keys isnt 100% and if the user is pressing H e.g. hold posistion army or make hydras 
+			||  (CheckMoveState &&  (MoveState := getUnitMoveState(unit)) != uMovementFlags.Amove && MoveState != uMovementFlags.Move && MoveState != uMovementFlags.Patrol)  )  ; I do this because my blocking of keys isnt 100% and if the user is pressing H e.g. hold posistion army or make hydras 
 			aControlGroup.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aControlGroup.Queens[aControlGroup.Queens.MaxIndex(), "Type"] := Type 		; and so can accidentally put queen on hold position thereby stopping injects!!!
-	} 																																					; so queen is not moving/patrolling/a-moving
+	} 																																					; so queen is not moving/patrolling/a-moving ; also if user right clicks queen to catsh, that would put her on a never ending follow command
 	aControlGroup["QueenCount"] := 	aControlGroup.Queens.maxIndex() ? aControlGroup.Queens.maxIndex() : 0 ; as "SelectedUnitCount" will contain total selected queens + other units in group
 	return 	aControlGroup.Queens.maxindex()
  }
@@ -8666,10 +8698,9 @@ OldBackSpaceCtrlGroupInject()
 		type := getUnitType(unit)
 		if (isUnitLocallyOwned(Unit) && A_unitID["Queen"] = type && ((energy := getUnitEnergy(unit)) >= 25)) 
 		&& (!CheckMoveState 
-			||  (CheckMoveState && (  (  (MoveState := getUnitMoveState(unit)) = uMovementFlags.Idle) || MoveState = uMovementFlags.HoldPosition)  )   )  ; I do this because my blocking of keys isnt 100% and if the user is pressing H e.g. hold posistion army or make hydras
+			||  (CheckMoveState &&  (MoveState := getUnitMoveState(unit)) != uMovementFlags.Amove && MoveState != uMovementFlags.Move && MoveState != uMovementFlags.Patrol)  )  ; I do this because my blocking of keys isnt 100% and if the user is pressing H e.g. hold posistion army or make hydras
 			aSelection.Queens.insert(objectGetUnitXYZAndEnergy(unit)), aSelection.Queens[aSelection.Queens.MaxIndex(), "Type"] := Type 					; and so can accidentally put queen on hold position thereby stopping injects!!!
-
-	}
+	} 																																			; also if user right clicks queen to catsh, that would put her on a never ending follow command
 	aSelection["Count"] :=  aSelection.Queens.maxIndex() ? aSelection.Queens.maxIndex() : 0 ; as "SelectedUnitCount" will contain total selected queens + other units in group
 	return 	aSelection.Queens.maxindex()
  }
@@ -9274,9 +9305,13 @@ debugData()
 { 	global a_Player, O_mTop, GameIdentifier
 	Player := getLocalPlayerNumber()
 	unit := getSelectedUnitIndex()
+	getSystemTimerResolutions(MinTimer, MaxTimer)
 	return "Is64bitOS: " A_Is64bitOS "`n"
 	. "OSVersion: " A_OSVersion "`n"
 	. "Language Code: " A_Language "`n"
+	. "Language: " getSystemLanguage() "`n"
+	. "MinTimer: " MinTimer "`n"
+	. "MaxTimer: " MaxTimer "`n"
 	. "==========================================="
 	. "`n"
 	. "`n"
@@ -9321,7 +9356,7 @@ debugData()
 
 SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 { 	GLOBAL a_LocalPlayer, A_UnitID
-	uSpacing := 4
+	uSpacing := 5
 
 
 	sleep, % SleepSplitUnits
@@ -10215,6 +10250,13 @@ groupMinerals(minerals)
 	}
 	return averagedMinerals
 }
+
+
+
+f2::
+objtree(a_player)
+return 
+
 
 /*
 f1::
