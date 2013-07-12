@@ -12,6 +12,7 @@ SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gm
 	getSystemTimerResolutions(MinTimer, MaxTimer)
 	p_message 	.= "`n`n`n"
 				. "General System Info:`n`n"
+				. "Trainer Vr: " getProgramVersion() "`n"
 				. "OSVersion: " A_OSVersion "`n"
 				. "Is64bitOS: " A_Is64bitOS "`n"
 				. "Language Code: " A_Language "`n"

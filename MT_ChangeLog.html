@@ -14,16 +14,16 @@ xmlns="http://www.w3.org/TR/REC-html40">
  <o:DocumentProperties>
   <o:Author>Matthieu</o:Author>
   <o:LastAuthor>Matthieu</o:LastAuthor>
-  <o:Revision>116</o:Revision>
-  <o:TotalTime>2404</o:TotalTime>
+  <o:Revision>132</o:Revision>
+  <o:TotalTime>2508</o:TotalTime>
   <o:Created>2013-05-31T13:17:00Z</o:Created>
-  <o:LastSaved>2013-07-10T13:22:00Z</o:LastSaved>
+  <o:LastSaved>2013-07-12T03:22:00Z</o:LastSaved>
   <o:Pages>10</o:Pages>
-  <o:Words>5381</o:Words>
-  <o:Characters>30677</o:Characters>
-  <o:Lines>255</o:Lines>
-  <o:Paragraphs>71</o:Paragraphs>
-  <o:CharactersWithSpaces>35987</o:CharactersWithSpaces>
+  <o:Words>5452</o:Words>
+  <o:Characters>31077</o:Characters>
+  <o:Lines>258</o:Lines>
+  <o:Paragraphs>72</o:Paragraphs>
+  <o:CharactersWithSpaces>36457</o:CharactersWithSpaces>
   <o:Version>12.00</o:Version>
  </o:DocumentProperties>
 </xml><![endif]-->
@@ -1691,7 +1691,7 @@ ul
 	mso-fareast-language:EN-US;}
 </style>
 <![endif]--><!--[if gte mso 9]><xml>
- <o:shapedefaults v:ext="edit" spidmax="25602"/>
+ <o:shapedefaults v:ext="edit" spidmax="27650"/>
 </xml><![endif]--><!--[if gte mso 9]><xml>
  <o:shapelayout v:ext="edit">
   <o:idmap v:ext="edit" data="1"/>
@@ -1712,23 +1712,38 @@ ul
 <p class=MsoNormal>Queens on a follow command will now inject during
 auto-injects</p>
 
-<p class=MsoNormal>This is done as users will often right click a queen to a
+<p class=MsoNormal>This is done as users will often (accidentally or
+purposely)<span style='mso-spacerun:yes'>&nbsp; </span>right click a queen to a
 hatchery, thereby putting her on a follow command.</p>
 
 <p class=MsoNormal>As it stands with regards to move state, queens which are on
 move, a-move, or patrol commands will not inject</p>
 
-<p class=MsoNormal>New version of AHK</p>
+<p class=MsoNormal>Compiled using a new version of <span class=SpellE>AHK</span></p>
 
-<p class=MsoNormal>removed volume hotkeys. <span class=SpellE>Progrom</span>
-volume settings are listed in options -&gt; settings</p>
+<p class=MsoNormal>removed volume hotkeys. Program volume settings are listed
+in options -&gt; settings</p>
 
 <p class=MsoNormal>Bug report,<span style='mso-spacerun:yes'>&nbsp;
-</span>includes user <span class=SpellE>inifile</span> and system information</p>
+</span>includes user <span class=SpellE>inifile</span> and general system
+information</p>
 
-<p class=MsoNormal>Can also add attachments</p>
+<p class=MsoNormal>Can also add attachments such as replays.</p>
 
-<p class=MsoNormal><o:p>&nbsp;</o:p></p>
+<p class=MsoNormal>Tweaked some timings as the selected unit subgroup was not always
+being restored after automations.</p>
+
+<p class=MsoNormal>This will mainly affect the auto inject and auto worker</p>
+
+<p class=MsoNormal>Tweaked the 'backspace' inject method. It should no longer
+cancel queens which are being built.</p>
+
+<p class=MsoNormal>Auto (fully automated) injects will not occur if there are
+no selected units, <span style='mso-spacerun:yes'>&nbsp;</span>or a non-self
+unit is selected </p>
+
+<p class=MsoNormal><span style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>(as
+these selections can't restored)</p>
 
 <p class=MsoNormal><o:p>&nbsp;</o:p></p>
 
@@ -1843,8 +1858,8 @@ custom colour highlight</p>
 <p class=MsoListParagraphCxSpMiddle style='text-indent:-18.0pt;mso-list:l23 level1 lfo2'><![if !supportLists]><span
 style='font-family:Symbol;mso-fareast-font-family:Symbol;mso-bidi-font-family:
 Symbol'><span style='mso-list:Ignore'>&middot;<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-</span></span></span><![endif]>Two additional user customisable colour lists have
-been added. </p>
+</span></span></span><![endif]>Two additional user customisable colour lists
+have been added. </p>
 
 <p class=MsoListParagraphCxSpMiddle style='text-indent:-18.0pt;mso-list:l23 level1 lfo2'><![if !supportLists]><span
 style='font-family:Symbol;mso-fareast-font-family:Symbol;mso-bidi-font-family:
@@ -2024,8 +2039,8 @@ auto;text-indent:-18.0pt;mso-list:l18 level1 lfo22'><![if !supportLists]><span
 style='mso-ascii-font-family:Calibri;mso-fareast-font-family:Calibri;
 mso-hansi-font-family:Calibri;mso-bidi-font-family:Calibri'><span
 style='mso-list:Ignore'>-<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-</span></span></span><![endif]>For reference, geysers are normally about 7-7.5 map
-units from a main base/spawning location. </p>
+</span></span></span><![endif]>For reference, geysers are normally about 7-7.5
+map units from a main base/spawning location. </p>
 
 <p class=MsoListParagraphCxSpMiddle style='margin-left:92.7pt;mso-add-space:
 auto;text-indent:-18.0pt;mso-list:l18 level1 lfo22'><![if !supportLists]><span
@@ -2084,8 +2099,8 @@ auto;text-indent:-18.0pt;mso-list:l24 level1 lfo18'><![if !supportLists]><span
 style='font-family:Wingdings;mso-fareast-font-family:Wingdings;mso-bidi-font-family:
 Wingdings'><span style='mso-list:Ignore'>&sect;<span style='font:7.0pt "Times New Roman"'>&nbsp;
 </span></span></span><![endif]>Worker production will not occur<span
-style='mso-spacerun:yes'>&nbsp; </span>while no units are selected, or a non-self
-(ally or enemy) unit is selected</p>
+style='mso-spacerun:yes'>&nbsp; </span>while no units are selected, or a
+non-self (ally or enemy) unit is selected</p>
 
 <p class=MsoListParagraphCxSpMiddle style='margin-left:92.15pt;mso-add-space:
 auto;text-indent:-18.0pt;mso-list:l19 level1 lfo20'><![if !supportLists]><span
@@ -2371,7 +2386,8 @@ style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&n
 Program website:</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
-style='mso-tab-count:2'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
+style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
 <a href="http://www.users.on.net/~jb10/MTSite/overview.html">http://www.users.on.net/~jb10/MTSite/overview.html</a></p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
@@ -2407,9 +2423,9 @@ text-indent:-18.0pt;mso-list:l2 level1 lfo44'><![if !supportLists]><span
 style='mso-ascii-font-family:Calibri;mso-fareast-font-family:Calibri;
 mso-hansi-font-family:Calibri;mso-bidi-font-family:Calibri'><span
 style='mso-list:Ignore'>-<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-</span></span></span><![endif]>During team games and while using hostile
-colours (green, yellow, and red) enemy bases will still be displayed using
-player colours.</p>
+</span></span></span><![endif]>During team games and while using hostile colours
+(green, yellow, and red) enemy bases will still be displayed using player
+colours.</p>
 
 <p class=MsoListParagraphCxSpLast style='margin-top:0cm;margin-right:0cm;
 margin-bottom:0cm;margin-left:90.0pt;margin-bottom:.0001pt;mso-add-space:auto;
@@ -2802,7 +2818,8 @@ Forced/Fully-Automated:</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:3'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>+
-Three Seconds after an inject round each hatch is checked for a successful inject</p>
+Three Seconds after an inject round each hatch is checked for a successful
+inject</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:4'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-If
@@ -2845,8 +2862,8 @@ attack, patrol, box drag etc. </p>
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:4'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
 Previously injects were delayed while a queen, a hatch which was building a
-queen, or a burrowed <span class=SpellE>swarmhost</span> was selected (this is no
-longer the case).</p>
+queen, or a burrowed <span class=SpellE>swarmhost</span> was selected (this is
+no longer the case).</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>&#8226;
@@ -2861,8 +2878,8 @@ This parameter is only used when the<span style='mso-spacerun:yes'>&nbsp;
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:2'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
 Option is found under &quot;Settings -- &gt;<span
-style='mso-spacerun:yes'>&nbsp; </span>Misc. Settings&quot; (And is only visible
-if Input Method = &quot;Event&quot;)</p>
+style='mso-spacerun:yes'>&nbsp; </span>Misc. Settings&quot; (And is only
+visible if Input Method = &quot;Event&quot;)</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:2'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
@@ -2889,7 +2906,8 @@ I have changed a lot of things, so if anyone finds a new bug please report it!!<
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>&#8226;
-A bug introduced in version 2.964 which could cause hatcheries to miss injections.</p>
+A bug introduced in version 2.964 which could cause hatcheries to miss
+injections.</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>&#8226;
@@ -3220,8 +3238,7 @@ style='mso-tab-count:2'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&n
 if a drone has not been</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
-style='mso-tab-count:2'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
-style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>built
+style='mso-tab-count:3'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>built
 in the last X seconds. Sorry, the <span class=SpellE>zerg</span> unit build
 method is different to T &amp; P.</p>
 
@@ -3472,8 +3489,8 @@ location (in addition to the verbal warning)</p>
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
 Limit Grouping can now be set for individual control groups.</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; If
-the program's settings are changed i.e. 'saved' or 'applied' during a match:</p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; If the
+program's settings are changed i.e. 'saved' or 'applied' during a match:</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
@@ -3578,8 +3595,8 @@ Spawning races will no longer be displayed nor read aloud.</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><o:p>&nbsp;</o:p></p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>To help
-resolve the 'sticky key' issue once and for all, the following </p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>To help resolve
+the 'sticky key' issue once and for all, the following </p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>changes have
 been made:</p>
@@ -3622,8 +3639,8 @@ money, gas<span style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbs
 
 <p class=MsoNormal>New:</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; New injection
-method 'Backspace Advanced':</p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; New
+injection method 'Backspace Advanced':</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
@@ -3667,8 +3684,8 @@ The program will now attempt to rally workers to the closet patches first.</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
-The program will now attempt to rally the nexus/hatch/cc to the inner/middle
-patches first.</p>
+The program will now attempt to rally the nexus/hatch/cc to the inner/middle patches
+first.</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-
@@ -3688,9 +3705,9 @@ style='mso-tab-count:3'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&n
 
 <p class=MsoNormal>Fix:</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
-Larva Injection - <span class=SpellE>MiniMap</span> and Backspace Advanced
-methods will only inject hatcheries which have a <span class=SpellE>HOTKEYED</span>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Larva
+Injection - <span class=SpellE>MiniMap</span> and Backspace Advanced methods
+will only inject hatcheries which have a <span class=SpellE>HOTKEYED</span>
 queen present (as <span class=SpellE>apposed</span> to any queen).</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
@@ -3725,9 +3742,9 @@ Game pause if user is idle (at start) has been re-enabled/fixed.</p>
 Mouse input/movement will be blocked during fully automated i.e. forced
 injects. (like it use to be)</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Sticky
-keys - Although this problem is much better than it once was, on occasion keys
-(particularly the ctrl key) can still become </p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
+Sticky keys - Although this problem is much better than it once was, on
+occasion keys (particularly the ctrl key) can still become </p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>temporarily
@@ -3776,8 +3793,8 @@ Hotkey to playback the last detected/unit-alert message. (detected units)</p>
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; The
 Ctrl/shift key 'sticking' while using auto-group should be better/fixed.</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
-Optimised <span class=SpellE>Minimap</span> Drawing rate - ~13% performance increase</p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Optimised
+<span class=SpellE>Minimap</span> Drawing rate - ~13% performance increase</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
 Minor code/speed improvements</p>
@@ -3872,8 +3889,7 @@ and forgotten gateway alerts can be drawn on the <span class=SpellE>minimap</spa
 Added Resource, Income, Army, and (local) Worker overlays</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
-Added 'Misc' ability to bring the game window to foreground on match
-commencement</p>
+Added 'Misc' ability to bring the game window to foreground on match commencement</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Note:
@@ -3892,8 +3908,8 @@ style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&n
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Auto
 Grouping units using control group 0 will now work</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Playing
-a game while having the options menu open will no longer cause <span
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
+Playing a game while having the options menu open will no longer cause <span
 class=SpellE>warnigs</span> (money/supply etc) to occur more frequently than
 set.</p>
 
@@ -3931,8 +3947,8 @@ Emergency Unlock and Restart Button &quot;Left windows &amp; Space&quot; ***</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-When
-pressed once, it should restore user input if a key has become artificially stuck
-OR user input is erroneously blocked</p>
+pressed once, it should restore user input if a key has become artificially
+stuck OR user input is erroneously blocked</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>-When
@@ -4041,10 +4057,10 @@ Added player colour to the alert message</p>
 program should now be compatible with custom games, including those with
 free/empty player slots, spectators, observers, and referees.</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
-Fixed an issue which resulted in values changing for user Idle time and
-additional delay times (supply, minerals etc) when entering the options menu
-and leaving without saving.</p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Fixed
+an issue which resulted in values changing for user Idle time and additional
+delay times (supply, minerals etc) when entering the options menu and leaving
+without saving.</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><span
 style='mso-tab-count:1'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>(this
@@ -4076,8 +4092,8 @@ enemy races can now be automatically read at the start of the game</p>
 <p class=MsoNormal>Fixes:</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
-Fixed an oversight with a memory offset which could result in no 'Unit Detection
-Warning' being issued early on in the match.</p>
+Fixed an oversight with a memory offset which could result in no 'Unit
+Detection Warning' being issued early on in the match.</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
 Modified the user idle function.</p>
@@ -4142,10 +4158,10 @@ system can't play the beep sound)</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><o:p>&nbsp;</o:p></p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>Note: When
-updating to 2.6, your previous alert list will not be incorporated into the new
-<span class=SpellE>config</span> file (a copy will be retained in the
-&#8216;backup folder&#8217;).</p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>Note: When updating
+to 2.6, your previous alert list will not be incorporated into the new <span
+class=SpellE>config</span> file (a copy will be retained in the &#8216;backup
+folder&#8217;).</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><o:p>&nbsp;</o:p></p>
 
@@ -4189,8 +4205,8 @@ longer receive &quot;idle&quot; warning at the start of a game.</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><o:p>&nbsp;</o:p></p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Added
-the ability to set the drag origin to the right top corner via <span
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
+Added the ability to set the drag origin to the right top corner via <span
 class=SpellE>config</span> setting <span class=SpellE>drag_origin</span>=Right
 (hence now compatible with observer panel hacks)</p>
 
@@ -4222,8 +4238,8 @@ Warnings will no longer be heard during replays</p>
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
 Program now auto detects local player name</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
-Speech and Overall program volumes can now be set via the <span class=SpellE>config</span>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Speech
+and Overall program volumes can now be set via the <span class=SpellE>config</span>
 file.</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
@@ -4263,8 +4279,8 @@ class=SpellE>config</span> file)</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><o:p>&nbsp;</o:p></p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Updated
-the memory addresses for SC <span class=SpellE>vr</span> 1.5.1</p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
+Updated the memory addresses for SC <span class=SpellE>vr</span> 1.5.1</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'><o:p>&nbsp;</o:p></p>
 
@@ -4278,8 +4294,8 @@ hatcheries) will no longer be cancelled </p>
 Fixed the incorrect naming/ID of some of the units in the <span class=SpellE>config</span>
 file (<span class=SpellE>nydus</span> and spire)</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
-Added the ability to set the overall volume for the program, and speech volume
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Added
+the ability to set the overall volume for the program, and speech volume
 independently</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
@@ -4324,10 +4340,9 @@ when updating.</p>
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
 Added the ability to read opponents races</p>
 
-<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
-Fixed a bug which paused the game when the user was not idle (due to
-peculiarity with <span class=SpellE>A_TimeIdlePhysical</span> in <span
-class=SpellE>AHK</span>)</p>
+<p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226; Fixed
+a bug which paused the game when the user was not idle (due to peculiarity with
+<span class=SpellE>A_TimeIdlePhysical</span> in <span class=SpellE>AHK</span>)</p>
 
 <p class=MsoNormal style='margin-bottom:0cm;margin-bottom:.0001pt'>&#8226;
 Updated the in game clock to a reliable timer (this bug affected numerous

@@ -22,6 +22,8 @@
 	Known Problems:
 		Pressing Esc to cancel chat while having one base selected will cancel auto production for 4.5 seconds
 
+	SC2 will not respond to a 'tab'-next subgroup command if the chat is open even when its not in focus
+	the Shift+Tab (previous subgroup) does however work
 */
 
 /*
@@ -103,7 +105,7 @@ url.PixelColour := url.homepage "Macro Trainer/PIXEL COLOUR.htm"
 program := []
 program.info := {"IsUpdating": 0} ; program.Info.IsUpdating := 0 ;has to stay here as first instance of creating infor object
 
-version := 2.977
+ProgramVersion := 2.977
 
 l_GameType := "1v1,2v2,3v3,4v4,FFA"
 l_Races := "Terran,Protoss,Zerg"
@@ -117,7 +119,7 @@ SetupUnitIDArray(A_unitID, A_UnitName)
 setupTargetFilters(a_UnitTargetFilter)
 SetupColourArrays(HexColour, MatrixColour)
 
-Menu, Tray, Tip, MT_V%version% Coded By Kalamity
+Menu, Tray, Tip, MT_V%ProgramVersion% Coded By Kalamity
 
 If InStr(A_ScriptDir, old_backup_DIR)
 {
@@ -153,7 +155,7 @@ CreatepBitmaps(a_pBitmap, a_unitID)
 aUnitInfo := []
 a_pBrush := []
 
-If (auto_update AND A_IsCompiled AND CheckForUpdates(version, url.vr ))
+If (auto_update AND A_IsCompiled AND CheckForUpdates(ProgramVersion, url.vr ))
 {
 ;	changelog_text := Url2Var(url.changelog)
 	Gui, New
@@ -168,7 +170,7 @@ If (auto_update AND A_IsCompiled AND CheckForUpdates(version, url.vr ))
 	Gui, Font, S8 CDefault, Verdana
 	Gui, Add, Text, x112 y+5 w560, %A_Tab% (You can still update via right clicking the tray icon.)
 	Gui, Font, S10
-	Gui, Add, Text, x112 y+10, You're currently running version %version%
+	Gui, Add, Text, x112 y+10, You're currently running version %ProgramVersion%
 	Gui, Font, S8 CDefault Bold, Verdana
 	Gui, Add, Text, x10 y+5 w80, Changelog:
 	Gui, Font, Norm
@@ -274,11 +276,11 @@ g_ListVars:
 
 g_GetDebugData:
 	clipboard := debugData := DebugData()
-	IfWinExist, DebugData Vr: %version%
+	IfWinExist, DebugData Vr: %ProgramVersion%
 		WinClose
 	Gui, New 
 	Gui, Add, Edit, x12 y+10 w980 h640 readonly -E0x200, % LTrim(debugData)
-	Gui, Show,, DebugData Vr: %version%
+	Gui, Show,, DebugData Vr: %ProgramVersion%
 return
 
 Stealth_Exit:
@@ -800,7 +802,7 @@ return
 
 Cast_ChronoStructure(StructureToChrono)
 {	GLOBAL A_unitID, CG_control_group, chrono_key, CG_nexus_Ctrlgroup_key, CG_chrono_remainder, ChronoBoostSleep
-	, HumanMouse, HumanMouseTimeLo, HumanMouseTimeHi
+	, HumanMouse, HumanMouseTimeLo, HumanMouseTimeHi, NextSubgroupKey
 	
 	oStructureToChrono := [], a_gateways := [], a_gatewaysConvertingToWarpGates := [], a_WarpgatesOnCoolDown := []
 	MouseGetPos, start_x, start_y
@@ -912,8 +914,10 @@ Cast_ChronoStructure(StructureToChrono)
 		else MouseMove, start_x, start_y
 	}
 	send % CG_control_group
+	if HighlightedGroup
+		sleep(2) ; After restoring a control group, needs at least 1 ms so tabs will register
 	while (A_Index <= HighlightedGroup)
-		send {Tab}
+		send % NextSubgroupKey
 	Return 
 }
 AutoGroupIdle:
@@ -1074,20 +1078,16 @@ cast_ForceInject:
 cast_inject:
 	Inject_Label := A_ThisLabel
 	If (Inject_Label = "cast_ForceInject")
-		ReleaseModifiers(F_Inject_ModifierBeep, 1, HotkeysZergBurrow)
+		ReleaseModifiers(False, 1, HotkeysZergBurrow)
 	else ReleaseModifiers(1,0)	
 ;	Critical ;cant use with input buffer, as prevents hotkey threads launching and hence tracking input
 	Thread, NoTimers, true  ;cant use critical with input buffer, as prevents hotkey threads launching and hence tracking input
 	SetBatchLines -1
 	Inject := []
-	If (Inject_Label = "cast_ForceInject")
-	{
 						;menu is always 1 regardless if chat is up
-			if isMenuOpen() & !isChatOpen()	;chat is 0 when  menu is in focus
-				return ;as let the timer continue to check
-			if F_Inject_Beep
-				SoundPlay, %A_Temp%\Windows Ding3.wav 
-	}
+						;chat is 0 when  menu is in focus
+	If (isMenuOpen() & !isChatOpen())
+		return ;as let the timer continue to check during auto injects
 
 	Inject := []
 	SetKeyDelay, %EventKeyDelay%	;this only affects send events - so can just have it, dont have to set delay to original as its only changed for current thread
@@ -1100,11 +1100,32 @@ cast_inject:
 		send {click Left up}
 
 	MouseGetPos, start_x, start_y
+
+
+	; For automatic injects, this wont click the middle of the screen if a non self or no unit is selected
+	; as these units can't be regrouped
+	; this prevents the chat box constantly losing and regaining focus
+	; note this actual click can change the selected units
+	; so withing the castinjectlarva function are checks for non-self/no units
+	; i dont care if the selection changes for a user invoked 1-button inject
 	If (ChatStatus := isChatOpen())
 	{
+		if (Inject_Label = "cast_ForceInject")
+		{
+			sleep(1)
+			numGetUnitSelectionObject(oSelection) 	; this additional check is needed in case you have a
+			for index, object in oSelection.units 	; non-self unit selected, other wise will continually
+				if (object.owner != a_LocalPlayer.slot) ; click middle screen not alloying you to type
+					goto CastInjectExitRoutine 
+			if !oSelection.Count ; needed as otherwise will still mouseclick screen if no unsits selected ie selected unit dies
+				goto CastInjectExitRoutine 	
+		}
+
 		Xscentre := A_ScreenWidth/2, Yscentre := A_ScreenHeight/2
 		send {click Left %Xscentre% %Yscentre%}
 	}
+
+
 	If (Inject_Label = "cast_ForceInject")
 		castInjectLarva("MiniMap", 1, F_Sleep_Time)	; still need the 1 so that it knows its a fully auto and to re-update mouse location during macro
 	else castInjectLarva(auto_inject, 0, auto_inject_sleep) ;ie nomral injectmethod
@@ -1123,7 +1144,7 @@ cast_inject:
 	If ChatStatus
 		send {Enter}
 
-	;	BufferInput(aButtons.List, "Send", 1) ; 1 so mouse isn't moved for the saved mouse clicks 
+	CastInjectExitRoutine:
 	BufferInputFast.Send(1) ; 1 so mouse isn't moved for the saved mouse clicks 
 
 	if (Inject.LMouseState AND !GetKeyState("LButton", "P")) ;mouse button up
@@ -1164,7 +1185,10 @@ g_ForceInjectSuccessCheck:
 		send % "^" Inject_control_group
 		send % MI_Queen_Group
 		if UnburrowedQueenCount
-			send {Tab}
+		{
+			sleep(2) ; After restoring a control group, needs at least 1 ms so tabs will register
+			send %NextSubgroupKey%
+		}
 		send %HotkeysZergBurrow%
 		send %Inject_control_group%	
 		TooManyBurrowedQueens := 0
@@ -2364,7 +2388,7 @@ TrayUpdate:
 	{	WinActivate
 		Return 					
 	}
-	IF (CheckForUpdates(version, url.vr ))
+	IF (CheckForUpdates(ProgramVersion, url.vr ))
 	{
 ;		changelog_text := Url2Var(url.changelog)
 		Gui, New
@@ -2374,7 +2398,7 @@ TrayUpdate:
 		Gui, Add, Text, x112 y10 w220, An update is available.
 		Gui, Font, Norm 
 		Gui, Add, Text, x112 y35 w300, Click UPDATE to download the latest version.
-		Gui, Add, Text, x112 y+5, You're currently running version %version%
+		Gui, Add, Text, x112 y+5, You're currently running version %ProgramVersion%
 		Gui, Font, S8 CDefault Bold, Verdana
 		Gui, Add, Text, x112 y+5 w80, Changelog:
 		Gui, Font, Norm 
@@ -2399,7 +2423,7 @@ TrayUpdate:
 		Gui, Add, Text, x112 y15  , You already have the latest version.
 		Gui, Add, Text, xp yp+20  , Version:
 		Gui, Font, S10 CDefault Bold, Verdana
-		Gui, Add, Text, xp+60 yp  , %version%
+		Gui, Add, Text, xp+60 yp  , %ProgramVersion%
 		Gui, Font, Norm 
 		Gui, Font, S8 CDefault Bold, Verdana
 		Gui, Font, Norm 
@@ -2468,15 +2492,9 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	;[Forced Inject]
 	section := "Forced Inject"
 	IniRead, F_Inject_Enable, %config_file%, %section%, F_Inject_Enable, 0
-	IniRead, F_Inject_ModifierBeep, %config_file%, %section%, F_Inject_ModifierBeep, 1
-	IniRead, F_Inject_Beep , %config_file%, %section%, F_Inject_Beep, 0
-	IniRead, F_Alert_Enable, %config_file%, %section%, Alert_Enable, 0
-	IniRead, F_Alert_PreTime, %config_file%, %section%, F_Alert_PreTime, 1
-	IniRead, F_Inject_Delay, %config_file%, %section%, F_Inject_Delay, 15
-	IniRead, F_Max_Injects, %config_file%, %section%, F_Max_Injects, 4
-	IniRead, F_Sleep_Time, %config_file%, %section%, F_Sleep_Time, 5
+	IniRead, F_Sleep_Time, %config_file%, %section%, F_Sleep_Time, 0
 	IniRead, FInjectHatchFrequency, %config_file%, %section%, FInjectHatchFrequency, 2500
-	IniRead, FInjectAPMProtection, %config_file%, %section%, FInjectAPMProtection, 160
+	IniRead, FInjectAPMProtection, %config_file%, %section%, FInjectAPMProtection, 190
 	IniRead, F_InjectOff_Key, %config_file%, %section%, F_InjectOff_Key, Lwin & F5
 	
 	
@@ -2493,6 +2511,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, name, %config_file%, Starcraft Settings & Keys, name, YourNameHere
 	IniRead, pause_game, %config_file%, Starcraft Settings & Keys, pause_game, {Pause}
 	IniRead, base_camera, %config_file%, Starcraft Settings & Keys, base_camera, {Backspace}
+	IniRead, NextSubgroupKey, %config_file%, Starcraft Settings & Keys, NextSubgroupKey, {Tab}
 	IniRead, escape, %config_file%, Starcraft Settings & Keys, escape, {escape}
 	
 	;[Backspace Inject Keys]
@@ -2823,7 +2842,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	; Resume Warnings
 	Iniread, ResumeWarnings, %config_file%, Resume Warnings, Resume, 0
 
-	if ( version > read_version ) ; its an update and the file exists - better backup the users settings
+	if ( ProgramVersion > read_version ) ; its an update and the file exists - better backup the users settings
 	{
 		program.Info.IsUpdating := 1
 		FileCreateDir, %old_backup_DIR%
@@ -2834,7 +2853,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 		Gosub, pre_startup ; Read the ini settings again - this updates the 'read version' and also helps with Control group 'ERROR' variable 
 		;IniRead, read_version, %config_file%, Version, version, 1	;this is a safety net - and used to prevent keeping user alert lists in update pre 2.6 & Auto control group 'ERROR'
 		;msgbox It seems that this is the first time that you have ran this version.`n`nYour old %config_file% & Macro Trainer have been backed up to `"\%old_backup_DIR%`". A new config file has been installed which contains your previous personalised settings`n`nPress OK to continue.
-		Pressed := CMsgbox( "Macro Trainer Vr" version , "It seems that this is the first time that you have ran this version.`n`nYour old " config_file " and Macro Trainer have been backed up to '\" old_backup_DIR "'.`nA new config file has been installed which contains your previous personalised settings`n`nPress Launch to run SC2 and pwn noobs.`n`nOtherwise press Options to open the options menu.", "*Launch|&Options", 560, 160, 45, A_Temp "\Starcraft-2.ico", 110, 0, 12)
+		Pressed := CMsgbox( "Macro Trainer Vr" ProgramVersion , "It seems that this is the first time that you have ran this version.`n`nYour old " config_file " and Macro Trainer have been backed up to '\" old_backup_DIR "'.`nA new config file has been installed which contains your previous personalised settings`n`nPress Launch to run SC2 and pwn noobs.`n`nOtherwise press Options to open the options menu.", "*Launch|&Options", 560, 160, 45, A_Temp "\Starcraft-2.ico", 110, 0, 12)
 		If ( Pressed = "Options")
 			gosub options_menu
 	}
@@ -2843,7 +2862,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 Else If A_IsCompiled  ; config file doesn't exist
 {
 	FileInstall, MT_Config.ini, %config_file%, 0 ; includes and install the ini to the working directory - 0 prevents file being overwritten
-	CMsgbox( "Macro Trainer Vr" version ,"This appears to be the first time you have run this program.`n`nPlease take a moment to read the help file and edit the settings in the options menu as you see fit.`n`n", "*OK", 500, 130, 10, A_Temp "\Starcraft-2.ico", 110)
+	CMsgbox( "Macro Trainer Vr" ProgramVersion ,"This appears to be the first time you have run this program.`n`nPlease take a moment to read the help file and edit the settings in the options menu as you see fit.`n`n", "*OK", 500, 130, 10, A_Temp "\Starcraft-2.ico", 110)
 	Gosub pre_startup
 	gosub options_menu
 }
@@ -2954,12 +2973,6 @@ ini_settings_write:
 		;[Forced Inject]
 	section := "Forced Inject"
 	IniWrite, %F_Inject_Enable%, %config_file%, %section%, F_Inject_Enable
-	IniWrite, %F_Inject_ModifierBeep%, %config_file%, %section%, F_Inject_ModifierBeep
-	IniWrite, %F_Inject_Beep%, %config_file%, %section%, F_Inject_Beep 
-	IniWrite, %F_Alert_Enable%, %config_file%, %section%, Alert_Enable
-	IniWrite, %F_Alert_PreTime%, %config_file%, %section%, F_Alert_PreTime
-	IniWrite, %F_Inject_Delay%, %config_file%, %section%, F_Inject_Delay
-	IniWrite, %F_Max_Injects%, %config_file%, %section%, F_Max_Injects
 	IniWrite, %F_Sleep_Time%, %config_file%, %section%, F_Sleep_Time
 	IniWrite, %FInjectHatchFrequency%, %config_file%, %section%, FInjectHatchFrequency
 	IniWrite, %FInjectAPMProtection%, %config_file%, %section%, FInjectAPMProtection
@@ -2978,6 +2991,7 @@ ini_settings_write:
 	;[Starcraft Settings & Keys]
 	IniWrite, %pause_game%, %config_file%, Starcraft Settings & Keys, pause_game
 	IniWrite, %base_camera%, %config_file%, Starcraft Settings & Keys, base_camera
+	IniWrite, %NextSubgroupKey%, %config_file%, Starcraft Settings & Keys, NextSubgroupKey
 	IniWrite, %escape%, %config_file%, Starcraft Settings & Keys, {escape}
 	
 	; [MiniMap Inject]
@@ -3349,7 +3363,7 @@ return
 
 
 options_menu:
-IfWinExist, Macro Trainer V%version% Settings
+IfWinExist, Macro Trainer V%ProgramVersion% Settings
 {
 	WinActivate
 	Return 									; prevent error due to reloading gui 
@@ -3498,13 +3512,11 @@ Gui, Tab,  Manual
 
 
 Gui, Tab,  Auto
-	Gui, Add, GroupBox, y+20 w225 h255, Fully Automated Injects
+	Gui, Add, GroupBox, y+20 w225 h210, Fully Automated Injects
 		Gui, Add, Checkbox,xp+10 yp+30 vF_Inject_Enable checked%F_Inject_Enable%, Enable
-		Gui, Add, Checkbox,y+10 vF_Inject_ModifierBeep checked%F_Inject_ModifierBeep%, Beep If modifier is held down
-		Gui, Add, Checkbox,y+10 vF_Inject_Beep checked%F_Inject_Beep%, Beep when auto Inject begins
-
-		Gui, Add, Text,y+15 x%settings2RX% w155, Sleep time (ms): 
-			Gui, Add, Edit, Number Right x+5 yp-2 w45 vTT_F_Sleep_Time 
+		
+		Gui, Add, Text,y+15 x%settings2RX% w140, Sleep time (ms): 
+			Gui, Add, Edit, Number Right x+5 yp-2 w60 vTT_F_Sleep_Time 
 				Gui, Add, UpDown, Range0-100000 vF_Sleep_Time, %F_Sleep_Time%	
 
 		Gui, Add, Text,y+15 x%settings2RX% w140, Check Hatches Every (ms): 
@@ -3516,10 +3528,10 @@ Gui, Tab,  Auto
 				Gui, Add, UpDown,  Range0-100000 vFInjectAPMProtection, %FInjectAPMProtection%		
 
 		Gui, Add, Text, x%settings2RX% yp+30, Enable/Disable Hotkey:
-			Gui, Add, Edit, Readonly y+10 xp+40 w120  vF_InjectOff_Key center gedit_hotkey, %F_InjectOff_Key%
+			Gui, Add, Edit, Readonly y+10 xp+45 w120  vF_InjectOff_Key center gedit_hotkey, %F_InjectOff_Key%
 			Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#F_InjectOff_Key,  Edit				
 			
-	Gui, Add, Text,yp+42 x%settings2RX% w340,  Note:`n`nAuto injects will begin after you control group your queen to the correct (inject) queen control group.`n`nAuto injects are performed using the 'MiniMap' macro.`n`nPlease ensure you have correctly set the settings under the 'basic' inject tab. This includes the 'minimap' settings as well as the 'spawn larva key', 'burrow key' and control group storage settings.
+	Gui, Add, Text,yp+57 x%settings2RX% w340,  Note:`n`nAuto injects will begin after you control group your queen to the correct (inject) queen control group.`n`nAuto injects are performed using the 'MiniMap' macro.`n`nPlease ensure you have correctly set the settings under the 'basic' inject tab. This includes the 'minimap' settings as well as the 'spawn larva key', 'burrow key' and control group storage settings.
 
 
 Gui, Tab,  Alert
@@ -3534,18 +3546,22 @@ Gui, Tab,  Alert
 
 
 Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vKeys_TAB, SC2 Keys				
-	Gui, Add, GroupBox, w280 h135, Starcraft Settings && Keys
+	Gui, Add, GroupBox, w280 h160, Starcraft Settings && Keys
 		Gui, Add, Text, xp+10 yp+30 w90, Pause Game: 
 			Gui, Add, Edit, Readonly yp-2 x+10 w120  center vpause_game , %pause_game%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#pause_game,  Edit
 
-		Gui, Add, Text, X%XTabX% yp+35 w90, Escape:
+		Gui, Add, Text, X%XTabX% yp+35 w90, Escape/Canel:
 			Gui, Add, Edit, Readonly yp-2 x+10 w120  center vescape , %escape%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#escape,  Edit
 
 		Gui, Add, Text, X%XTabX% yp+35 w90, Base Camera:
 			Gui, Add, Edit, Readonly yp-2 x+10 w120  center vbase_camera , %base_camera%
 				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#base_camera,  Edit
+
+		Gui, Add, Text, X%XTabX% yp+35 w90, Next Subgroup:
+			Gui, Add, Edit, Readonly yp-2 x+10 w120  center vNextSubgroupKey , %NextSubgroupKey%
+				Gui, Add, Button, yp-2 x+5 gEdit_SendHotkey v#NextSubgroupKey,  Edit
 
 		gui, font, s10
 		tmpX := XTabX-15
@@ -4505,6 +4521,7 @@ inject_start_key_TT := "The hotkey used to start or stop the timer."
 inject_reset_key_TT := "The hotkey used to reset (or start) the timer."
 Alert_List_Editor_TT := "Use this to edit and create alerts for any SC2 unit or building."
 #base_camera_TT := base_camera_TT := "The key used to cycle between hatcheries/bases."
+#NextSubgroupKey_TT := NextSubgroupKey_TT := "The key used to cycle forward though a selection group."
 #control_group_TT := control_group_TT := "Set this to a control group you DON'T use - It stores your unit selection during an inject round."
 create_camera_pos_x_TT := #create_camera_pos_x_TT := "The hotkey used to 'save' a camera location. - Ensure this isn't one you use."
 #camera_pos_x_TT := camera_pos_x_TT := "The hotkey associated with the 'create/save' camera location above."
@@ -4690,7 +4707,7 @@ loop, parse, l_races, `,
 
 
 OnMessage(0x200, "WM_MOUSEMOVE")
-GuI, Options:Show, w615 h505, Macro Trainer V%version% Settings
+GuI, Options:Show, w615 h505, Macro Trainer V%ProgramVersion% Settings
 Return
 
 HumanMouseWarning:
@@ -4806,7 +4823,7 @@ g_ChronoRulesURL:
 	Return
 
 B_ChangeLog:
-	IfWinExist, ChangeLog Vr: %version%
+	IfWinExist, ChangeLog Vr: %ProgramVersion%
 	{
 		WinActivate
 		Return 									
@@ -4814,7 +4831,7 @@ B_ChangeLog:
 	Gui, New 
 	Gui Add, ActiveX, xm w980 h640 vWB, Shell.Explorer
 	WB.Navigate(url.changelog)
-	Gui, Show,,ChangeLog Vr: %version%
+	Gui, Show,,ChangeLog Vr: %ProgramVersion%
 Return
 
 B_Report:
@@ -4958,7 +4975,7 @@ OptionsTree:
 	; This is a workaround for this bug
 ;	if (OptionTreeEvent = "D" && !GetKeyState("LButton", "P")) ; the gui event says its a drag when the error occurs (but its not really)
 ;		send {click 2}
-	WinSet, Redraw,, Macro Trainer V%version% Settings 				; redrawing whole thing as i noticed very very rarely (when a twitch stream open?) the save/canel/apply buttons disappear
+	WinSet, Redraw,, Macro Trainer V%ProgramVersion% Settings 				; redrawing whole thing as i noticed very very rarely (when a twitch stream open?) the save/canel/apply buttons disappear
 ; 	 GUIControl, MoveDraw, GUIListViewIdentifyingVariableForRedraw ; this is the same as redraw (but just for a control? - although it still seems to flicker the entire thing)
  	Return															; this prevents the problem where some of the icons would remain selected
  																	; so multiple categories would have the blue background
@@ -6363,7 +6380,7 @@ return
 
 
 autoWorkerProductionCheck()
-{	GLOBAl A_unitID, a_LocalPlayer, Base_Control_Group_T_Key, AutoWorkerStorage_P_Key, AutoWorkerStorage_T_Key, Base_Control_Group_P_Key
+{	GLOBAl A_unitID, a_LocalPlayer, Base_Control_Group_T_Key, AutoWorkerStorage_P_Key, AutoWorkerStorage_T_Key, Base_Control_Group_P_Key, NextSubgroupKey
 	, AutoWorkerMakeWorker_T_Key, AutoWorkerMakeWorker_P_Key, AutoWorkerMaxWorkerTerran, AutoWorkerMaxWorkerPerBaseTerran
 	, AutoWorkerMaxWorkerProtoss, AutoWorkerMaxWorkerPerBaseProtoss, AW_MaxWorkersReached
 	, aResourceLocations, aButtons, EventKeyDelay
@@ -6514,7 +6531,13 @@ autoWorkerProductionCheck()
 			Sleep(1) 
 			numGetUnitSelectionObject(oSelection) 	; this additional check is needed in case you have a
 			for index, object in oSelection.units 	; non-self unit selected, other wise will continually
-			if (object.owner != a_LocalPlayer.slot) ; click middle screen not alloying you to type
+				if (object.owner != a_LocalPlayer.slot) ; click middle screen not alloying you to type
+				{
+					ExitThread := 1
+					break
+				}
+
+			if (ExitThread || !oSelection.Count) ; needed as otherwise will still mouseclick screen if no unsits selected ie selected unit dies
 			{ 										
 				BufferInputFast.send()
 				SetBatchLines, %BatchLines%
@@ -6534,25 +6557,13 @@ autoWorkerProductionCheck()
 		HighlightedGroup := getSelectionHighlightedGroup()
 		numGetUnitSelectionObject(oSelection)
 		If !oSelection.Count  ; = 0 as nothing is selected so cant restore this/control group it
-		{
-			BufferInputFast.send()
-			SetBatchLines, %BatchLines%
-			Thread, NoTimers, false ; dont think is required as the thread is about to end
-			return 
-
-		}
+			Goto, autoWorkerProductionCheckExit
 
 		for index, object in oSelection.units
 		{
 			L_SelectionIndexes .= "," object.unitIndex
 			if (object.owner != a_LocalPlayer.slot) 	; as cant restore unit selection. Need to work out how to detect allied leaver
-			{ 										
-				BufferInputFast.send()
-				SetBatchLines, %BatchLines%
-				Thread, NoTimers, false ; dont think is required as the thread is about to end
-				return 
-			}
-
+				Goto, autoWorkerProductionCheckExit
 			if (!varInMatchList(object.unitIndex, L_BaseCtrlGroupIndexes) || !isUnitAStructure(object.unitIndex)) ; so if a selected unit isnt in the base control group, or is a non-structure
 				BaseControlGroupNotSelected := 1
 		}
@@ -6579,7 +6590,6 @@ autoWorkerProductionCheck()
 		; better to be safe than sorry!
 		; thats why im doing it slightly different now
 
-
 		if BaseControlGroupNotSelected ; hence if the 'main base' control group is already selected, it wont bother control grouping them (and later restoring them)
 		{
 			numGetControlGroupObject(oControlstorage, controlstorageGroup) 	; this checks if the currently selected units match those
@@ -6595,8 +6605,8 @@ autoWorkerProductionCheck()
 		{
 			tabrepreat := oSelection["Types"]  - HighlightedGroup
 			loop % tabrepreat ;get tab selection back to 0 ;too hard and too many things can go wrong and slow it down if i try to tab to all user possible locations
-				send {tab}  ; as there are still building / priority rules i dont understand e.g. planetary fortress is last even though it has higher Unitindex than ebay
-		}					; and its much faster as dont have to double sort an array
+				send % NextSubgroupKey  ; as there are still building / priority rules i dont understand e.g. planetary fortress is last even though it has higher Unitindex than ebay
+		}						; and its much faster as dont have to double sort an array
 
 		
 		; other function gets spammed when user incorrectly adds a unit to the main control group (as it will take group 0) and for terran tell that unit to 'stop' when sends s
@@ -6617,7 +6627,7 @@ autoWorkerProductionCheck()
 		; and make a worker 5 times in a row without any risk of falsely activating the the control group error routine
 		if (UninterruptedWorkersMade > 5) ; after 4 days this started giving an error, so now i have added an additional sleep time 
 		{
-			Sleep(12)  ; give heaps of time to update!
+			Sleep(8)  ; give heaps of time to update!
 			numGetUnitSelectionObject(oSelection) 	; can't use numgetControlGroup - as when nexus dies and is replaced with a local owned unit it will cause a warning
 			for index, object in oSelection.units
 				if !isUnitAStructure(object.unitIndex)	; as units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
@@ -6626,14 +6636,17 @@ autoWorkerProductionCheck()
 
 		if BaseControlGroupNotSelected
 		{												
-			Sleep(3) 					; I think sc2 needs a sleep as otherwise the send controlgroup storate gets ignored every now and then  (it worked well with 4)
+			Sleep(2) 			; I think sc2 needs a sleep as otherwise the send controlgroup storate gets ignored every now and then  (it worked well with 4)
 			send % controlstorageGroup
 		}
 
-
+		if HighlightedGroup
+			sleep(2) ; After restoring a control group, needs at least 1 ms so tabs will register
 		while (A_Index <= HighlightedGroup)
-			send {Tab}
+			send % NextSubgroupKey
 
+		autoWorkerProductionCheckExit: ; just a less messy way to exit out of function if it doesn't perform an action
+		
 		If ChatStatus
 		{
 			send {Enter}
@@ -6651,10 +6664,11 @@ autoWorkerProductionCheck()
 			gosub g_UserToggleAutoWorkerState ; this will say 'off' Hence Will speak Auto worker Off	
 			return 
 		}
-
-		UninterruptedWorkersMade++ ; keep track of how many workers are made in a row
-		sleep, 800 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
-				 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
+		if (A_ThisLabel != "autoWorkerProductionCheckExit")
+		{
+			UninterruptedWorkersMade++ ; keep track of how many workers are made in a row
+			sleep, 800 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
+		}		 	; this will prevent the timer running again otherwise sc2 slower to update 'isin production' 
 											; so will send another build event and queueing more workers
 					; 400 worked find for stable connection, but on Kr sever needed more. 800 seems to work well
 	}
@@ -7050,7 +7064,7 @@ getPlayerRace(i) ; start at 0
 	Else If (Race == "Neut")
 		Race := "Neutral"
 	Else 
-		Race := "Error"
+		Race := "Race Error" ; so if it ever gets read out in speech, easily know its just from here and not some other error
 	Return Race
 }
 
@@ -8360,26 +8374,38 @@ getCamCenteredUnit(UnitList) ; |delimited ** ; needs a minimum of 70+ ms to upda
 
 castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlocked("^" CG_control_group)
 {	global
-	LOCAL click_x, click_y
+	LOCAL 	click_x, click_y, BaseCount, oSelection, SkipUsedQueen, MissedHatcheries, QueenCount, FoundQueen
+			, start_x, start_y
+			, QueenMultiInjects, MaxInjects, CurrentQueenInjectCount
+			, HatchIndex, Dx1, Dy1, Dx2, Dy2, QueenIndex
+
 	LOCAL HighlightedGroup := getSelectionHighlightedGroup()
 
 ;	Send, ^%Inject_control_group%
 	send % "^" Inject_control_group
 	if (Method = "MiniMap" OR ForceInject)
 	{
-		Sleep(1) ; give time for the selection buffer to update
 		local xNew, yNew
 	;	Send, %MI_Queen_Group%
 	;	if ForceInject
 	;		send % BI_create_camera_pos_x 	;just incase it stuffs up and moves the camera
+	
+		if ForceInject
+		{
+			numGetUnitSelectionObject(oSelection)
+			for index, object in oSelection.units 	; non-self unit selected, other wise will continually
+				if (object.owner != a_LocalPlayer.slot)
+					return
+			If !oSelection.Count  ; = 0 as nothing is selected so cant restore this/control group it
+				return
+		}
 		send % MI_Queen_Group
-
+		Sleep(1) ; give time for the selection buffer to update
 		oHatcheries := [] ; Global used to check if successfuly without having to iterate again
 		local BaseCount := zergGetHatcheriesToInject(oHatcheries)
 		Local oSelection := []
 		Local SkipUsedQueen := []
 		local MissedHatcheries := []
-	    randomcount := 0
 																			; ForceInject ie 1 or 0 so it will check move statte if a forceinject, but not if user presses button
 		If (Local QueenCount := getSelectedQueensWhichCanInject(oSelection, ForceInject)) ; this wont fetch burrowed queens!! so dont have to do a check below - as burrowed queens can make cameramove when clicking their hatch
 		{
@@ -8458,11 +8484,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 							start_x += xNew - click_x , start_y += yNew - click_y
 						}
 					}					
-
 			}
-		;	if ForceInject
-		;		send % BI_camera_pos_x
-
 		}
 	}	
 	else if ((Method = "Backspace Adv") || (Method = "Backspace CtrlGroup")) ; I.E. I have disabled this feature until i get around to finding the centred hatch better ((Method="Backspace Adv") || (Method = "Backspace CtrlGroup")) ;cos i changed the name in an update
@@ -8475,7 +8497,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		Local oSelection := []
 		Local SkipUsedQueen := []
 		local MissedHatcheries := []
-	    randomcount := 0
+
 	    For Index, CurrentHatch in oHatcheries 	; so (for the most part) the inject order should match the basecamera order - though there are more rules than just age
 	    	CurrentHatch.Age := getUnitTimer(CurrentHatch.unit)
 	    Sort2DArray(oHatcheries, "Age", 0) ; 0 = descending
@@ -8517,6 +8539,11 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 	}
 	else ; if (Method="Backspace")
 	{
+
+		; 	Note: When a queen has inadequate energy for an inject, after pressing the inject larva key nothing will actually happen 
+		;	so the subsequent left click on the hatch will actually select the hatch (as the spell wasn't cast)
+		;	this was what part of the reason queens were somtimes being cancelled
+
 		HatchIndex := getBuildingList(A_unitID["Hatchery"], A_unitID["Lair"], A_unitID["Hive"])
 		send % BI_create_camera_pos_x
 		If (drag_origin = "Right" OR drag_origin = "R") And !HumanMouse ;so left origin - not case sensitive
@@ -8560,10 +8587,11 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		}
 		send % BI_camera_pos_x
 	}
-	;	Send, %Inject_control_group%
-		send % Inject_control_group
-		while (A_Index <= HighlightedGroup)
-			send {Tab}
+	send % Inject_control_group
+	if HighlightedGroup
+		sleep(2) ; After restoring a control group, needs at least 1 ms so tabs will register
+	while (A_Index <= HighlightedGroup)
+		send % NextSubgroupKey
 }
 
 
@@ -9306,7 +9334,8 @@ debugData()
 	Player := getLocalPlayerNumber()
 	unit := getSelectedUnitIndex()
 	getSystemTimerResolutions(MinTimer, MaxTimer)
-	return "Is64bitOS: " A_Is64bitOS "`n"
+	return "Trainer Vr: " getProgramVersion() "`n"
+	. "Is64bitOS: " A_Is64bitOS "`n"
 	. "OSVersion: " A_OSVersion "`n"
 	. "Language Code: " A_Language "`n"
 	. "Language: " getSystemLanguage() "`n"
@@ -9354,12 +9383,45 @@ debugData()
 	.  "`nPosZ : " getUnitPositionZ(unit)
 }
 
-SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
-{ 	GLOBAL a_LocalPlayer, A_UnitID
-	uSpacing := 5
+/*
+f2::
+	a_SelectedUnits := []
+	selectionCount := getSelectionCount()
+	while (A_Index <= selectionCount)	
+	{
+		unit := getSelectedUnitIndex(A_Index -1)
+		getMiniMapMousePos(unit, mX, mY)
+		a_SelectedUnits.insert({"Unit": unit, "x": mX, "y": mY, absDistance: ""})
+	}
 
+;	objtree(a_SelectedUnits)
+	ArrayPosition := getLeftMostUnitFromArray(a_SelectedUnits)  
+	
+	ClickSelectUnitsPortriat(a_SelectedUnits[ArrayPosition].unit)
+return 
+
+
+getLeftMostUnitFromArray(array) ; just a test function
+{
+	LeftMin := []
+	for ArrayIndex, object in array 
+	{
+		if (A_index = 1)
+			LeftMin.ArrayIndex := ArrayIndex, LeftMin.x := object.x
+		else if (object.x < LeftMin.x)
+		LeftMin.ArrayIndex := ArrayIndex, LeftMin.x := object.x
+	}
+	return LeftMin.ArrayIndex
+}
+
+*/
+
+
+SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
+{ 	GLOBAL a_LocalPlayer, A_UnitID, NextSubgroupKey
 
 	sleep, % SleepSplitUnits
+	HighlightedGroup := getSelectionHighlightedGroup()
 	send ^%SplitctrlgroupStorage_key%
 	BlockInput, MouseMove
 	mousegetpos, Xorigin, Yorigin
@@ -9393,7 +9455,7 @@ SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 		uSpacing := 8 ; for hellbat and hellion spread
 	Else if (SiegeTank / selectionCount >= .9 ) ; i.e. 90% of the selected units are workers
 		uSpacing := 9 ; for hellbat and hellion spread
-	Else uSpacing := 4
+	Else uSpacing := 5
 
 	for index, unit in a_SelectedUnits
 		xSum += unit.mouseX, ySum += unit.mouseY
@@ -9436,6 +9498,10 @@ SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
 ;	clipboard .= "BL (" botLeftUnitX ", " botLeftUnity ")`n"
 ;	clipboard .= "Squarespots: " squareSpots "`n"
 	send %SplitctrlgroupStorage_key%
+	if HighlightedGroup
+		sleep(2) ; After restoring a control group, needs at least 1 ms so tabs will register
+	while (A_Index <= HighlightedGroup)
+		send % NextSubgroupKey
 	BlockInput, MouseMoveOff
 	send {click %Xorigin%, %Yorigin%, 0}
 		return
@@ -10251,11 +10317,6 @@ groupMinerals(minerals)
 	return averagedMinerals
 }
 
-
-
-f2::
-objtree(a_player)
-return 
 
 
 /*
