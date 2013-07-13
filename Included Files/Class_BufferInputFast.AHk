@@ -73,6 +73,9 @@ Class BufferInputFast
 	}
 	send(MouseBlocking := 0, DisableBuffering := 1)
 	{
+		static aModifierKeys := ["Shift", "Ctrl", "Alt"]
+
+
 		MouseGetPos, Xstart, Ystart
 		for index, Button in this.aBuffer
 		{
@@ -101,6 +104,11 @@ Class BufferInputFast
 			if Button contains Esc ; this is a local function which disables auto worker
 				gosub g_temporarilyDisableAutoWorkerProductionOriginUserInputBufferSend
 		}
+		if MouseHasMoved
+			send {click  %Xstart%, %Ystart%, 0} 
+		if DisableBuffering
+			BufferInputFast.disableBufferingAndBlocking()
+
 		if !GetKeyState("Lbutton", "P") && GetKeyState("Lbutton") 	; so if the button is up, but the game thinks it down
 			send {click Up}  										; send and up command to unstick it - but doesnt seem to work here
 	;	else if GetKeyState("Lbutton", "P") && !GetKeyState("Lbutton") 
@@ -111,11 +119,9 @@ Class BufferInputFast
 	;	else if GetKeyState("Rbutton", "P") && !GetKeyState("Rbutton") 
 	;		send {click Down Right}  			
 
-
-		if MouseHasMoved
-			send {click  %Xstart%, %Ystart%, 0} 
-		if DisableBuffering
-			BufferInputFast.disableBufferingAndBlocking()
+		for index, button in aModifierKeys 							;	seeing if this helps the stick modifer problem
+			if !GetKeyState(button, "P") && GetKeyState(button)		; could add a modiferUp ~ hotkey to check
+				send % "{" button " Up}"
 		return
 	}
 	getModifiersFromString(string)
@@ -182,15 +188,48 @@ Class BufferInputFast
 
 }
 Goto g_class_BufferInputFastLabelSkip> ;so can include anywhere even in autoexec section
+
+; Thread, NoTimers, true is required as this will be in effect most times when these hotkeys are active
+; and if this is not set, the hotkey will activate this hotkey thread, which IS interuptible could cause other timers to run
+; and these other timers could have their own BufferInputFast.send() (eg auto worker) command which would A. Stuff up the sequence of keystrokes
+; B. Prematurely disable key blocking/buffering
+
 g_BufferInputFastLabel:
+	Thread, NoTimers, true 
 	BufferInputFast.RecordInput()
 return
 g_ReturnFastLabel:
+	Thread, NoTimers, true  ; probably not required as default value makes threads un-interupterble for 15ms
 return
 #If, (!BufferInputFast.isInputBlockedOrBuffered() && WinActive(GameIdentifier))  ; need this here as AHK tree view goes crazy! it needs like 200 ms sleep or something
+; this obviously wont account for if the user has swapped the left and right mouse buttons in windows
+
+; the lbutton check is definitely needed to prevent the button getting stuck down if the user releases/presses it sometimes
+; while it is being blocked
+; the modifiers probably are not needed, but every now and then the ctrl key gets stuck down
+; and needs a press, testing if this makes it more robust
+; the mouse hook/system state seems slower to update and so needs a small sleep
+; to allow the button to 'come up' i.e. register
+; the keyboard buttons seem much faster, but added the delay anyway
 ~Lbutton Up::
+sleep(2)
 if !GetKeyState("Lbutton", "P") && GetKeyState("Lbutton") 
-	send {click left up}
+	send {click left up}	
+return
+~alt up::
+sleep(2)
+if !GetKeyState("alt", "P") && GetKeyState("alt") 
+	send {alt up}
+return
+~ctrl up::
+sleep(2)
+if !GetKeyState("ctrl", "P") && GetKeyState("ctrl") 
+	send {ctrl up}
+return
+~Shift Up::
+sleep(2)
+if !GetKeyState("Shift", "P") && GetKeyState("Shift") 
+	send {Shift up}
 return
 #If
 g_class_BufferInputFastLabelSkip>:

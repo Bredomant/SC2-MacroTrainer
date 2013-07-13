@@ -66,6 +66,7 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #MaxThreads 20 ; don't know if this will affect anything
 SetStoreCapslockMode, off ; needed in case a user bind something to the capslock key in sc2 - other AHK always sends capslock to adjust for case.
 OnExit, ShutdownProcedure
+ListLines(False) 
 
 Menu, Tray, Icon 
 if !A_IsAdmin 
@@ -709,7 +710,7 @@ clock:
 		{
 			settimer, Auto_Group, %AutoGroupTimer% 						; set to 30 ms via config ini default
 																		; WITH Normal 1 priority so it should run once every 30 ms
-			settimer, AutoGroupIdle, %AutoGroupTimerIdle%, -99999 		; default ini value 5 ms - Lowest priority so will only run when script is idle! And wont interrupt any other timer
+			settimer, AutoGroupIdle, %AutoGroupTimerIdle%, -9999 		; default ini value 5 ms - Lowest priority so will only run when script is idle! And wont interrupt any other timer
 																		; and so wont prevent the minimap or overlay being drawn
 																		; note may delay some timers from launching for a fraction of a ms while its in thread, no timers interupt mode (but it takes less than 1 ms to run anyway)
 		} 																; Hence with these two timers running autogroup will occur at least once every 30 ms, but generally much more frequently
@@ -937,8 +938,6 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 	BatchLines := A_BatchLines
 	Thread, NoTimers, true
 	SetBatchLines, -1
-
-
 	numGetUnitSelectionObject(oSelection)
 	selectedUnits := oSelection.Count
 	, SelectedTypes := oSelection.Types
@@ -995,13 +994,15 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 			if ReleaseModifiers(0, 0, "", 20)
 				return
 			BufferInputFast.BufferInput()
-			Sleep(2) ; give time for selection buffer to update. This along with blocking input should cover pre- and post-selection delay buffer changes
+			Sleep(4) ; give time for selection buffer to update. This along with blocking input should cover pre- and post-selection delay buffer changes
 			numGetUnitSelectionObject(oSelection)
 			for index, Unit in oSelection.Units
 				PostDelaySelected .= "," unit.UnitIndex
 			if (CurrentlySelected = PostDelaySelected)
+			{
 				send, +%Player_Ctrl_GroupSet%
-	;		sleep(1) ; not sure if a sleep here would help prevent ctrl problems or cause issues notices 1 missrally after doing this, but that could have been a missclick
+				sleep(1) ; not sure if a sleep here would help prevent ctrl problems or cause issues notices 1 missrally after doing this, but that could have been a missclick
+			}
 			BufferInputFast.Send()
 		}
 			
@@ -6656,7 +6657,7 @@ autoWorkerProductionCheck()
 		BufferInputFast.send()
 
 		SetBatchLines, %BatchLines%
-		Thread, NoTimers, false ; dont think is required as the thread is about to end
+		Thread, NoTimers, false 
 		
 		if BaseCtrlGroupError ; as non-structure units will have higher priority and appear in group 0/top left control card - and this isnt compatible with this macro
 		{	; as the macro will tell that unit e.g. probe to 'make a worker' and cause it to bug out
@@ -9382,6 +9383,29 @@ debugData()
 	.  "PosZ Round: " round(getUnitPositionZ(unit), 1)
 	.  "`nPosZ : " getUnitPositionZ(unit)
 }
+
+
+/*
+f2::
+
+ Thread, NoTimers, true
+	;	BufferInputFast.disableHotkeys() ; disable any previously created buffered hotkeys in case user has changed the key blocking list
+	;	BufferInputFast.createHotkeys(aButtons.List) 
+sleep 1000
+SoundPlay, *1
+BufferInputFast.BufferInput()
+
+sleep 1500
+SoundPlay, *1
+BufferInputFast.send()
+
+return 
+
+
+
+
+
+
 
 /*
 f2::
