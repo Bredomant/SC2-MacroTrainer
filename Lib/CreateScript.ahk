@@ -7,7 +7,8 @@ CreateScript(script, replace*){
       If (A_IsCompiled){
          lib := DllCall("GetModuleHandle", "ptr", 0, "ptr")
         If !(res := DllCall("FindResource", "ptr", lib, "str", ">AUTOHOTKEY SCRIPT<", "ptr", Type:=10, "ptr"))
-          If !(res := DllCall("FindResource", "ptr", lib, "str", ">AHK WITH ICON<", "ptr", Type:=10, "ptr")){
+          If !(res := DllCall("FindResource", "ptr", lib, "str", ">AHK WITH ICON<", "ptr", Type:=10, "ptr")) && !A_IsCompiled
+          {
             MsgBox Could not extract script!
             return
           }

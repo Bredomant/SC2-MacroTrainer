@@ -23,10 +23,15 @@ WriteMemory(PID, Address, &Buf, 8) ; Write 8 bytes from a buffer.
 ; ------------ Function -----------------------
 
 ;***user length name eg int instead of 4!!!
-WriteMemory(WriteAddress, PROGRAM="", Data="", TypeOrLength = "")
+
+; function will return True if successful 0 if not.
+; But when call WriteMemory() to close handle 
+; will return either "Handle Closed:" closed  OR "Fail" 
+; call WriteMemory() on exit to close handle
+WriteMemory(WriteAddress = "", PROGRAM="", Data="", TypeOrLength = "")
 {
   
-   Static OLDPROC, ProcessHandle, pid
+   Static OLDPROC, hProcess, pid
    VarSetCapacity(MVALUE,4,0)
    static PROCESS_VM_WRITE = 0x20
    static PROCESS_VM_OPERATION = 0x8
@@ -34,21 +39,17 @@ WriteMemory(WriteAddress, PROGRAM="", Data="", TypeOrLength = "")
    If PROGRAM != %OLDPROC%
    {
       WinGet, pid, pid, % OLDPROC := PROGRAM
-      ProcessHandle := ( ProcessHandle ? 0*(closed:=DllCall("CloseHandle"
-      ,"UInt",ProcessHandle)) : 0 )+(pid ? DllCall("OpenProcess"
-      ,"Int",16,"Int",0,"UInt",pid) : 0) ;PID is stored in value pid
+      hProcess := ( hProcess ? 0*(closed:=DllCall("CloseHandle"
+      ,"UInt",hProcess)) : 0 )+(pid ? DllCall("OpenProcess"
+      ,"UInt", PROCESS_VM_WRITE | PROCESS_VM_OPERATION,"Int",False,"UInt",pid) : 0) ;PID is stored in value pid
    }
 
+;old method
+;    hProcess := DllCall("OpenProcess"
+;                        , "UInt", PROCESS_VM_WRITE | PROCESS_VM_OPERATION
+;                        , "Int",  False
+;                        , "UInt", pid)
 
-    hProcess := DllCall("OpenProcess"
-                        , "UInt", PROCESS_VM_WRITE | PROCESS_VM_OPERATION
-                        , "Int",  False
-                        , "UInt", pid)
-
-    If (!hProcess) {
-        MsgBox, OpenProcess failed.
-        Return False
-    }
 
     If Data is Number   ; Either a numeric value or a memory address.
     {
@@ -69,9 +70,8 @@ WriteMemory(WriteAddress, PROGRAM="", Data="", TypeOrLength = "")
             Else If (TypeOrLength = "Char" or TypeOrLength = "UChar")
 				DataSize = 1
             Else {
-                MsgBox, Invalid type of number.
-                DllCall("CloseHandle", "UInt", hProcess)
-                Return False
+              ;  MsgBox, Invalid type of number.
+                Return False 
             }
             NumPut(Data, Buf, 0, TypeOrLength)
             DataAddress := &Buf
@@ -95,19 +95,12 @@ WriteMemory(WriteAddress, PROGRAM="", Data="", TypeOrLength = "")
                 DataSize := StrLen(Data) + 1
         }
     }                                               
-
-    Ret := DllCall("WriteProcessMemory", "UInt", hProcess
-                                       , "UInt", WriteAddress
-                                       , "UInt", DataAddress
-                                       , "UInt", DataSize
-                                       , "UInt", 0)
-
-    DllCall("CloseHandle", "UInt", hProcess)
-
-    If (!Ret) {
-        MsgBox, WriteProcessMemory failed.
-        Return False
-    }
-
-    Return True
+    ; will return true if write works
+    if hProcess
+     Return DllCall("WriteProcessMemory", "UInt", hProcess 
+                                         , "UInt", WriteAddress
+                                         , "UInt", DataAddress
+                                         , "UInt", DataSize
+                                         , "UInt", 0)
+    else  return !ProcessHandle ? "Handle Closed:" closed : "Fail"
 }

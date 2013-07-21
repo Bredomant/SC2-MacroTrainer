@@ -12,7 +12,7 @@ DynaRun(TempScript, pipename="", AhkEXE="")
 	if (AhkEXE = "")
 		AhkEXE := A_AhkPath
    Run, %AhkEXE% "\\.\pipe\%name%",,UseErrorLevel HIDE, PID
-   If ErrorLevel
+   If (ErrorLevel && !A_IsCompiled)
       MsgBox, 262144, ERROR,% "Could not open file:`n" __AHK_EXE_ """\\.\pipe\" name """"
    DllCall("ConnectNamedPipe",@,__PIPE_GA_,@,0)
    DllCall("CloseHandle",@,__PIPE_GA_)

@@ -13,6 +13,11 @@
 
 ; if script re-copied from github should save it using UTF-8 with BOM (otherwise some of the ascii symbols like • wont be displayed correctly)
 /*	Things to do
+		g_ControlShiftTimer make off routine
+	add a variable to check reason restart/exit
+	; For the DWM and Window style check add an if not hotkeyrestart
+
+
 	Update unit panel structure so can add build progress and hallucination properties
 	Check if chrono structures are powered - It seems to be a behaviour ' Power User (Queue) '
 	Team send warn message after clicking building..maybe
@@ -54,7 +59,6 @@
 		These numbers were averaged over 10,000 reads.
 
 */
-
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 #SingleInstance force
 #MaxHotkeysPerInterval 999999	; a user requested feature (they probably have their own macro script)
@@ -71,7 +75,9 @@ ListLines(False)
 Menu, Tray, Icon 
 if !A_IsAdmin 
 {
-	try  Run *RunAs "%A_ScriptFullPath%"
+	if (A_OSVersion = "WIN_XP") ; apparently the below command wont work on XP
+		RunAsAdmin()
+	else try  Run *RunAs "%A_ScriptFullPath%"
 	ExitApp
 }
 Process, Priority, , H
@@ -133,15 +139,14 @@ SetProgramWaveVolume(programVolume)
 SAPI.volume := speech_volume
 
 ;	this is required to enable drag and drop on vista and above systems while running with admin privileges 
-; 	also should read up on the security aspects of these commands
 ; 	this has a 'process wide' scope (tested it, and it seems to mean what it says i.e. 
 ;	only for this process and so reverts on closing)
 
-	if A_OSVersion in WIN_8,WIN_7,WIN_VISTA
-	{  
-		DllCall("ChangeWindowMessageFilter", uint, 0x49, uint, 1) 	; 1 allows message to be received 
-		DllCall("ChangeWindowMessageFilter", uint, 0x233, uint, 1)
-	}
+if A_OSVersion in WIN_8,WIN_7,WIN_VISTA
+{  
+	DllCall("ChangeWindowMessageFilter", uint, 0x49, uint, 1) 	; 1 allows message to be received 
+	DllCall("ChangeWindowMessageFilter", uint, 0x233, uint, 1)
+}
 
 ;-----------------------
 ;	Startup
@@ -151,6 +156,7 @@ InstallSC2Files()
 #include %A_ScriptDir%\Included Files\Gdip.ahk
 #include %A_ScriptDir%\Included Files\Colour Selector.ahk
 #include %A_ScriptDir%\Included Files\Class_BufferInputFast.AHk
+#include %A_ScriptDir%\Included Files\Class_ChangeButtonNames.AHk
 
 CreatepBitmaps(a_pBitmap, a_unitID)
 aUnitInfo := []
@@ -215,12 +221,14 @@ hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and g
 process, exist, %GameExe%
 If !errorlevel
 {
-	RegRead, SC2InstallPath, HKEY_LOCAL_MACHINE, SOFTWARE\Wow6432Node\Blizzard Entertainment\StarCraft II Retail, GamePath
-	try run %SC2InstallPath%
+	MT_StarCraftOpenOnLanuch := 0
+	try run % StarcraftExePath()
 }
+else MT_StarCraftOpenOnLanuch := 1
 Process, wait, %GameExe%	; waits for starcraft to exist
 while (!(B_SC2Process := getProcessBaseAddress(GameIdentifier)) || B_SC2Process < 0)		;using just the window title could cause problems if a folder had the same name e.g. sc2 folder
-	sleep 250				; required to prevent memory read error - Handle closed: error 		
+	sleep 400				; required to prevent memory read error - Handle closed: error 		
+
 LoadMemoryAddresses(B_SC2Process)	
 settimer, clock, 250
 settimer, timer_exit, 5000, -100
@@ -228,6 +236,73 @@ SetTimer, OverlayKeepOnTop, 1000, -20	;better here, as since WOL 2.0.4 having it
 
 l_Changeling := A_unitID["ChangelingZealot"] "," A_unitID["ChangelingMarineShield"] ","  A_unitID["ChangelingMarine"] 
 				. ","  A_unitID["ChangelingZerglingWings"] "," A_unitID["ChangelingZergling"]
+
+
+if A_OSVersion in WIN_7,WIN_VISTA 
+{
+	if !DwmIsCompositionEnabled() && !MT_DWMwarned && !MT_Restart && A_IsCompiled ; so not restarted via hotkey or icon 
+	{
+		ChangeButtonNames.set("DWM is Disabled?", "Help", "Ignore") 
+		; msgbox with exclamation and Ok, Cancel Buttons
+		MsgBox, 49, DWM is Disabled?
+		,	% "Desktop Widows Management (DWM) is disabled!`n`n" 
+		.	"This will cause significant performance issues while using this program.`n"
+		.  	"Your FPS can be expected to decrease by 70%`n`n" 
+		.	"Click  'Help' to launch some URLs explaining how to do enable DWM.`n`n"
+		.	"You will not see this warning again!"	
+		IniWrite, % MT_DWMwarned := True, %config_file%, Misc Info, MT_DWMwarned
+		ifMsgbox Ok ; 'Help'
+			gosub, g_HTTPEnableDWM	
+	}
+}
+
+; SC2 Window Modes EXStyle
+; Windowed FullScreen 	:= 0x00040000
+; FullScreen 			:= 0x00040008
+; Windowed 				:= 0x00040100
+ 
+; Breakdown
+; WS_THICKFRAME       =   0x00040000 ; WindowedFullScreen
+; WS_EX_TOPMOST       =   0x00000008
+; WS_EX_WINDOWEDGE    =   0x00000100
+; winset fails when attempting to modify these values
+
+; 	Style or ExStyle: Retrieves an 8-digit hexadecimal number representing style 
+;	or extended style (respectively) of a window. 
+;	If there are no matching windows, OutputVar is made blank. 
+SC2WindowEXStyles := []
+	SC2WindowEXStyles.WindowedFullScreen := 0x00040000
+	SC2WindowEXStyles.FullScreen := 0x00040008
+	SC2WindowEXStyles.Windowed := 0x00040100
+
+if !MT_StarCraftOpenOnLanuch
+	sleep 2000 	; 	give time for SC2 to fully launch. This may be required on slower or stressed computers
+				;	to give time for the  window to fully launch and activate to allow the below check
+				; 	to work properly
+If WinGet("EXStyle", GameIdentifier) = SC2WindowEXStyles.FullScreen
+&& (DrawMiniMap || DrawAlerts || DrawSpawningRaces
+|| DrawIncomeOverlay || DrawResourcesOverlay || DrawArmySizeOverlay
+|| DrawWorkerOverlay || DrawIdleWorkersOverlay || DrawLocalPlayerColourOverlay
+|| DrawUnitOverlay)
+&& !MT_Restart && A_IsCompiled ; so not restarted via hotkey or icon 
+{
+	ChangeButtonNames.set("SC2 Is NOT in 'windowed Fullscreen' mode!", "Disable", "Continue") 
+	; OK/Cancel messagebox
+	MsgBox, 49, SC2 Is NOT in 'windowed Fullscreen' mode!
+	, % "Starcraft seems to be in 'fullscreen' mode and you have overlays enabled within"
+	. " the Macro Trainer.`n`n"
+	. "The Minimap hack and overlays will only be visible while in 'windowed Fullscreen' mode.`n`n"
+	. "This setting can be changed within the SC2 options menu.`n`n"
+	. "Click 'Disable' to turn off all the overlays in Macro Trainer.`n"
+	. "Click 'Continue' if you intend on changing the SC2 Window Mode."
+	ifMsgbox Ok ; 'Disable'
+	{
+		DrawMiniMap := DrawAlerts := DrawSpawningRaces := DrawIncomeOverlay := DrawResourcesOverlay
+		:= DrawArmySizeOverlay := DrawWorkerOverlay := DrawIdleWorkersOverlay 
+		:= DrawLocalPlayerColourOverlay := DrawUnitOverlay := 0
+		gosub, ini_settings_write
+	}
+}
 
 return
 
@@ -242,12 +317,21 @@ g_EmergencyRestart:
 		SetMouseDelay, 10	; to ensure release modifiers works
 		SetKeyDelay, 10			
 		releaseAllModifiers() 					;This will be active irrespective of the window
-		RestoreModifierPhysicalState("Unblock")		;input on ; this doesnt really do anything now - not needed
+		RestoreModifierPhysicalState()		;input on ; this doesnt really do anything now - not needed
 		settimer, EmergencyInputCountReset, 5000, -100	
 		EmergencyInputCount ++		 
-		If EmergencyInputCount >= 3
+		If (EmergencyInputCount = 1)
 		{
+			BufferInputFast.disableHotkeys()
+			BufferInputFast.createHotkeys(aButtons.List) 
+			CreateHotkeys()
+		}
+		else If (EmergencyInputCount >= 3)
+		{
+			IniWrite, Hotkey, %config_file%, Misc Info, RestartMethod
 		g_reload:
+			if (A_ThisLabel = "g_reload")
+				IniWrite, Icon, %config_file%, Misc Info, RestartMethod
 			SoundPlay, %A_Temp%\Windows Ding.wav
 			if time && alert_array[GameType, "Enabled"]
 				doUnitDetection(unit, type, owner, "Save")	;these first 3 vars are nothing - they wont get Read
@@ -287,6 +371,7 @@ return
 Stealth_Exit:
 	ExitApp
 	return
+
 g_PlayModifierWarningSound:
 	SoundPlay, %A_Temp%\ModifierDown.wav
 return
@@ -385,6 +470,7 @@ ReleaseModifiers(Beep = 1, CheckIfUserPerformingAction = 0, AdditionalKeys = "",
 	|| getkeystate("LWin", "L") || getkeystate("RWin", "L")
 	|| getkeystate("LButton", "P") || getkeystate("LButton", "L")
 	|| getkeystate("RButton", "P") || getkeystate("RButton", "L")
+	|| readModifierState() 
 	||  (AdditionalKeys && isaKeyPhysicallyOrLogicallyDown(AdditionalKeys))  ; ExtraKeysDown should actually return the actual key
 	|| (isPerformingAction := CheckIfUserPerformingAction && isUserPerformingAction()) ; have this function last as it can take the longest if lots of units selected
 	{
@@ -726,6 +812,8 @@ clock:
 		SetTimer, overlay_timer, %OverlayRefresh%, -8	
 		SetTimer, g_unitPanelOverlay_timer, %UnitOverlayRefresh%, -9	
 
+	;	SetTimer, g_ControlShiftTimer, 40
+
 		EnemyBaseList := GetEBases()		
 		UserSavedAppliedSettings := 0		
 	}
@@ -795,7 +883,9 @@ Cast_ChronoStructure:
 	Else if (UserPressedHotkey = Cast_ChronoNexus_Key)
 		Cast_ChronoStructure(A_unitID.Nexus)
 	Else If (UserPressedHotkey = Cast_ChronoGate_Key)
-		Cast_ChronoStructure(A_unitID.WarpGate) ; this will also do gateways
+		Cast_ChronoStructure(A_unitID.WarpGate) ; this will also do gateways	
+	Else If (UserPressedHotkey = Cast_ChronoRoboticsFacility_Key)
+		Cast_ChronoStructure(A_unitID.RoboticsFacility) ; this will also do gateways
 	BufferInputFast.disableBufferingAndBlocking()
 	Critical Off	
 return
@@ -994,7 +1084,7 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 			if ReleaseModifiers(0, 0, "", 20)
 				return
 			BufferInputFast.BufferInput()
-			Sleep(4) ; give time for selection buffer to update. This along with blocking input should cover pre- and post-selection delay buffer changes
+			Sleep(2) ; give time for selection buffer to update. This along with blocking input should cover pre- and post-selection delay buffer changes
 			numGetUnitSelectionObject(oSelection)
 			for index, Unit in oSelection.Units
 				PostDelaySelected .= "," unit.UnitIndex
@@ -1815,7 +1905,7 @@ scvidle:
 ;	Inject	Timers
 ;------------
 inject:
-	if ( time - inject_set >= manual_inject_time )		;for manual inject alarm
+	if ( time - inject_set >= manual_inject_time )		;for manual dumb inject alarm  (i.e. dings every X seconds)
 	{
 		inject_timer := 1
 		inject_set:=time
@@ -1826,6 +1916,8 @@ inject:
 			DSpeak(w_inject_spoken)	
 	}		
 	return
+
+; This is for the One-Button Injects (not the fully automated injects)
 
 auto_inject:
 	if ( time - inject_set >= auto_inject_time ) && (!F_Inject_Enable)
@@ -2336,6 +2428,11 @@ g_buyBeer:
 	run % url.buyBeer
 	return
 
+g_HTTPEnableDWM:
+	run http://answers.microsoft.com/en-us/windows/forum/windows_vista-desktop/need-to-enable-desktop-window-manager/7e011e13-1005-467b-8dc0-10342f8f71e6
+	run http://www.petri.co.il/enable_windows_vista_aero_graphics.htm
+	return
+
 ;------------
 ;	Exit
 ;------------
@@ -2678,12 +2775,11 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, BlockingNumpad, %config_file%, %section%, BlockingNumpad, 1
 	IniRead, BlockingMouseKeys, %config_file%, %section%, BlockingMouseKeys, 1
 	IniRead, BlockingMultimedia, %config_file%, %section%, BlockingMultimedia, 1
-	IniRead, BlockingModifier, %config_file%, %section%, BlockingModifier, 1
 	IniRead, LwinDisable, %config_file%, %section%, LwinDisable, 1
 
-	aButtons := []
+	aButtons := [] 	; Note I no longer retreive modifier keys in this list as these will always be blocked using ~*prefix
 	aButtons.List := getKeyboardAndMouseButtonArray(BlockingStandard*1 + BlockingFunctional*2 + BlockingNumpad*4
-																	 + BlockingMouseKeys*8 + BlockingMultimedia*16 + BlockingModifier*32)	;gets an object contains keys
+																	 + BlockingMouseKeys*8 + BlockingMultimedia*16)	;gets an object contains keys
 	;[Auto Mine]
 	section := "Auto Mine"
 	IniRead, auto_mine, %config_file%, %section%, enable, 0
@@ -2842,6 +2938,15 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	
 	; Resume Warnings
 	Iniread, ResumeWarnings, %config_file%, Resume Warnings, Resume, 0
+
+	; [Misc Info]
+	section := "Misc Info"
+	; RestartMethod is written to in the emergency exit routine
+	; it is used in a couple of checks
+	IniRead, MT_Restart, %config_file%, %section%, RestartMethod, 0
+	if MT_Restart
+		IniWrite, 0, %config_file%, %section%, RestartMethod ; set the value back to 0	
+	IniRead, MT_DWMwarned, %config_file%, %section%, MT_DWMwarned, 0
 
 	if ( ProgramVersion > read_version ) ; its an update and the file exists - better backup the users settings
 	{
@@ -3227,7 +3332,6 @@ ini_settings_write:
 	IniWrite, %BlockingNumpad%, %config_file%, %section%, BlockingNumpad
 	IniWrite, %BlockingMouseKeys%, %config_file%, %section%, BlockingMouseKeys
 	IniWrite, %BlockingMultimedia%, %config_file%, %section%, BlockingMultimedia
-	IniWrite, %BlockingModifier%, %config_file%, %section%, BlockingModifier
 	IniWrite, %LwinDisable%, %config_file%, %section%, LwinDisable
 	
 	;[Alert Location]
@@ -3824,16 +3928,15 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Set
 
 		Gui, Add, Checkbox,xs+10 yp+30 Vauto_update checked%auto_update%, Auto Check For Updates
 
-	Gui, Add, GroupBox, xs yp+30 w161 h185, Key Blocking
+	Gui, Add, GroupBox, xs yp+30 w161 h170, Key Blocking
 		Gui, Add, Checkbox,xp+10 yp+25 vBlockingStandard checked%BlockingStandard%, Standard Keys	
 		Gui, Add, Checkbox, y+10 vBlockingFunctional checked%BlockingFunctional%, Functional F-Keys 	
 		Gui, Add, Checkbox, y+10 vBlockingNumpad checked%BlockingNumpad%, Numpad Keys	
 		Gui, Add, Checkbox, y+10 vBlockingMouseKeys checked%BlockingMouseKeys%, Mouse Buttons	
 		Gui, Add, Checkbox, y+10 vBlockingMultimedia checked%BlockingMultimedia%, Mutimedia Buttons	
-		Gui, Add, Checkbox, y+10 vBlockingModifier checked%BlockingModifier%, Modifier Keys	
 		Gui, Add, Checkbox, y+10 vLwinDisable checked%LwinDisable%, Disable Left Windows Key
 
-	Gui, Add, GroupBox, xs yp+30 w161 h60, Unit Deselection
+	Gui, Add, GroupBox, xs yp+35 w161 h60, Unit Deselection
 		Gui, Add, Text, xp+10 yp+25, Sleep Time:
 		Gui, Add, Edit, Number Right x+25 yp-2 w45 vTT_DeselectSleepTime
 			Gui, Add, UpDown,  Range0-300 vDeselectSleepTime, %DeselectSleepTime%,
@@ -3847,7 +3950,7 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Set
 			Gui, Add, Slider, ToolTip  NoTicks w140 x+2 yp-2  VprogramVolume, %programVolume%
 				Gui, Add, Button, x+5 yp w30 h23 vTest_VOL_All gTest_VOL, Test
 
-	Gui, Add, GroupBox, Xs+171 ys+116 w245 h185, Debugging
+	Gui, Add, GroupBox, Xs+171 ys+116 w245 h170, Debugging
 		Gui, Add, Button, xp+10 yp+30  Gg_ListVars w75 h25,  List Variables
 		Gui, Add, Button, xp yp+30  Gg_GetDebugData w75 h25,  Debug Data
 
@@ -4294,10 +4397,10 @@ Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, Min
 Gui, Tab, MiniMap
 
 	CurrentGuiTabX := XTabX -5
-	Gui, Add, Checkbox, X%CurrentGuiTabX% Y+10 vDrawMiniMap Checked%DrawMiniMap% gG_GuiSetupDrawMiniMapDisable, Enable MiniMap
-	Gui, Add, Checkbox, xp+20 Y+5 vDrawSpawningRaces Checked%DrawSpawningRaces%, Display Spawning Races
-	Gui, Add, Checkbox, vDrawAlerts Checked%DrawAlerts%, Display Alerts
-	Gui, Add, Checkbox, vHostileColourAssist Checked%HostileColourAssist%, Hostile Colour Assist
+	Gui, Add, Checkbox, X%CurrentGuiTabX% Y+15 vDrawMiniMap Checked%DrawMiniMap% gG_GuiSetupDrawMiniMapDisable, Enable MiniMap Hack
+	Gui, Add, Checkbox, xp Y+7 vDrawSpawningRaces Checked%DrawSpawningRaces%, Display Spawning Races
+	Gui, Add, Checkbox, Y+7 vDrawAlerts Checked%DrawAlerts%, Display Alerts
+	Gui, Add, Checkbox, Y+7  vHostileColourAssist Checked%HostileColourAssist%, Hostile Colour Assist
 
 
 		Gui, add, text, y+15 X%CurrentGuiTabX% w45, Exclude:
@@ -4346,7 +4449,7 @@ Gui, Tab, MiniMap
 	Gui, Add, Text, Y50 x367, Refresh Rate (ms):
 		Gui, Add, Edit, Number Right x+25 yp-2 w55 vTT_MiniMapRefresh
 			Gui, Add, UpDown,  Range1-1500 vMiniMapRefresh, %MiniMapRefresh%	
-	Gui, Add, Text, x367 yp+30, Hide MiniMap:
+	Gui, Add, Text, x367 yp+35, Hide MiniMap:
 	Gui, Add, Edit, Readonly yp-2 xp+80 center w90 vTempHideMiniMapKey gedit_hotkey, %TempHideMiniMapKey%
 	Gui, Add, Button, yp-2 x+10 gEdit_hotkey v#TempHideMiniMapKey,  Edit 		
 
@@ -4548,7 +4651,7 @@ TT_workerProductionTPIdle_TT := workerProductionTPIdle_TT := "This only applies 
 delay_warpgate_warn_TT := TT_delay_warpgate_warn_TT := "A warning will be heard when an unconverted gateway exists for this period of time.`nThis is in SC/in-game seconds.`n`nNote: An additional delay of up to three (real) seconds can be expected"
 
  TT_delay_warpgate_warn_followup_TT := delay_warpgate_warn_followup_TT := "This sets the delay between the initial warning and the additional/follow-up warnings.`n`nNote: This is in SC2 (in game) seconds."
-
+DrawMiniMap_TT := "Draws enemy units on the minimap i.e. A Minimap Hack"
 DrawSpawningRaces_TT := "Displays a race icon over the enemies spawning location at the start of the match."
 
 DrawAlerts_TT := "While using the 'detection list' function an 'x' will be briefly displayed on the minimap during a unit warning.`n`nUnconverted gateways will also be marked (if that macro is enabled)."
@@ -4708,6 +4811,7 @@ loop, parse, l_races, `,
 
 
 OnMessage(0x200, "WM_MOUSEMOVE")
+Gosub, G_GuiSetupDrawMiniMapDisable ; Disable controls based on current drawing settings
 GuI, Options:Show, w615 h505, Macro Trainer V%ProgramVersion% Settings
 Return
 
@@ -4732,13 +4836,17 @@ return
 
 
 g_GuiSetupDrawMiniMapDisable:
+	
+	; the commented out controls here are ones which can still be active 
+	; even when the 'Minimap Hack' is not being used
 	GuiControlGet, Checked, ,DrawMiniMap 
 	if !Checked
-	{	GUIControl, Disable, DrawSpawningRaces
-		GUIControl, Disable, DrawAlerts
-		GUIControl, Disable, TT_MiniMapRefresh
-		GUIControl, Disable, TempHideMiniMapKey
-		GUIControl, Disable, #TempHideMiniMapKey
+	{	
+	;	GUIControl, Disable, DrawSpawningRaces
+	;	GUIControl, Disable, DrawAlerts
+	;	GUIControl, Disable, TT_MiniMapRefresh
+	;	GUIControl, Disable, TempHideMiniMapKey
+	;	GUIControl, Disable, #TempHideMiniMapKey
 		GUIControl, Disable, HostileColourAssist
 		GUIControl, Disable, HighlightInvisible
 		GUIControl, Disable, HighlightHallucinations
@@ -4760,14 +4868,15 @@ g_GuiSetupDrawMiniMapDisable:
 		GUIControl, Disable, #UnitHighlightHallucinationsColour
 	}
 	Else
-	{	GUIControl, Enable, DrawSpawningRaces
-		GUIControl, Enable, DrawAlerts
+	{	
+	;	GUIControl, Enable, DrawSpawningRaces
+	;	GUIControl, Enable, DrawAlerts
 		GUIControl, Enable, UnitHighlightExcludeList
 		GUIControl, Enable, #UnitHighlightExcludeList
 
-		GUIControl, Enable, TT_MiniMapRefresh
-		GUIControl, Enable, TempHideMiniMapKey
-		GUIControl, Enable, #TempHideMiniMapKey
+	;	GUIControl, Enable, TT_MiniMapRefresh
+	;	GUIControl, Enable, TempHideMiniMapKey
+	;	GUIControl, Enable, #TempHideMiniMapKey
 		GUIControl, Enable, HostileColourAssist
 		GUIControl, Enable, HighlightInvisible
 		GUIControl, Enable, HighlightHallucinations
@@ -6509,6 +6618,7 @@ autoWorkerProductionCheck()
 		|| getkeystate("LWin", "L") || getkeystate("RWin", "L")
 		|| getkeystate("LButton", "P") || getkeystate("LButton", "L")
 		|| getkeystate("RButton", "P") || getkeystate("RButton", "L")
+		|| readModifierState() 
 		|| isUserPerformingActionIgnoringCamera()
 		{
 			if (A_index > 12)
@@ -6748,28 +6858,24 @@ getControlGroupCount(Group)
 	Return	ReadMemory(B_CtrlGroupStructure + S_CtrlGroup * (Group - 1), GameIdentifier, 2)
 }	
 
-ReleaseAllModifiers(Mode="") 
+ReleaseAllModifiers() 
 { 
-	If (Mode = "BlockAll")
-		BlockInput, On 			;BlockInput, MouseMove not required
 	KeyDelay := A_KeyDelay
 	MouseDelay := A_MouseDelay
 	SetKeyDelay 10
 	SetMouseDelay 10
 	list = LControl|RControl|LShift|RShift|LAlt|RAlt|LButton|RButton|MButton 
-	Loop Parse, list, | 
+	Loop Parse, list, | ;could just not bother with the getkeystate check and send UP button regardless
 	{ 
-		if (GetKeyState(A_LoopField)) 	;fix sticky key problem
-		send {Blind}{%A_LoopField% up}       ; {Blind} is added.
+		if (!GetKeyState(A_LoopField, "P") && GetKeyState(A_LoopField)) 	;fix sticky key problem
+			send {Blind}{%A_LoopField% up}       ; {Blind} is added.
 	} 
 	SetKeyDelay %KeyDelay%
 	SetMouseDelay %MouseDelay%   
 } 
 
-RestoreModifierPhysicalState(Mode="")
+RestoreModifierPhysicalState()
 {
-	If (Mode = "Unblock")
-		BlockInput, off
 	KeyDelay := A_KeyDelay
 	MouseDelay := A_MouseDelay
 	SetKeyDelay 10
@@ -8186,6 +8292,51 @@ CreatepBitmaps(byref a_pBitmap, a_unitID)
 }
 
 
+
+;	This Timer is called after a sendinput/block off 
+; 	it will stop after 5 goes, so it doesnt have to run in the background all the time
+;	maybe try a sendEvent here
+
+  g_ControlShiftTimer:
+  	ControlShiftTimerCount++
+
+  	if !GetKeyState("ctrl", "P") && GetKeyState("ctrl") 
+		send {Blind}{ctrl up}
+	if !GetKeyState("Shift", "P") && GetKeyState("Shift") 
+		send {Blind}{Shift up}
+	if !GetKeyState("alt", "P") && GetKeyState("alt") 
+		send {Blind}{alt up}
+	if (ControlShiftTimerCount >= 7)
+	{
+		SetTimer, g_ControlShiftTimer, off
+		ControlShiftTimerCount := 0
+	}
+	return
+
+/*
+	This is activated when the user presses 0-9 
+	the problem is rarely the shift or ctrl (and alt but alt is used less, so occurs even less often) gets stuck down
+	and so when user presses the next number eg 5 the selected units will be shift grouped with whatevera is in 5
+
+	still wont address the problem when the user mouse clicks and such
+
+*/
+	
+	; this should be changed to check physcial against SC2 memory modifiers
+	; should used sendBlind aswell
+  g_ControlShiftCheck:
+  	ControlShiftCheckHotkey := A_ThisHotkey
+    sleep(1)
+	if !GetKeyState("ctrl", "P") && GetKeyState("ctrl") 
+		send {ctrl up}
+	if !GetKeyState("Shift", "P") && GetKeyState("Shift") 
+		send {Shift up}
+	if !GetKeyState("alt", "P") && GetKeyState("alt") 
+		send {alt up}
+   ;	send % BufferInputFast.getModifierState(ControlShiftCheckHotkey) BufferInputFast.stripModifiers(ControlShiftCheckHotkey)
+   	send % ControlShiftCheckHotkey 
+    return
+
 ;	Some commands which can come in handy for some functions (obviously have to use within the hotkey command)
 ; 	#MaxThreadsBuffer on 		- this will buffer a hotkeys own key for 1 second, hence this is more in series - subsequent threads will begin when the previous one finishes
 ;	#MaxThreadsPerHotkey 3 		- this will allow a simultaneous 'thread' of hotkeys i.e. parallel
@@ -8224,6 +8375,11 @@ CreateHotkeys()
 	Hotkey, If, WinActive(GameIdentifier) && !BufferInputFast.isInputBlockedOrBuffered() 														
 		hotkey, %warning_toggle_key%, mt_pause_resume, on		
 		hotkey, *~LButton, g_LbuttonDown, on
+	
+ 
+;	Loop, 10
+;		hotkey, % A_Index-1, g_ControlShiftCheck, on
+
 	Hotkey, If, WinActive(GameIdentifier) && LwinDisable
 			hotkey, Lwin, g_DoNothing, on		
 	Hotkey, If, WinActive(GameIdentifier) && !isMenuOpen() && time && !BufferInputFast.isInputBlockedOrBuffered()
@@ -8962,6 +9118,18 @@ LoadMemoryAddresses(SC2EXE)
 		O1_PlayerColours := 0x4
 		O2_PlayerColours := 0x17c
 
+
+/*
+				; 2 when team colours is on 
+                //TeamColor 
+                TeamColor1 = (int)starcraft.MainModule.BaseAddress + 0x0209D4E4; //V
+                TeamColor2 = (int)starcraft.MainModule.BaseAddress + 0x03ED4BF8; //V
+
+*/
+
+
+
+
 	P_SelectionPage := SC2EXE + 0x0209C3C8 ;	0x02097818 ;theres one other 3 lvl pointer
 		O1_SelectionPage := 0x35C			;this is for the currently selected unit portrait page ie 1-6 in game (really starts at 0-5)
 		O2_SelectionPage := 0x180			;might actually be a 2 or 1 byte value....but works fine as 4
@@ -9011,7 +9179,13 @@ LoadMemoryAddresses(SC2EXE)
 
 											; there are two of these the later 1 is actually the one that affects the game
 	B_ModifierKeys := SC2EXE + 0x1FDF7D8  	;shift = 1, ctrl = 2, alt = 4 (and add them together)
+/*
+Around this modifier area are other values which contain the logical states
+SC2.exe+1FDF7C6 is a 2byte value which contains the state of the numbers 0-9
+SC2.exe+1FDF7D0 contains the state F-keys as well as keys like tab, backspace, Ins, left, right etc
+SC2.exe+1FDF7C8 (8 bytes) contains the state of most keys eg a-z etc
 
+*/
 
 	B_MouseButtonState := SC2EXE + 0x1FDF7BC 				;1 byte - MouseButton state 1 for Lbutton,  2 for middle mouse, 4 for rbutton
 															; 
@@ -9028,6 +9202,23 @@ LoadMemoryAddresses(SC2EXE)
 
 
 	B_IsGamePaused := SC2EXE + 0x2186548 						
+
+
+	B_FramesPerSecond := SC2EXE + 0x03ED54DC
+	B_Gamespeed  := SC2EXE + 0x03E18628
+
+	; example: D:\My Computer\My Documents\StarCraft II\Accounts\56064144\6-S2-1-79722\Replays\
+	B_ReplayFolder :=  SC2EXE + 0x03E93E00
+
+
+
+	; Horizontal resolution ; 4 bytes
+	; vertical resolution ; The next 4 bytes immediately after the Horizontal resolution
+
+	P_HorizontalResolution := SC2EXE + 0x01106654
+		01_HorizontalResolution := 0x90 
+	P_VerticalResolution := SC2EXE + 0x01106654
+		01_VerticalResolution:= 0x94
 
  ; The below offsets are not Currently used but are current for 2.0.8
 
@@ -9101,8 +9292,8 @@ g_SelectArmy:
 		{
 			SelectArmy.LastHotKeyPress := A_TickCount
 			send % Sc2SelectArmyCtrlGroup Sc2SelectArmyCtrlGroup ; to move the camera
-			BufferInput(aButtons.List)
-			KeyWait, %castSelectArmy_key%, T3
+			BufferInputFast.disableBufferingAndBlocking()
+			KeyWait, %castSelectArmy_key%, T2
 			return
 		}
 		Else
@@ -9385,60 +9576,110 @@ debugData()
 }
 
 
-/*
-f2::
-
- Thread, NoTimers, true
-	;	BufferInputFast.disableHotkeys() ; disable any previously created buffered hotkeys in case user has changed the key blocking list
-	;	BufferInputFast.createHotkeys(aButtons.List) 
-sleep 1000
-SoundPlay, *1
-BufferInputFast.BufferInput()
-
-sleep 1500
-SoundPlay, *1
-BufferInputFast.send()
-
-return 
-
-
-
-
-
-
-
-/*
-f2::
-	a_SelectedUnits := []
-	selectionCount := getSelectionCount()
-	while (A_Index <= selectionCount)	
-	{
-		unit := getSelectedUnitIndex(A_Index -1)
-		getMiniMapMousePos(unit, mX, mY)
-		a_SelectedUnits.insert({"Unit": unit, "x": mX, "y": mY, absDistance: ""})
+	; example: D:\My Computer\My Documents\StarCraft II\Accounts\56064144\6-S2-1-79722\Replays\
+	getReplayFolder()
+	{	GLOBAL
+		Return ReadMemory_Str(B_ReplayFolder, , GameIdentifier) 
 	}
 
-;	objtree(a_SelectedUnits)
-	ArrayPosition := getLeftMostUnitFromArray(a_SelectedUnits)  
-	
-	ClickSelectUnitsPortriat(a_SelectedUnits[ArrayPosition].unit)
-return 
+/*	Documents\StarCraft II\Accounts\<numbers>\Variables.txt 
+	The Account Folder has the Variables.txt file
+	and Hotkeys folder
 
 
-getLeftMostUnitFromArray(array) ; just a test function
-{
-	LeftMin := []
-	for ArrayIndex, object in array 
-	{
-		if (A_index = 1)
-			LeftMin.ArrayIndex := ArrayIndex, LeftMin.x := object.x
-		else if (object.x < LeftMin.x)
-		LeftMin.ArrayIndex := ArrayIndex, LeftMin.x := object.x
-	}
-	return LeftMin.ArrayIndex
-}
+	Within Variables.txt file is a hotkeyprofile= key
+	Values For standard (non-modfied SC2 profiles):
+
+	hotkeyprofile=0_Default  		; Standard
+	hotkeyprofile=1_NameRightSide	; Standard for Lefties
+	hotkeyprofile=2_GridLeftSide	; Grid
+	hotkeyprofile=3_GridRightSide	; Grid for Lefties
+	hotkeyprofile=4_Classic			; Classic
+
+	If using a user hotkey profiles, it will contain the active hotkey file which is stored in ..\Hotkeys folder
+	eg
+	hotkeyprofile=Good 				; using the good Hotkey profile
+
+
 
 */
+/*
+	Default=[nothing] (that would be the Normal Left Side)
+	Suffix=_NRS = Normal Right Side (for lefties)
+	Suffix=_GLS = Grid Left Side
+	Suffix=_GRS = Grid Right Side (for lefties)
+	Suffix=_SC1 = Classic
+
+*/
+
+
+/*	Hotkey file eg Documents\StarCraft II\Accounts\<numbers>\Hotkeys\
+	This is pretty much just an ini file containing the altered hotkeys
+	
+	-	Has a [Settings] section
+		If based on grid profile will contian a 
+		Grid=1 (this is missing in the other profiles)
+
+	- A "Suffix=" line 
+		indicating the standard hotkey profile the active settings are based on 
+		(if there's no Suffix line then it's based on "Standard")
+
+		_USDL ...not sure univeral? This appears in the mpq extracted hotkeys
+
+
+	obviously for grid layout commands (command card) 00-14 corresond to the keyboard letters
+
+*/
+
+getAccountFolder()
+{
+
+		; example: D:\My Computer\My Documents\StarCraft II\Accounts\56064144\6-S2-1-79722\Replays\
+	replayFolder := getReplayFolder()
+	StringReplace, ModifiedString, replayFolder,  \Accounts\, ?, All ;replace with ? which can occur in name
+	stringSplit, output, ModifiedString, ?
+	; output1 D:\My Computer\My Documents\StarCraft II
+	; output2 56064144\6-S2-1-79722\Replays\
+	loop % strlen(output2)
+		if ((Char := substr(output2, A_Index, 1)) = "\") ; read each character of account number until reach '\' of next folder
+			break
+		else AccountNumber .= Char ;
+	
+	return output1 "\" AccountNumber "\"
+}
+
+
+/*
+
+. The two offsets I have listed right now are 0x2031078 and 0x03ED4970, but I can't remember exactly what they are for. I've changed the method I use a bit so that might not be much help. 
+
+Also, and more importantly: all the hotkeys have been moved to new files:
+
+patch-enUS.SC2Archive\Mods\Core.SC2Mod\enUS.SC2Data\LocalizedData
+
+and
+
+patch-enUS.SC2Archive\Mods\Liberty.SC2Mod\enUS.SC2Data\LocalizedData
+
+they are both named GameHotkeys.txt (so we'll have to keep using the extraction merging)
+
+
+and if you want to implement loading of the default hotkeys, the directory :
+
+Mods\Core.SC2Mod\Base.SC2Data\UI\Hotkeys
+
+contains all the files (the .SC2Hotkeys filetype is openable with notepad) that directs which setting goes with which suffix, here's the list :
+
+Default=[nothing] (that would be the Normal Left Side)
+Suffix=_NRS = Normal Right Side (for lefties)
+Suffix=_GLS = Grid Left Side
+Suffix=_GRS = Grid Right Side (for lefties)
+Suffix=_SC1 = Classic
+
+
+
+*/
+
 
 
 SplitUnits(SplitctrlgroupStorage_key, SleepSplitUnits)
@@ -10152,13 +10393,29 @@ IsCameraDragScrollActivated()
 }
 
 	; these will return the same as if you check logical state of the key
-	; whereas if check physical, AHK changes physical faster
 	; there are two of these the later 1 is actually the one that affects the game
 	; shift = 1, ctrl = 2, alt = 4 (and add them together)
+	; left and right modifers give same values
 	; if you modify these values will actually affect in game
 readModifierState()
 {	GLOBAL 
 	return ReadMemory(B_ModifierKeys, GameIdentifier, 1)
+}
+
+; this will only have a temporary affect
+; as sc2 continually poles the modifier states
+; use exact value if you want to write a number
+WriteModifiers(shift := 0, ctrl := 0, alt := 0, ExactValue := 0){
+	LOCAL value 
+	if shift
+		value += 1
+	if ctrl 
+		value += 2 
+	if alt 
+		value += 4
+	if ExactValue
+		value := ExactValue
+	Return WriteMemory(B_ModifierKeys, GameIdentifier, value,"Char")
 }
 
 ; can check if producing by checking queue size via buildstats()
@@ -10341,6 +10598,86 @@ groupMinerals(minerals)
 	return averagedMinerals
 }
 
+SC2HorizontalResolution()
+{	GLOBAL
+	return  pointer(GameIdentifier, P_HorizontalResolution, 01_HorizontalResolution)
+}
+SC2VerticalResolution()
+{	GLOBAL
+	return  pointer(GameIdentifier, P_VerticalResolution, 01_VerticalResolution)
+}
+
+	
+*f3::
+sendInput {BLind}{Shift up}
+return 
+
+*f1:: 
+
+
+BufferInputFast.createHotkeys(aButtons.List) 
+keywait, Shift, D
+sleep 250
+BufferInputFast.BufferInput()
+soundplay *-1 
+sleep 5000
+soundplay *16 
+BufferInputFast.Send()
+return 
+
+
+f2::
+settimer, g_TTTest, 200
+return 
+
+g_TTTest:
+MouseGetPos, mx, my
+r := DllCall("GetAsyncKeyState",Int, GetKeyVK("Shift"))
+r2 := getkeystate("Shift", "P")
+r3 := getkeystate("Shift")
+ToolTip, AS: %r% `n P: %r2% `n L: %r3% , (800), (810)
+
+return 
+/*
+ffff
+var := "Trainer Vr: " getProgramVersion() "`n"
+	. "Is64bitOS: " A_Is64bitOS "`n"
+	. "OSVersion: " A_OSVersion "`n"
+	. "Language Code: " A_Language "`n"
+	. "Language: " getSystemLanguage() "`n"
+	. "MinTimer: " MinTimer "`n"
+	. "MaxTimer: " MaxTimer "`n"
+	. "XRes: " SC2HorizontalResolution() "`n"
+	. "YRes: " SC2VerticalResolution() "`n"
+	. "Replay Folder: "  getReplayFolder() "`n"
+	. "Account Folder: "  getAccountFolder() "`n"
+	. "Game Exe:"	StarcraftExePath() "`n"
+	. "Game Dir:"	StarcraftInstallPath() "`n"
+
+	. "SwarmMulti.SC2Mod:`n" 
+loop, % StarcraftInstallPath() "\SwarmMulti.SC2Mod"
+	var .= A_Tab A_LoopFileName "`n"
+
+/*
+
+f1::
+send {Shift Down}
+return 
+
+*f2::
+
+	
+	startTime := A_TickCount
+
+	while (A_TickCount - StartTime < 1000 * 10)
+	{
+		soundplay *-1
+		clipboard := WriteModifiers(False, False, False)
+		sleep 250
+	}
+	soundplay *16
+
+return 
 
 
 /*
