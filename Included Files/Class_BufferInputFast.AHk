@@ -33,6 +33,16 @@ Class BufferInputFast
 			this.aBlockedKeys := []
 		}
 		return			
+	}
+	releaseModifiers()
+	{
+		if GetKeyState("Shift", "P")
+			sendInput {Blind}{Shift up}
+		if GetKeyState("Ctrl", "P")
+			sendInput {Blind}{ctrl up}	
+		if GetKeyState("Alt", "P")
+			sendInput {Blind}{alt up}
+		return
 	}	
 
 	isInputBuffered()
@@ -54,52 +64,70 @@ Class BufferInputFast
 		this.aBuffer := []
 		this.BufferedState := 1
 		this.BlockedState := 0
-		sendInput {Blind}{Shift up}{ctrl up}{alt up} ;lets release the modifiers (the hard rebinds will prevent it getting pushed down)
+		this.releaseModifiers() ;lets release the modifiers (the hard rebinds will prevent it getting pushed down)
 		return
 	}	
 	BlockInput()
 	{
 		this.BufferedState := 0
 		this.BlockedState := 1
-		sendInput {Blind}{Shift up}{ctrl up}{alt up} ;lets release the modifiers (the hard rebinds will prevent it getting pushed down)
+		this.releaseModifiers() ;lets release the modifiers (the hard rebinds will prevent it getting pushed down)
 		return
 	}
 	disableBufferingAndBlocking()
 	{
 	;	shift = 1, ctrl = 2, alt = 4 (and add them together)
-		; This is to restore propper shift modifier state
-		; MOdifiers can be seen as up when they are down
-		; if modifier combox eg shit + ctrl are
-		; pressed and released a few times during blocking 
-/*
+
 		ModifierState := readModifierState() ; read from sc2 memory
+
 		, Shift := (1 & ModifierState)
 		, Ctrl := (2 & ModifierState)
 		, Alt := (4 & ModifierState)
 
-		if GetKeyState("Shift", "P") && !Shift
-			sendInput {Blind}{Shift Down}
-		if GetKeyState("Ctrl", "P") && !Ctrl
-			sendInput {Blind}{ctrl Down}	
-		if GetKeyState("alt", "P") && !alt
-			sendInput {Blind}{alt Down}		
-*/
-		ModifierState := readModifierState() ; read from sc2 memory
-		, Shift := (1 & ModifierState)
-		, Ctrl := (2 & ModifierState)
-		, Alt := (4 & ModifierState)
+;	{Blind} Has to be used when sending modifier ups.	
+;
 
-		; so this checks if the key is physically UP, but SC2 Window thinks its Down
-		; due to it being released while blocking was enabled
-		if !GetKeyState("Shift", "P") && Shift
-			sendInput {Blind}{Shift up}
-		if !GetKeyState("Ctrl", "P") && Ctrl
-			sendInput {Blind}{ctrl up}	
-		if !GetKeyState("alt", "P") && alt
-			sendInput {Blind}{alt up}
+;	Obviously sendInput {Blind}{Shift Up} must be used to restore the logical state of the key
+;	before restoring user input,
+;	but sendInput {Blind}{Shift Down} also needs to be used when the other scenario occurs
+;	This does present a super slim timing window if the user releases the shift key the instant the 
+;	command runs, but the chance of this happening is very low and considerably less likely
+;	than a user intended shift action not being shift-modified.
+; 	If this slim timming Shift Down window ends up being a problem, can just launch a settimer 
+;	in say 50ms which does another check and corrects the keystate. But I will test for a while and 
+;	see how well it works in its current implementation.
 
+;	If this Down event isn't sent, and the user is holding down the shift button
+;	all of the user input within the first ~50ms of blocking being turned off will NOT
+;	be shift modified (when it should be!) 
 
-		if (GetKeyState("Shift", "P") != GetKeyState("Shift"))
+;	This was tested by removing the below SendInputs which restore the keystate
+;	and and putting a unit on a patrol move and moving the mouse to a spot
+;	so that it will be Blind Right clicked at that location
+; 	If the game realised shift was down the unit was shift Right clicked
+;	if it didn't it was simply Right clicked
+
+;	BufferInputFast.BufferInput()
+;	soundplay *-1 
+	; Shift Key is physically pressed and held down 
+;	sleep 5000
+;	BufferInputFast.Send()
+;	sleep(50)
+;	send {BLIND}{click Right} 
+
+; 	Further Notes: Technically I should use Send {Blind} For all send commands after blocking enabled
+;	This is because even though the shift key is remapped to nothing, AHK will still see it as 
+; 	physically AND logically down when pressed, even though the game window will not know it is down,
+;	hence when using plain send AHK will send extra shift UP/down modifiers to the send command
+;	but this shouldn't cause any major issues.
+
+; 	Also Note: Don't trust cheat engine to read the modifier value correctly during some blocking events.
+;	I can't explain this, but sometimes it simply doesn't read or update properly (even using 
+;	increased timer resolutions). I Don't know if this is the same for some other values.
+;	Hence it is better to have a tool tip on a loop which reads and displays the value
+;	When doing this, the value always corresponds to what you would expect it to be
+
+		if (GetKeyState("Shift", "P") != Shift)
 		{
 			if GetKeyState("Shift", "P")
 				sendInput {Blind}{Shift Down}
@@ -107,7 +135,7 @@ Class BufferInputFast
 				sendInput {Blind}{Shift Up}
 		}
 
-		if (GetKeyState("Ctrl", "P") != GetKeyState("Ctrl"))
+		if (GetKeyState("Ctrl", "P") != Ctrl)
 		{
 			if GetKeyState("Ctrl", "P")
 				sendInput {Blind}{Ctrl Down}
@@ -115,18 +143,15 @@ Class BufferInputFast
 				sendInput {Blind}{Ctrl Up}
 		}
 
-		if (GetKeyState("alt", "P") != GetKeyState("alt"))
+		if (GetKeyState("Alt", "P") != Alt)
 		{
-			if GetKeyState("alt", "P")
-				sendInput {Blind}{alt Down}
+			if GetKeyState("Alt", "P")
+				sendInput {Blind}{Alt Down}
 			else 
-				sendInput {Blind}{alt Up}
+				sendInput {Blind}{Alt Up}
 		}
 		this.BufferedState := 0
 		this.BlockedState := 0
-
-	;  using write modifiers still possible for modifiers to be temp stuck down outside game
-  	; but a send should fix that  	
 		return
 	}
 	retrieveBuffer()
@@ -180,10 +205,6 @@ Class BufferInputFast
 			send {click Up Right} 	
 	;	else if GetKeyState("Rbutton", "P") && !GetKeyState("Rbutton") 
 	;		send {click Down Right}  			
-
-	;	for index, button in aModifierKeys 							;	seeing if this helps the stick modifer problem
-	;		if !GetKeyState(button, "P") && GetKeyState(button)		; could add a modiferUp ~ hotkey to check
-	;			Send % "{" button " Up}"
 		return
 	}
 	getModifiersFromString(string)
@@ -210,6 +231,7 @@ Class BufferInputFast
 		StringReplace, pressedKey, pressedKey, + ;	these are needed in case the hotkey/keyname in key list contains these modifiers
 		StringReplace, pressedKey, pressedKey, ! 
 		StringReplace, pressedKey, pressedKey, *
+		StringReplace, pressedKey, pressedKey, ~
 		return pressedKey
 	}
 	setCase(Upper=0, string="", Title=0)
@@ -271,18 +293,6 @@ g_ReturnFastLabel:
 return
 
 
-g_ModifierInputFastLabel:
-return 
-		ModifierState := readModifierState() ; read from sc2 memory
-		; so this checks if the key is physically down, but SC2 Window thinks its up
-		if GetKeyState("Shift", "P") || (1 & ModifierState)
-			sendInput {Blind}{Shift up}
-		if GetKeyState("Ctrl", "P") || (2 & ModifierState)
-			sendInput {Blind}{ctrl up}
-		if GetKeyState("alt", "P") || (4 & ModifierState)
-			sendInput {Blind}{alt up}
-return
-
 #If, (!BufferInputFast.isInputBlockedOrBuffered() && WinActive(GameIdentifier))  ; need this here as AHK tree view goes crazy! it needs like 200 ms sleep or something
 ; this obviously wont account for if the user has swapped the left and right mouse buttons in windows
 
@@ -314,46 +324,6 @@ return
 *Alt up::return
 #If
 
-
-/*
-Test: Current re-assign hotkey block/buffer method
-      press shift key down
-      enable buffering
-      physically release the shift
-      disable (not send) buffering
-When the below part is incorprated into the script
-    #If, (WinActive(GameIdentifier)) 
-    ~Shift Up::
-    sleep(2)
-    if !GetKeyState("Shift", "P") && GetKeyState("Shift") 
-      send {Shift up}
-
-Result:
-  Shift key is stuck down until it gets pressed (every action will be shift modified)
-  BUT  AHK sees the shift key as both physically and LOGICALLY up
-
-	Therefore any comparison of the two will not work
-	Having a sendInput {Shift up} somewhere afterwards fixes key state
-*/
-/*
-#If, (WinActive(GameIdentifier)) 
-~alt up::
-sleep(2)
-if !GetKeyState("alt", "P") && GetKeyState("alt") 
-	send {alt up}
-return
-~ctrl up::
-sleep(2)
-if !GetKeyState("ctrl", "P") && GetKeyState("ctrl") 
-	send {ctrl up}
-return
-~Shift Up::
-sleep(2)
-if !GetKeyState("Shift", "P") && GetKeyState("Shift") 
-	send {Shift up}
-return
-
-*/
 g_class_BufferInputFastLabelSkip>:
 
 

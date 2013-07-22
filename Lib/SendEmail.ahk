@@ -23,6 +23,12 @@ SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gm
 				. "Screen DPI: " A_ScreenDPI "`n"
 				. "MinTimer: " MinTimer "`n"
 				. "MaxTimer: " MaxTimer "`n"
+				. "XRes: " SC2HorizontalResolution() "`n"
+				. "YRes: " SC2VerticalResolution() "`n"
+				. "Replay Folder: "  getReplayFolder() "`n"
+				. "Account Folder: "  getAccountFolder() "`n"
+				. "Game Exe: "	StarcraftExePath() "`n"
+				. "Game Dir: "	StarcraftInstallPath() "`n"
 
 	pmsg.TextBody    := p_message
 	;OR

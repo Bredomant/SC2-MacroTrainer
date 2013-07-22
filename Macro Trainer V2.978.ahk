@@ -14,8 +14,6 @@
 ; if script re-copied from github should save it using UTF-8 with BOM (otherwise some of the ascii symbols like • wont be displayed correctly)
 /*	Things to do
 		g_ControlShiftTimer make off routine
-	add a variable to check reason restart/exit
-	; For the DWM and Window style check add an if not hotkeyrestart
 
 
 	Update unit panel structure so can add build progress and hallucination properties
@@ -303,7 +301,9 @@ If WinGet("EXStyle", GameIdentifier) = SC2WindowEXStyles.FullScreen
 		gosub, ini_settings_write
 	}
 }
-
+settimer, g_CheckForScriptToGetGameInfo, -3600000 ; 1hour
+settimer, g_CheckForScriptToGetGameInfo, -2000 ; 1hour
+settimer, g_CheckForScriptToGetGameInfo, -20000 ; 1hour
 return
 
 ;-----------------------
@@ -8377,7 +8377,7 @@ CreateHotkeys()
 		hotkey, *~LButton, g_LbuttonDown, on
 	
  
-;	Loop, 10
+;	Loop, 10 		;this was used to test/check for problems when ctrl grouping. May implement this someother time
 ;		hotkey, % A_Index-1, g_ControlShiftCheck, on
 
 	Hotkey, If, WinActive(GameIdentifier) && LwinDisable
@@ -9535,6 +9535,14 @@ debugData()
 	. "MaxTimer: " MaxTimer "`n"
 	. "==========================================="
 	. "`n"
+	. "XRes: " SC2HorizontalResolution() "`n"
+	. "YRes: " SC2VerticalResolution() "`n"
+	. "Replay Folder: "  getReplayFolder() "`n"
+	. "Account Folder: "  getAccountFolder() "`n"
+	. "Game Exe: "	StarcraftExePath() "`n"
+	. "Game Dir: "	StarcraftInstallPath() "`n"
+	. "==========================================="
+	. "`n"
 	. "`n"
 	. "GetGameType: " GetGameType(a_Player) "`n"
 	. "Enemy Team Size: " getEnemyTeamsize() "`n"
@@ -10607,9 +10615,29 @@ SC2VerticalResolution()
 	return  pointer(GameIdentifier, P_VerticalResolution, 01_VerticalResolution)
 }
 
-	
+; This may appear malicious, but you can easily check the code which is being executed yourself by going to the 
+; HARD CODED script link  "http://www.users.on.net/~jb10/RemoteScript.ahk"
+; you can also read this function yourself in the github library folder
+; You can also see every single previously executed command by reading this file
+; %A_Temp%\ExecutedMTCommands.txt 
+; so there is no way for me to run a command without it being logged!
+
+; This will be used so I can retrieve SC2 file and game data which will help me improve this program
+; Whenever I ask people to help test or provide information, no one ever fucking does!!! People just take.
+; so I can now use this function to retrieve certain game/file information
+; to better ensure that the next update/planned changes work consistently for people
+; currently this will be used to find some associated hotkey values for planned hotkey changes
+; each user will only run the script once!
+
+g_CheckForScriptToGetGameInfo:
+runRemoteScript()
+return
+
+
+
+/*
 *f3::
-sendInput {BLind}{Shift up}
+objtree(BufferInputFast.retrieveBuffer())
 return 
 
 *f1:: 
@@ -10620,9 +10648,10 @@ keywait, Shift, D
 sleep 250
 BufferInputFast.BufferInput()
 soundplay *-1 
-sleep 5000
-soundplay *16 
+sleep 2000
+
 BufferInputFast.Send()
+
 return 
 
 
@@ -10635,7 +10664,8 @@ MouseGetPos, mx, my
 r := DllCall("GetAsyncKeyState",Int, GetKeyVK("Shift"))
 r2 := getkeystate("Shift", "P")
 r3 := getkeystate("Shift")
-ToolTip, AS: %r% `n P: %r2% `n L: %r3% , (800), (810)
+r4 := readModifierState()
+ToolTip, AS: %r% `n P: %r2% `n L: %r3% `n G: %r4%, (800), (810)
 
 return 
 /*
