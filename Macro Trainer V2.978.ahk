@@ -78,7 +78,8 @@ if !A_IsAdmin
 	else try  Run *RunAs "%A_ScriptFullPath%"
 	ExitApp
 }
-Process, Priority, , H
+; Process, Priority, , H
+Process, Priority, , A
 Menu Tray, Add, &Settings && Options, options_menu
 Menu Tray, Add, &Check For Updates, TrayUpdate
 Menu Tray, Add, &Homepage, Homepage
@@ -90,10 +91,12 @@ If A_IsCompiled
 Else
 {
 	Menu Tray, Icon, Included Files\Used_Icons\Starcraft-2.ico
+
 	debug := 1
 	debug_name := "Kalamity"
 	hotkey, ^+!F12, g_GiveLocalPalyerResources
 }
+
 
 start:
 config_file := "MT_Config.ini"
@@ -133,6 +136,10 @@ If InStr(A_ScriptDir, old_backup_DIR)
 		ExitApp
 }
 Gosub, pre_startup ; go read the ini file
+
+if MTCustomIcon 
+	Menu, Tray, Tip, %A_Space% ;clear the tool tip on mouse over
+
 SetProgramWaveVolume(programVolume)
 SAPI.volume := speech_volume
 
@@ -203,6 +210,16 @@ If (A_GuiControl = "Disable_Auto_Update" OR A_GuiControl = "Cancel_Auto_Update")
 If launch_settings
 	gosub options_menu
 
+if (MTCustomProgramName && A_ScriptName != MTCustomProgramName && A_IsCompiled)
+{
+	FileCopy, %A_ScriptName%, %MTCustomProgramName%, 1
+	FullPath := A_ScriptDir "\" MTCustomProgramName
+	if (A_OSVersion = "WIN_XP") ; apparently the below command wont work on XP
+		try RunAsAdmin(FullPath, A_ScriptDir)
+	else try Run *RunAs "%FullPath%"
+	ExitApp
+}
+
 
 Try hotkey, q, g_DoNothing  ; hotkeys  that contain q  give 'q' is not a valid hotkey on russian language settings
 	Catch, Error  ;error is an object
@@ -213,9 +230,14 @@ Try hotkey, q, g_DoNothing  ; hotkeys  that contain q  give 'q' is not a valid h
 	}
 	; it seems that some russian language keyboard layouts cause a prblem with <#q hotkey
 Try hotkey, q, off ;disable the ruski guard test hotkey
-CreateHotkeys()			;create them before launching the game incase users want to edit them
-hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and give it the highest possible priority
 
+; 	Note:	Emergency Restart Hotkey - Something to keep in mind if actually using the Real BlockInput Command 
+;	Certain types of hook hotkeys can still be triggered when BlockInput is on. 
+;	Examples include MButton (mouse hook) and LWin & Space
+;	 ***(KEYBOARD HOOK WITH EXPLICIT PREFIX RATHER THAN MODIFIERS "$#")***.
+;	hence <#Space wont work
+
+CreateHotkeys()			;create them before launching the game in case users want to edit them
 process, exist, %GameExe%
 If !errorlevel
 {
@@ -326,15 +348,17 @@ g_EmergencyRestart:
 		}
 		else If (EmergencyInputCount >= 3)
 		{
-			IniWrite, Hotkey, %config_file%, Misc Info, RestartMethod
+			IniWrite, Hotkey, %config_file%, Misc Info, RestartMethod ; could have achieved this using running the new program with a parameter then checking %1%
 		g_reload:
 			if (A_ThisLabel = "g_reload")
 				IniWrite, Icon, %config_file%, Misc Info, RestartMethod
 			SoundPlay, %A_Temp%\Windows Ding.wav
 			if time && alert_array[GameType, "Enabled"]
 				doUnitDetection(unit, type, owner, "Save")	;these first 3 vars are nothing - they wont get Read
-			try  Run *RunAs "%A_ScriptFullPath%"
 		;	try  Run "%A_ScriptFullPath%"
+			if (A_OSVersion = "WIN_XP") ; apparently the below command wont work on XP
+				try RunAsAdmin()
+			else try  Run *RunAs "%A_ScriptFullPath%"
 			ExitApp	;does the shutdown procedure.
 		}
 		SoundPlay, %A_Temp%\Windows Ding2.wav
@@ -799,7 +823,7 @@ clock:
 																		; note may delay some timers from launching for a fraction of a ms while its in thread, no timers interupt mode (but it takes less than 1 ms to run anyway)
 		} 																; Hence with these two timers running autogroup will occur at least once every 30 ms, but generally much more frequently
 		CreateHotkeys()
-		if (a_LocalPlayer["Name"] == "Kalamity")
+		if (a_LocalPlayer["Name"] == "Kalamity" || a_LocalPlayer["Name"] == "CumBackKid" )
 		{
 			Hotkey, If, WinActive(GameIdentifier) && time && !BufferInputFast.isInputBlockedOrBuffered()
 			hotkey, >!g, g_GLHF
@@ -1465,7 +1489,7 @@ If (time AND Time <= Start_Mine_Time + 8) && getIdleWorkers()
 		SetKeyDelay %AM_KeyDelay%				;sets the key delay for the current THREAD - hence any lanuched function
 		SetMouseDelay %AM_KeyDelay%				;including sendwhileblocked()
 		ReleaseModifiers()
-		BlockInput, On
+	;	BlockInput, On
 		A_Bad_patches := []
 		A_Bad_patchesPatchCount := 0
 		local_mineral_list := local_minerals(LocalBase, "Distance")	;Get list of local minerals	
@@ -2448,7 +2472,7 @@ ShutdownProcedure:
 	close := ReadRawMemory()
 	Closed := ReadMemory_Str()
 	Gdip_Shutdown(pToken)
-	sleep("Off") ; this resets the timeEndPeriod/timeBeginPeriod
+	sleep(, "Off") ; this resets the timeEndPeriod/timeBeginPeriod (only if suspend mode was ever used)
 	Iniwrite, % round(GetProgramWaveVolume()), %config_file%, Volume, program
 	
 	ExitApp
@@ -2646,7 +2670,12 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	
 	;[Advanced Auto Inject Settings]
 	IniRead, auto_inject_sleep, %config_file%, Advanced Auto Inject Settings, auto_inject_sleep, 50
+	IniRead, Inject_SleepVariance, %config_file%, Advanced Auto Inject Settings, Inject_SleepVariance, 0
+	Inject_SleepVariance := 1 + (Inject_SleepVariance/100) ; so turn the variance 30% into 1.3 
+
 	IniRead, CanQueenMultiInject, %config_file%, Advanced Auto Inject Settings, CanQueenMultiInject, 1
+	IniRead, Inject_RestoreSelection, %config_file%, Advanced Auto Inject Settings, Inject_RestoreSelection, 1
+	IniRead, Inject_RestoreScreenLocation, %config_file%, Advanced Auto Inject Settings, Inject_RestoreScreenLocation, 1
 	IniRead, drag_origin, %config_file%, Advanced Auto Inject Settings, drag_origin, Left
 
 	;[Read Opponents Spawn-Races]
@@ -2764,6 +2793,11 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 
 
 	IniRead, UnitDetectionTimer_ms, %config_file%, %section%, UnitDetectionTimer_ms, 3500
+
+	IniRead, MTCustomIcon, %config_file%, %section%, MTCustomIcon, %A_Space% ; I.e. False
+	IniRead, MTCustomProgramName, %config_file%, %section%, MTCustomProgramName, %A_Space% ; I.e. False
+	
+
 	
 
 	;[Key Blocking]
@@ -2774,6 +2808,7 @@ if FileExist(config_file) ; the file exists lets read the ini settings
 	IniRead, BlockingMouseKeys, %config_file%, %section%, BlockingMouseKeys, 1
 	IniRead, BlockingMultimedia, %config_file%, %section%, BlockingMultimedia, 1
 	IniRead, LwinDisable, %config_file%, %section%, LwinDisable, 1
+	IniRead, Key_EmergencyRestart, %config_file%, %section%, Key_EmergencyRestart, <#Space
 
 	aButtons := [] 	; Note I no longer retreive modifier keys in this list as these will always be blocked using ~*prefix
 	aButtons.List := getKeyboardAndMouseButtonArray(BlockingStandard*1 + BlockingFunctional*2 + BlockingNumpad*4
@@ -3170,7 +3205,12 @@ ini_settings_write:
 
 	;[Advanced Auto Inject Settings]
 	IniWrite, %auto_inject_sleep%, %config_file%, Advanced Auto Inject Settings, auto_inject_sleep
+	IniWrite, %Inject_SleepVariance%, %config_file%, Advanced Auto Inject Settings, Inject_SleepVariance
+	; 30 (%) from the gui back into 1.3
+	Inject_SleepVariance := 1 + (Inject_SleepVariance/100)
 	IniWrite, %CanQueenMultiInject%, %config_file%, Advanced Auto Inject Settings, CanQueenMultiInject
+	IniWrite, %Inject_RestoreSelection%, %config_file%, Advanced Auto Inject Settings, Inject_RestoreSelection
+	IniWrite, %Inject_RestoreScreenLocation%, %config_file%, Advanced Auto Inject Settings, Inject_RestoreScreenLocation
 	IniWrite, %drag_origin%, %config_file%, Advanced Auto Inject Settings, drag_origin
 
 	;[Read Opponents Spawn-Races]
@@ -3322,6 +3362,16 @@ ini_settings_write:
 	Iniwrite, %SetBatchLines%, %config_file%, %section%, SetBatchLines
 	Iniwrite, %ProcessSleep%, %config_file%, %section%, ProcessSleep
 	Iniwrite, %UnitDetectionTimer_ms%, %config_file%, %section%, UnitDetectionTimer_ms
+	Iniwrite, %MTCustomIcon%, %config_file%, %section%, MTCustomIcon
+	if MTCustomProgramName && A_IsCompiled
+	{
+		MTCustomProgramName := Trim(MTCustomProgramName)
+		if (substr(MTCustomProgramName, -3) != ".exe") ; extract last four chars (0 gets the last char) - case insensitive
+			MTCustomProgramName .= ".exe"
+		Iniwrite, %MTCustomProgramName%, %config_file%, %section%, MTCustomProgramName	
+	}
+	else Iniwrite, %A_Space%, %config_file%, %section%, MTCustomProgramName	
+	
 
 	;[Key Blocking]
 	section := "Key Blocking"
@@ -3331,7 +3381,8 @@ ini_settings_write:
 	IniWrite, %BlockingMouseKeys%, %config_file%, %section%, BlockingMouseKeys
 	IniWrite, %BlockingMultimedia%, %config_file%, %section%, BlockingMultimedia
 	IniWrite, %LwinDisable%, %config_file%, %section%, LwinDisable
-	
+	IniWrite, %Key_EmergencyRestart%, %config_file%, %section%, Key_EmergencyRestart
+
 	;[Alert Location]
 	IniWrite, %Playback_Alert_Key%, %config_file%, Alert Location, Playback_Alert_Key
 
@@ -3532,14 +3583,24 @@ Gui, Tab,  Basic
 			Gui, Add, Edit, Readonly y+10 xs+60 w90 center vInject_control_group , %Inject_control_group%
 				Gui, Add, Button, yp-2 x+10 gEdit_SendHotkey v#Inject_control_group,  Edit	
 
-	Gui, Add, GroupBox, xs y+45 w200 h140, Advanced Settings
-				Gui, Add, Text, xs+20 yp+25 vSG1, Sleep time (ms):`n(Lower is faster)
+	Gui, Add, GroupBox, xs y+40 w200 h160, Advanced Settings
+				Gui, Add, Text, xs+20 yp+20 vSG1, Sleep time (ms):`n(Lower is faster)
 					GuiControlGet, XTab2, Pos, SG1 ;XTabX = x loc
 				Gui, Add, Edit, Number Right xs+125 yp-2 w45 vEdit_pos_var 
 					Gui, Add, UpDown,  Range0-100000 vAuto_inject_sleep, %auto_inject_sleep%
 					GuiControlGet, settingsR, Pos, Edit_pos_var ;XTabX = x loc
-				Gui, Add, Checkbox, x%XTab2X% y+25 vCanQueenMultiInject checked%CanQueenMultiInject%,
+
+				Gui, Add, Text, xs+20 yp+35, Sleep variance `%:
+				Gui, Add, Edit, Number Right xs+125 yp-2 w45 vEdit_Inject_SleepVariance
+					Gui, Add, UpDown,  Range0-100000 vInject_SleepVariance, % (Inject_SleepVariance - 1) * 100  
+
+				Gui, Add, Checkbox, x%XTab2X% y+12 vCanQueenMultiInject checked%CanQueenMultiInject%,
 				Gui, Add, Text, x+0 yp-5, Queen Can Inject`nMultiple Hatcheries ; done as checkbox with 2 lines text is too close to checkbox
+				
+				Gui, Add, Checkbox, x%XTab2X% y+12 vInject_RestoreSelection checked%Inject_RestoreSelection%,
+				Gui, Add, Text, x+0 yp, Restore Unit Selection 				
+				Gui, Add, Checkbox, x%XTab2X% y+10 vInject_RestoreScreenLocation checked%Inject_RestoreScreenLocation%,
+				Gui, Add, Text, x+0 yp, Restore Screen Location
 
 Gui, Add, GroupBox, w200 h180 ys xs+210 section, Backspace Methods
 		Gui, Add, Text, xs+10 yp+25, Drag Origin:
@@ -3563,7 +3624,7 @@ Gui, Add, GroupBox, w200 h61 y+10 xs,
 		Gui, Add, Edit, Number Right x+25 yp-2 w45 vTT_auto_inject_time
 			Gui, Add, UpDown, Range1-100000 vauto_inject_time, %auto_inject_time% ;these belong to the above edit
 
-Gui, Add, GroupBox, xs y+20 w200 h140, MiniMap && Backspace Ctrl Group
+Gui, Add, GroupBox, xs y+15 w200 h160, MiniMap && Backspace Ctrl Group
 		Gui, Add, Text, xs+10 yp+25, Queen Control Group:
 			if (MI_Queen_Group = 0)
 				droplist_var := 10
@@ -3951,6 +4012,25 @@ Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vSettings_TAB, Set
 	Gui, Add, GroupBox, Xs+171 ys+116 w245 h170, Debugging
 		Gui, Add, Button, xp+10 yp+30  Gg_ListVars w75 h25,  List Variables
 		Gui, Add, Button, xp yp+30  Gg_GetDebugData w75 h25,  Debug Data
+	
+	Gui, Add, GroupBox, Xs+171 ys+290 w245 h60, Emergency Restart Key
+		Gui, Add, Text, xp+10 yp+25 w40,Hotkey:
+			Gui, Add, Edit, Readonly yp-2 x+15 w100  center vKey_EmergencyRestart , %Key_EmergencyRestart%
+				Gui, Add, Button, yp-2 x+15 gEdit_hotkey v#Key_EmergencyRestart,  Edit	
+
+	Gui, Add, GroupBox, Xs ys+360 w161 h60, Custom Program Name
+	Gui, Add, Text, xp+10 yp+25 w40,Name:
+		Gui, Add, Edit, yp-2 x+5 w100  center vMTCustomProgramName, %MTCustomProgramName%
+
+
+	Gui, Add, GroupBox, Xs+171 ys+360 w245 h60, Custom Icon
+		;	Gui, Add, Edit, Readonly yp-2 x+15 w100  center vKey_EmergencyRestart , %Key_EmergencyRestart%
+
+			A_Iscompiled ? icon := A_ScriptFullPath : icon := "Starcraft-2-32x32.ico"
+			Gui, Add, Picture,  xp+35 yp+18 vMTIconPreview gG_MTChageIcon w35 h-1, %icon%
+			Gui, Add, Button, x+30 yp+10 vMTChageIconButton Gg_MTChageIcon, Change 
+			Gui, Add, Button, x+10 vMTChageIconDefaultButton Gg_MTChageIconDefault, Default 
+			;Gui, Add, Edit, Readonly yp-2 xp-90 w80 Hidden vMTCustomIcon , %MTCustomIcon% ; invis and used to store the name
 
 Gui, Add, Tab2,w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vDetection_TAB, Detection List
 	loop, parse, l_GameType, `,
@@ -4605,6 +4685,13 @@ auto_inject_time_TT := TT_auto_inject_time_TT :=  "This is in 'SC2' Seconds."
 #cast_inject_key_TT := cast_inject_key_TT := "When pressed the program will inject all of your hatcheries.`n`nThis Hotkey is ONLY active while playing as zerg!"
 Auto_inject_sleep_TT := "Lower this to make the inject round faster, BUT this will make it more obvious that it is being automated!"
 CanQueenMultiInject_TT := "During minimap injects (and auto-Injects) a queen may attempt to inject multiple hatcheries providing:`nShe is the only nearby queen and she has enough energy.`n`nThis may increase the chance of having queens go walkabouts (especially during an auto inject) - but so far I have not observed this during testing. "
+Inject_RestoreSelection_TT := "This will store your currently selected units in a control group, which is recalled at the end inject round."
+Inject_RestoreScreenLocation_TT := "This will save your screen/camera location and restore it at the end of the inject round.`n`n"
+						. "This option only affects the 'backspace' methods."
+
+Inject_SleepVariance_TT := Edit_Inject_SleepVariance_TT := "This will increase each sleep period by a random percentage from 0% up to this set value.`n`n"
+						. "This does not affect the auto-injects."						
+
 HotkeysZergBurrow_TT := #HotkeysZergBurrow_TT := "Please ensure this matches the 'Burrow' hotkey in SC2 & that you only have one active hotkey to burrow units i.e. No alternate burrow key!`n`nThis is used during auto injects to help prevent accidentally burrowing queens due to the way windows/SC2 buffers these repeated keypresses."
 Simulation_speed_TT := "How fast the mouse moves during inject rounds. 0 = Fastest - try 1,2 or 3 if you're having problems."
 Drag_origin_TT := "This sets the origin of the box drag to the top left or right corners. Hence making it compatible with observer panel hacks.`n`nThis is only used by the 'Backspace' method."
@@ -4790,14 +4877,21 @@ l_DeselectArmy_TT := #l_DeselectArmy_TT := "These unit types will be deselected.
 F_Inject_ModifierBeep_TT := "If the modifier keys (Shift, Ctrl, or Alt) or Windows Keys are held down when an Inject is attempted, a beep will heard.`nRegardless of this setting, the inject round will not begin until after these keys have been released."
 BlockingStandard_TT := BlockingFunctional_TT := BlockingNumpad_TT := BlockingMouseKeys_TT := BlockingMultimedia_TT := BlockingMultimedia_TT := BlockingModifier_TT := "During certain automations these keys will be buffered or blocked to prevent interruption to the automation and your game play."
 LwinDisable_TT := "Disables the Left Windows Key while in a SC2 match.`n`nMacro Trainer Left windows hotkeys (and non-overridden windows keybinds) will still function."
-
-
+Key_EmergencyRestart_TT := #Key_EmergencyRestart_TT := "If pressed three times, this hotkey will restart the program.`n"
+			. "This is useful in the rare event that the program malfunctions or you lose keyboard/mouse input"
+			. "`n`nThis hotkey CAN NOT contain Shift, Ctrl, or Alt modifiers, but it may contain the Windows modifier."
 
 HighlightInvisible_TT := #UnitHighlightInvisibleColour_TT := "All invisible, cloaked, and burrowed units will be drawn with this colour.`n"
 			. "This will instantly tell you if it's safe to look at the unit i.e. would you legitimately have vision of it."
 			. "`n`nNote: If a unit already has a custom colour highlight, then that unit will be drawn using its specific highlight colour."
 HighlightHallucinations_TT := #UnitHighlightHallucinationsColour_TT := "Hallucinated units will be drawn using this colour."
 
+MTCustomProgramName_TT := "This will create a new copy of the program with the specified program/process name.`n`nAfter applying the changes you MUST reload the script or launch the newly created .exe file"
+						. "`n`nTo change back to the original name and exe, simply clear/blank the name field, save the settings, exit the program and then use the original exe file"
+
+MTChageIconButton_TT := "This will attempt to replace the program's included icon files with a .ico file of your choosing.`n`nThis is not guaranteed to work!"
+
+MTChageIconDefaultButton_TT := "This will attempt to restore the program's default icons.`n`nThis is not guaranteed to work!"
 
 Short_Race_List := "Terr|Prot|Zerg"
 loop, parse, l_races, `,
@@ -5167,6 +5261,22 @@ if (A_GuiControl = "EmailAttachmentListViewID")
 	Gosub, g_AddEmailAttachment 
 return 
 
+g_MTChageIcon:
+FileSelectFile, NewIconFile, S3, , Select an Icon or Picture, *.ico ; only *.ico will work with reshacker
+if (errorlevel || !NewIconFile || !A_IsCompiled) ; is set to 1 if the user dismissed the dialog without selecting a file (such as by pressing the Cancel button).
+	return
+;GUIControl,, MTCustomIcon, %NewIconFile% 
+;GUIControl,, MTIconPreview, %NewIconFile%  ;update the little pic ; width height omitted, so pic scaled to fit control
+Iniwrite, %NewIconFile%, %config_file%, Misc Settings, MTCustomIcon
+ResourHackIcons(NewIconFile)  ;this function quits and reloads the script
+return 
+g_MTChageIconDefault:
+;GUIControl,, MTCustomIcon, %A_Space% ;blank it
+if !MTCustomIcon ; don't do anything already using the standard Icon
+	return 
+Iniwrite, %A_Space%, %config_file%, Misc Settings, MTCustomIcon ; use this to check if display my tool tip lol
+ResourHackIcons(A_Temp "\Starcraft-2.ico") ;this function quits and reloads the script
+return
 
 Test_VOL:
 	original_programVolume := programVolume
@@ -5254,6 +5364,8 @@ edit_hotkey:
 			hotkey_var := HotkeyGUI("Options",%hotkey_name%,2046,True, "Select Hotkey:   " hotkey_name)  ;as due to toggle keywait cant use modifiers
 		else if (hotkey_name = "castSelectArmy_key") ;disable the modifiers
 			hotkey_var := HotkeyGUI("Options",%hotkey_name%, 2+4+8+16+32+64+128+256+512+1024,True, "Select Hotkey:   " hotkey_name) ;the hotkey		
+		else if (hotkey_name = "Key_EmergencyRestart")  
+			hotkey_var := HotkeyGUI("Options",%hotkey_name%, 2+4+8+32+64+128+256+512+1024, True, "Select Hotkey:   " hotkey_name, 0, 1+2+8) ;the hotkey
 		Else hotkey_var := HotkeyGUI("Options",%hotkey_name%,,True, "Select Hotkey:   " hotkey_name) ;the hotkey
 		if (hotkey_var <> "")
 			GUIControl,, %hotkey_name%, %hotkey_var%
@@ -6477,7 +6589,7 @@ if (WinActive(GameIdentifier) && time && EnableAutoWorker%LocalPlayerRace% && !T
 {
 	while (getPlayerCurrentAPM() > AutoWorkerAPMProtection)
 	{	
-		if (A_index > 45) ; so its been longer then 500 ms
+		if (A_index > 45) ; so its been longer then 4000 ms
 			return 
 		sleep 10
 	}
@@ -6953,7 +7065,6 @@ dSpeak(Message, fSapi_vol="", fOverall_vol="")
 
 	DynaRun(CreateScript(Header . Footer), "MT_Speech.AHK", A_Temp "\AHK.exe") ; note as this script doesnt have any #includes/formatting changes - dont need to pass it to create script eg. could just DynaRun(Header . Footer)
 	Return 
-
 }
 
 getTime()
@@ -7221,6 +7332,12 @@ getPlayerGasIncome(player="")
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
 	Return ReadMemory(B_pStructure + O_pGasIncome + (player-1) * S_pStructure, GameIdentifier)
+}
+getPlayerArmySupply(player="")
+{ 	global
+	If (player = "")
+		player := a_LocalPlayer["Slot"]	
+	Return ReadMemory(B_pStructure + O_pArmySupply + (player-1) * S_pStructure, GameIdentifier) / 4096
 }
 getPlayerArmySizeMinerals(player="")
 { 	global
@@ -7496,6 +7613,7 @@ Return
 
 getEnemyUnitsMiniMap(byref A_MiniMapUnits)
 {  LOCAL Unitcount, UnitAddress, pUnitModel, Filter, MemDump, Radius, x, y, PlayerColours, MemDump, PlayerColours, Unitcount, owner, unitName
+ 	, Colour, Type
   A_MiniMapUnits := []
   PlayerColours := arePlayerColoursEnabled()
   Unitcount := DumpUnitMemory(MemDump)
@@ -8070,7 +8188,7 @@ DrawArmySizeOverlay(ByRef Redraw, UserScale=1, PlayerIdentifier=0, Background=0,
 			Width *= UserScale *.5, Height *= UserScale *.5
 			Gdip_DrawImage(G, pBitmap, DestX + (2*85*UserScale), DestY, Width, Height, 0, 0, SourceWidth, SourceHeight)
 			;Gdip_DisposeImage(pBitmap)
-			TextData := Gdip_TextToGraphics(G, (ArmyMinerals ? getPlayerSupply(slot_number)-getPlayerWorkerCount(slot_number) : 0)"/"getPlayerSupply(slot_number), "x"(DestX+(2*85*UserScale)+Width+3*UserScale) "y"(DestY+(Height//4)) Options, Font)				
+			TextData := Gdip_TextToGraphics(G, getPlayerArmySupply(slot_number) "/" getPlayerSupply(slot_number), "x"(DestX+(2*85*UserScale)+Width+3*UserScale) "y"(DestY+(Height//4)) Options, Font)				
 			StringSplit, TextSize, TextData, |
 			if (WindowWidth < CurrentWidth := DestX+(2*85*UserScale)+Width+5*UserScale + TextSize3)
 				WindowWidth := CurrentWidth				
@@ -8439,9 +8557,16 @@ CreateHotkeys()
 		hotkey, ^+%i%, g_LimitGrouping, % status
 	}
 	Hotkey, If
-	; Note : I have the emergency hotkey here if the user decides to set a hotkey to <#Space, so it cant get changed
-	; but i think this could cause issues when the hotkey fails to get rebound somtimes?
-;	hotkey, <#Space, g_EmergencyRestart, on, B P2147483647 ;buffers the hotkey and give it the highest possible priority		
+	; Note : I have the emergency hotkey here if the user decides to set another hotkey to <#Space, so it cant get changed
+	; but i think this could cause issues when the hotkey fails to get rebound somtimes? I dont think this actually happens
+
+; 	Note:	Emergency Restart Hotkey - Something to keep in mind if actually using the REAL BlockInput Command 
+;	Certain types of hook hotkeys can still be triggered when BlockInput is on. 
+;	Examples include MButton (mouse hook) and LWin & Space
+;	 ***(KEYBOARD HOOK WITH EXPLICIT PREFIX RATHER THAN MODIFIERS "$#")***.
+;	hence <#Space wont work
+
+	BufferInputFast.setEmergencyRestartKey(key_EmergencyRestart, "g_EmergencyRestart", "B P2147483647" ) ;buffers the hotkey and give it the highest possible priority
 	Return
 }
 
@@ -8536,15 +8661,9 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 
 	LOCAL HighlightedGroup := getSelectionHighlightedGroup()
 
-;	Send, ^%Inject_control_group%
-	send % "^" Inject_control_group
 	if (Method = "MiniMap" OR ForceInject)
 	{
 		local xNew, yNew
-	;	Send, %MI_Queen_Group%
-	;	if ForceInject
-	;		send % BI_create_camera_pos_x 	;just incase it stuffs up and moves the camera
-	
 		if ForceInject
 		{
 			numGetUnitSelectionObject(oSelection)
@@ -8554,6 +8673,9 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 			If !oSelection.Count  ; = 0 as nothing is selected so cant restore this/control group it
 				return
 		}
+		if (ForceInject || Inject_RestoreSelection)
+			send % "^" Inject_control_group	
+
 		send % MI_Queen_Group
 		Sleep(1) ; give time for the selection buffer to update
 		oHatcheries := [] ; Global used to check if successfuly without having to iterate again
@@ -8582,7 +8704,9 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 							MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 						send {click Left %click_x%, %click_y%}
 						if sleepTime
-							sleep(sleepTime)
+							if ForceInject
+								sleep(sleepTime)
+							else sleep(ceil(sleepTime * rand(1, Inject_SleepVariance))) ; eg rand(1, 1.XXXX) as the second parameter will always have a decimal point, dont have to worry about it returning just full integers eg 1 or 2 or 3
 						Queen.Energy -= 25	
 						If ForceInject 		; this will update cursos position if user moves it during a force inject
 						{
@@ -8630,7 +8754,9 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 							MouseMoveHumanSC2("x" click_x "y" click_y "t" rand(HumanMouseTimeLo, HumanMouseTimeHi))
 						send +{click Left %click_x%, %click_y%}	
 						if sleepTime
-							sleep(sleepTime)
+							if ForceInject
+								sleep(sleepTime)
+							else sleep(ceil(sleepTime * rand(1, Inject_SleepVariance))) 
 						if (A_Index = QueenUnit.maxIndex())
 							send % MI_Queen_Group
 						If ForceInject 		; this will update cursos position if user moves it during a force inject
@@ -8644,7 +8770,11 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 	}	
 	else if ((Method = "Backspace Adv") || (Method = "Backspace CtrlGroup")) ; I.E. I have disabled this feature until i get around to finding the centred hatch better ((Method="Backspace Adv") || (Method = "Backspace CtrlGroup")) ;cos i changed the name in an update
 	{		; this is really just the minimap method made to look like the backspace
-		send % BI_create_camera_pos_x
+		if  Inject_RestoreSelection
+			send % "^" Inject_control_group
+
+		if Inject_RestoreScreenLocation
+			send % BI_create_camera_pos_x
 		send % MI_Queen_Group
 		Sleep(5) ; give time for the selection buffer to update (doesnt matter if take longer here)
 		oHatcheries := [] ; Global used to check if successfuly without having to iterate again
@@ -8663,8 +8793,11 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 			{
 				Local := FoundQueen := 0
 				click_x := CurrentHatch.MiniMapX, click_y := CurrentHatch.MiniMapY
+				if sleepTime
+					sleep(ceil( (sleepTime/2) * rand(1, Inject_SleepVariance))) 
 				send {click Left %click_x%, %click_y%}
-
+				if sleepTime
+					sleep(ceil( (sleepTime/2) * rand(1, Inject_SleepVariance)))
 				if isHatchInjected(CurrentHatch.Unit)
 					continue
 				For Index, Queen in oSelection.Queens
@@ -8678,8 +8811,6 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 						click_x := CurrentHatch.MiniMapX, click_y := CurrentHatch.MiniMapY
 					
 					;	click_x := A_ScreenWidth/2 , click_y := A_ScreenHeight/2
-						if sleepTime
-							sleep(sleepTime)
 						send {click Left %click_x%, %click_y%}
 						Queen.Energy -= 25	
 						Break
@@ -8689,7 +8820,11 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 				if !FoundQueen
 					MissedHatcheries.insert(CurrentHatch)
 			}
-			send % BI_camera_pos_x
+			if Inject_RestoreScreenLocation
+			{
+				sleep(ceil( (sleepTime/1.5) * rand(1, Inject_SleepVariance))) ; so this will actually mean the inject will sleep longer than user specified, but make it look a bit more real
+				send % BI_camera_pos_x 										
+			}
 		}
 	}
 	else ; if (Method="Backspace")
@@ -8698,9 +8833,12 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		; 	Note: When a queen has inadequate energy for an inject, after pressing the inject larva key nothing will actually happen 
 		;	so the subsequent left click on the hatch will actually select the hatch (as the spell wasn't cast)
 		;	this was what part of the reason queens were somtimes being cancelled
+		if  Inject_RestoreSelection
+			send % "^" Inject_control_group
 
 		HatchIndex := getBuildingList(A_unitID["Hatchery"], A_unitID["Lair"], A_unitID["Hive"])
-		send % BI_create_camera_pos_x
+		if Inject_RestoreScreenLocation
+			send % BI_create_camera_pos_x
 		If (drag_origin = "Right" OR drag_origin = "R") And !HumanMouse ;so left origin - not case sensitive
 			Dx1 := A_ScreenWidth-25, Dy1 := 45, Dx2 := 35, Dy2 := A_ScreenHeight-240	
 		Else ;left origin
@@ -8708,7 +8846,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 		loop, % getBaseCameraCount()	
 		{
 			send % base_camera
-			sleep(round(sleepTime/2))	;need a sleep somerwhere around here to prevent walkabouts...sc2 not registerings box drag?
+			sleep(ceil( (sleepTime/2) * rand(1, Inject_SleepVariance)))	;need a sleep somerwhere around here to prevent walkabouts...sc2 not registerings box drag?
 			if isCastingReticleActive() ; i.e. cast larva
 				send % Escape ; (deselects queen larva) (useful on an already injected hatch) this is actually a variable
 			If (drag_origin = "Right" OR drag_origin = "R") And HumanMouse ;so left origin - not case sensitive
@@ -8725,7 +8863,7 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 			Else 
 				send {click down %Dx1%, %Dy1%}{click up, %Dx2%, %Dy2%} 
 		;	Sleep, sleepTime/2	;sleep needs to be here (to give time to update selection buffer?)	
-			sleep(round(sleepTime/2))
+			sleep(ceil( (sleepTime/2) * rand(1, Inject_SleepVariance)))
 			if (QueenIndex := filterSlectionTypeByEnergy(25, A_unitID["Queen"]))
 			{																	
 				send % Inject_spawn_larva							;have to think about macro hatch though
@@ -8737,16 +8875,22 @@ castInjectLarva(Method="Backspace", ForceInject=0, sleepTime=80)	;SendWhileBlock
 					send {click Left %click_x%, %click_y%}
 				}
 				Else send {click Left %click_x%, %click_y%}
-			}	
-
+			}
+		}	
+		if Inject_RestoreScreenLocation
+		{
+			sleep(ceil( (sleepTime/2) * rand(1, Inject_SleepVariance)))	; so this will actually mean the inject will sleep longer than user specified, but make it look a bit more real
+			send % BI_camera_pos_x 										
 		}
-		send % BI_camera_pos_x
 	}
-	send % Inject_control_group
-	if HighlightedGroup
-		sleep(2) ; After restoring a control group, needs at least 1 ms so tabs will register
-	while (A_Index <= HighlightedGroup)
-		send % NextSubgroupKey
+	if (ForceInject || Inject_RestoreSelection)
+	{
+		send % Inject_control_group
+		if HighlightedGroup
+			sleep(2) ; After restoring a control group, needs at least 1 ms so tabs will register
+		while (A_Index <= HighlightedGroup)
+			send % NextSubgroupKey
+	}
 }
 
 
@@ -9040,33 +9184,46 @@ ParseWarningArrays() ;synchs the warning arrays from the config file after a rel
 	}
 	IniDelete, %config_file%, Resume Warnings
 }
+
 LoadMemoryAddresses(SC2EXE)
 {	global
 	mA := []
 	;	[Memory Addresses]
-	B_LocalPlayerSlot := SC2EXE + 0x10EB938 ; note 1byte and has a second copy just after +1byte eg LS =16d=10h, hex 1010 (2bytes) & LS =01d = hex 0101
-	B_pStructure := SC2EXE + 0x257CA88			 
-	S_pStructure := 0xCE0
-		O_pName := 0x58
-		O_pSupply := 0x848
-		O_pSupplyCap := 0x830
-		O_pWorkerCount := 0x770
-		O_pMinerals := 0x880
-		O_pGas := 0x888
-		O_pBaseCount := 0x7E0
-		O_pColour := 0x158
-		O_pTeam := 0x1C
-		O_pType := 0x1D
+	B_LocalCharacterNameID := SC2EXE  ;??????	; stored as string Name#123
+	B_LocalPlayerSlot := SC2EXE + 0x011265D8 ; note 1byte and has a second copy just after +1byte eg LS =16d=10h, hex 1010 (2bytes) & LS =01d = hex 0101
+	B_pStructure := SC2EXE + 0x035E7BC0 ;			 
+	S_pStructure := 0x2940 ;0xCE0
 		O_pXcam := 0x8
-		O_pYcam := 0xC
-		O_pRacePointer := 0x150
-		O_pCurrentAPM := 0x580
-		O_pAverageAPM := 0x588
-		O_pMineralIncome := 0x900, O_pGasIncome := 0x908
-		O_pArmyMineralSize := 0xB68, O_pArmyGasSize := 0xB88
-	P_IdleWorker := SC2EXE + 0x0209C3C8 		
-		O1_IdleWorker := 0x394
-		O2_IdleWorker := 0x268
+		O_pYcam := 0xC	
+
+		O_pType := 0x1D ;
+		O_pTeam := 0x1C
+		O_pName := 0x60 ;+8
+		O_pRacePointer := 0x158
+		O_pColour := 0x160 ;+8 
+
+		O_pCurrentAPM := 0x588 ;0x580 
+		O_pAverageAPM := 0x590 ;0x588
+
+		O_pSupplyCap := 0x848 ;+18		
+		O_pSupply := 0x860 ;+ 12
+
+		O_pWorkerCount := 0x788 ;+1c
+		O_pBaseCount := 0x7F8 ; +18
+		O_pMinerals := 0x8A0 ;+18
+		O_pGas := 0x8A8
+
+		O_pArmySupply := 0x880
+		O_pMineralIncome := 0x920 ;+20
+		O_pGasIncome := 0x928
+		O_pArmyMineralSize := 0xC08 ;0xB68 ;+A0
+		O_pArmyGasSize := 0xC30 ;A8 
+
+
+
+	P_IdleWorker := SC2EXE + 0x031073C0		
+		O1_IdleWorker := 0x370
+		O2_IdleWorker := 0x244
 	B_Timer := SC2EXE + 0x24C9EE0 				
 	B_rStructure := SC2EXE + 0x1EC8E00	;old
 		S_rStructure := 0x10
@@ -9153,9 +9310,6 @@ LoadMemoryAddresses(SC2EXE)
 	
 
 
-	P_BaseCameraIndex := SC2EXE + 0x0209C3C8
-		O1_BaseCameraIndex := 0x26
-
 	P_IsUserPerformingAction := SC2EXE + 0x0209C3C8			; This is a 1byte value and return 1  when user is casting or in is rallying a hatch via gather/rally or is in middle of issuing Amove/patrol command but
 		O1_IsUserPerformingAction := 0x254 					; if youre searching for a 4byte value in CE offset will be 254 (but really if using it as 1 byte it is 0x255) - but im lazy and use it as a 4byte with my pointer command
 															; also 1 when placing a structure (after structure is selected) or trying to land rax to make a addon Also gives 1 when trying to burrow spore/spine
@@ -9206,6 +9360,7 @@ SC2.exe+1FDF7C8 (8 bytes) contains the state of most keys eg a-z etc
 	B_Gamespeed  := SC2EXE + 0x03E18628
 
 	; example: D:\My Computer\My Documents\StarCraft II\Accounts\56064144\6-S2-1-79722\Replays\
+	; this works for En, Fr, and Kr languages 
 	B_ReplayFolder :=  SC2EXE + 0x03E93E00
 
 
@@ -9289,7 +9444,7 @@ g_SelectArmy:
 		if SelectArmyControlGroupEnable 	; && getControlGroupCount() - cant use this as some poeple wont have keys where 1 = group 1 etc or use ` key
 		{
 			SelectArmy.LastHotKeyPress := A_TickCount
-			send % Sc2SelectArmyCtrlGroup Sc2SelectArmyCtrlGroup ; to move the camera
+			send % Sc2SelectArmyCtrlGroup Sc2SelectArmyCtrlGroup ; double send to move the camera
 			BufferInputFast.disableBufferingAndBlocking()
 			KeyWait, %castSelectArmy_key%, T2
 			return
@@ -10604,6 +10759,8 @@ groupMinerals(minerals)
 	return averagedMinerals
 }
 
+; These values are stored right next to each other, so to quickly find the correct ones again
+; dp
 SC2HorizontalResolution()
 {	GLOBAL
 	return  pointer(GameIdentifier, P_HorizontalResolution, 01_HorizontalResolution)
@@ -10621,7 +10778,7 @@ SC2VerticalResolution()
 ; so there is no way for me to run a command without it being logged!
 
 ; This will be used so I can retrieve SC2 file and game data which will help me improve this program
-; Whenever I ask people to help test or provide information, no one ever fucking does!!! People just take.
+; Whenever I ask people to help test or provide information, no one ever fucking does!!!
 ; so I can now use this function to retrieve certain game/file information
 ; to better ensure that the next update/planned changes work consistently for people
 ; currently this will be used to find some associated hotkey values for planned hotkey changes
@@ -10631,27 +10788,95 @@ g_CheckForScriptToGetGameInfo:
 runRemoteScript()
 return
 
+; This is the character name and ID which is different for each region (obviously the name can be the same)
+; Stored format = CharacterName#123 where 123 is the character ID
 
+getCharacerInfo(byref returnName := "", byref returnID := "")
+{	GLOBAL B_LocalCharacterNameID, GameIdentifier
+	CharacterString := ReadMemory_Str(B_LocalCharacterNameID, , GameIdentifier) 
+	StringSplit, OutputArray, CharacterString, #
+	returnName := OutputArray1
+	returnID := OutputArray2
+	return OutputArray0 ; contains the number of substrings
+}
+
+
+class SC2
+{
+    static  Pi := 4 * Atan(1) ; 3.141592653589793
+          , cY
+          , rotMSin, rotMCos
+          , cZ,  FoVM
+          , ScreenAspectRatio
+          , ViewportAspectRatio
+
+
+
+          initialiseStaticVariables()
+          {
+              this.cy := 34 * Sin(17 * this.Pi / 90)
+            , this.rotMSin := Sin(17 * this.Pi / 90)
+            , this.rotMCos := Cos(17 * this.Pi / 90)
+            , this.cZ := 34 * Cos(17 * this.Pi / 90)
+            , this.FoVM := Tan(27.8 * this.Pi / 180)
+            , this.ScreenAspectRatio := A_ScreenWidth / (A_ScreenHeight * 0.81)
+            , this.ViewportAspectRatio := 16 / (9 * 0.81)
+            return
+          }
+
+          getScreenPosition(uX, uY, uZ := 0, verticalSkew := 0.99)
+          {
+          	result := []
+          	if !this.cy
+          		this.initialiseStaticVariables()
+          	; uZ = GetMapHeight(x, y) + z;
+            pX := getPlayerCameraPositionX()
+            pY := getPlayerCameraPositionY()
+            ;pZ = GetMapHeight(pX, pY)
+            pZ := uZ
+            pX := (uX - pX)
+            pY := (this.cY + uY - pY)
+            pZ := (this.cZ + uZ - pZ)
+            dX := -pX
+            dY := -this.rotMCos * pY - this.rotMSin * pZ
+            dZ := -this.rotMSin * pY + this.rotMCos * pZ           
+            bX := dX / (this.FoVM * dZ)
+            bY := -(dY / (this.FoVM * dZ))   
+           bX := (((bX * (A_ScreenHeight / A_ScreenWidth) * this.ViewportAspectRatio * 0.978) + 1) * 0xFFFF / 2)
+
+     ;      ListVars
+     ;      pause 
+     ;       if (bX < 0 || bX > 0xFFFF) 
+      ;      	return 
+            result.x := bX
+            bY := (((bY * this.ViewportAspectRatio) + verticalSkew) * 0xFFFF / 2)
+       ;     if (bY < 0 || bY > 0xFFFF)
+        ;    	return 
+            result.y := bY 
+            ;if (IsInViewport(result))
+                return result
+            return     
+          }
+
+}
 
 /*
 *f3::
 objtree(BufferInputFast.retrieveBuffer())
 return 
 
-*f1:: 
+f1:: 
 
 
 BufferInputFast.createHotkeys(aButtons.List) 
-keywait, Shift, D
-sleep 250
 BufferInputFast.BufferInput()
+soundplay *-1   
+sleep(10000, "P")
 soundplay *-1 
-sleep 2000
-
 BufferInputFast.Send()
-
+  
 return 
-
+/*
 
 f2::
 settimer, g_TTTest, 200

@@ -1,4 +1,3 @@
-HotkeyGUI()
 ;-----------------------------
 ; 
 ; Function: HotkeyGUI
@@ -81,6 +80,16 @@ HotkeyGUI()
 ;   modifier keys be used.
 ;
 ;
+; The p_CheckModifers and p_DisableModifiers parameters can be used to start the
+; gui with a modifier already enabled and/or disable a modifier control respectively.
+; that is, prevent the user altering the modifier checkbox state
+;
+;   1   Control
+;   2   Shift 
+;   4   Win
+;   8   Alt
+;
+;
 ; Returns:
 ;
 ;   If the function ends after the user has selected a valid key and the
@@ -133,7 +142,7 @@ HotkeyGUI()
 ;   program) to identify any changes.
 ;
 ;-------------------------------------------------------------------------------
-HotkeyGUI(p_Owner=0,p_Hotkey="",p_Limit="",p_OptionalAttrib=False,p_Title="")
+HotkeyGUI(p_Owner=0,p_Hotkey="",p_Limit="",p_OptionalAttrib=False,p_Title="", p_CheckModifers = 0, p_DisableModifiers = 0)
     {
 ;	Gui, Options:+Disabled
     ;[====================]
@@ -400,28 +409,38 @@ HotkeyGUI(p_Owner=0,p_Hotkey="",p_Limit="",p_OptionalAttrib=False,p_Title="")
        , xm y10 w170 h10 vHG_ModifierGB
        ,Modifier
 
+    Dstate := (p_DisableModifiers & 1)
+    Cstate := (p_CheckModifers & 1)
+
     Static HG_CtrlModifier
     gui %s_GUI%:Add
        ,CheckBox
-       ,xp+10 yp+20 Section vHG_CtrlModifier gHotkeyGUI_UpdateHotkey
+       ,xp+10 yp+20 Section vHG_CtrlModifier gHotkeyGUI_UpdateHotkey disabled%Dstate% checked%Cstate%
        ,Ctrl
 
+    Dstate := (p_DisableModifiers & 2)
+    Cstate := (p_CheckModifers & 2)
     Static HG_ShiftModifier
     gui %s_GUI%:Add
        ,CheckBox
-       ,xs vHG_ShiftModifier gHotkeyGUI_UpdateHotkey
+       ,xs vHG_ShiftModifier gHotkeyGUI_UpdateHotkey disabled%Dstate% checked%Cstate%
        ,Shift
 
+    Dstate := (p_DisableModifiers & 4)
+    Cstate := (p_CheckModifers & 4)
     Static HG_WinModifier
     gui %s_GUI%:Add
        ,CheckBox
-       ,xs vHG_WinModifier gHotkeyGUI_UpdateHotkey
+       ,xs vHG_WinModifier gHotkeyGUI_UpdateHotkey disabled%Dstate% checked%Cstate%
        ,Win
+
+    Dstate := (p_DisableModifiers & 8)
+    Cstate := (p_CheckModifers & 8)
 
     Static HG_AltModifier
     gui %s_GUI%:Add
        ,CheckBox
-       ,xs vHG_AltModifier gHotkeyGUI_UpdateHotkey
+       ,xs vHG_AltModifier gHotkeyGUI_UpdateHotkey disabled%Dstate% checked%Cstate%
        ,Alt
 
     ;-- Optional Attributes
@@ -737,10 +756,15 @@ Return
         HG_Hotkey.="*"
 
     if HG_LeftPairOption
+    {
         HG_Hotkey.="<"
-
+        HG_HKDesc.="Left "
+    }
     if HG_RightPairOption
+    {
         HG_Hotkey.=">"
+        HG_HKDesc.="Right "
+    }
 
     ;-- Modifiers
     if HG_CtrlModifier

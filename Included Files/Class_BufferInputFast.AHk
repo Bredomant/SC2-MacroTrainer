@@ -1,32 +1,57 @@
 Class BufferInputFast
 {	static BufferedState := 0, BlockedState := 0, aBuffer := [], aBlockedKeys := []
+	
+	; EmergencyRestartKey: Allows a specified key to
+	; launch a label even while input is blocked e.g. to reload the script
+	; As Ctrl, Shift, Alt are remapped to 'return' during blocking, the emergency
+	; key must not contain these modifiers. (wont work) 
+	; **Valid keys are any Win-key combination or any single button 
+	; 
+	; As the EmergencyRestart has no #if i.e. it is global, it will take precedence 
+	; over any of the keys listed in the blocking routine.
 
+	setEmergencyRestartKey(Key, Label, Options := "")
+	{	static EmergencyRestartKey
+		Hotkey, If 	;	just in case there is an active Hotkey, if somewhere above
+		#If
+		if (Key != EmergencyRestartKey)
+		{
+			Try Hotkey, %EmergencyRestartKey%, Off 	; disable the previous key if it exists
+													; note, this may disable some other function hotkey
+													; if the user has changed both keys 
+													; due to the where I actually call this function
+													; to ensure the emergency restart hotkey is never
+													; overwritten by another function hotkey
+			Try Hotkey, %Key%, %Label%, On, %Options%
+		}
+		EmergencyRestartKey := Key
+		return
+	}
 	createHotkeys(aKeys)
-	{
+	{	GLOBAL GameIdentifier
 		this.aBlockedKeys := aKeys
-		#If, BufferInputFast.isInputBuffered() 
-		Hotkey, If, BufferInputFast.isInputBuffered() 
+		
+		#If, BufferInputFast.isInputBuffered() && WinActive(GameIdentifier)
+		Hotkey, If, BufferInputFast.isInputBuffered() && WinActive(GameIdentifier)
 		for index, Button in aKeys
 			Try Hotkey, %Button%, g_BufferInputFastLabel, On
 
-		#If, BufferInputFast.isInputBlocked() 
-		Hotkey, If, BufferInputFast.isInputBlocked()
+		#If, BufferInputFast.isInputBlocked() && WinActive(GameIdentifier)
+		Hotkey, If, BufferInputFast.isInputBlocked() && WinActive(GameIdentifier)
 		for index, Button in aKeys
 			Try Hotkey, %Button%, g_ReturnFastLabel, On
-
 		#If
-		Hotkey, If
 		return			
 	}
 	disableHotkeys()
-	{
+	{ 	GLOBAL GameIdentifier
 		if this.aBlockedKeys.MaxIndex()
 		{
-			Hotkey, If, BufferInputFast.isInputBuffered()
+			Hotkey, If, BufferInputFast.isInputBuffered() && WinActive(GameIdentifier)
 			for index, Button in this.aBlockedKeys
 				Try Hotkey, %Button%, Off
-			
-			Hotkey, If, BufferInputFast.isInputBlocked() 
+
+			Hotkey, If, BufferInputFast.isInputBlocked() && WinActive(GameIdentifier)
 			for index, Button in this.aBlockedKeys
 				Try Hotkey, %Button%, Off
 			Hotkey, If

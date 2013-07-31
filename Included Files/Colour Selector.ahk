@@ -1,16 +1,17 @@
 Goto, ColourSector>
 ColourSelectorSave:
-%LaunchedColour% := TransparencySlider colour ;save the new colour to the variable stored in the variablde :(
-LaunchedColour := "_"  LaunchedColour	;get the handle name
-if ( LaunchedColour = "_UnitHighlightInvisibleColour" || LaunchedColour = "_UnitHighlightHallucinationsColour")
-	paintPictureControl(%LaunchedColour%, colour, TransparencySlider, 50,22) ; draw it with a width of 50, as I'm not sure how to make the function get the controls width from the other gui
-Else paintPictureControl(%LaunchedColour%, colour, TransparencySlider, 300,22)
+
+%CS_LaunchedColour% := CS_TransparencySlider CS_colour ;save the new colour to the variable stored in the variablde :(
+CS_LaunchedColour := "_"  CS_LaunchedColour	;get the handle name
+if ( CS_LaunchedColour = "_UnitHighlightInvisibleColour" || CS_LaunchedColour = "_UnitHighlightHallucinationsColour")
+	paintPictureControl(%CS_LaunchedColour%, CS_colour, CS_TransparencySlider, 50,22) ; draw it with a width of 50, as I'm not sure how to make the function get the controls width from the other gui
+Else paintPictureControl(%CS_LaunchedColour%, CS_colour, CS_TransparencySlider, 300,22)
 Gui, Options:-Disabled  
 Gui, Destroy
 Return
 
 ColourSelector:
-LaunchedColour := SubStr(A_GuiControl, 2)	;drops the # and allows colour to be saved 
+CS_LaunchedColour := SubStr(A_GuiControl, 2)	;drops the # and allows colour to be saved 
 
 width := 300 , height := 300 
 WidthTmp := width +16 , HeightTmp := height +16
@@ -23,11 +24,11 @@ Gui, Add, Slider, x5 y2 Line10 NoTicks Range0-510 Vertical +AltSubmit  vCS gCS h
 Gui, Add, Picture, x30 y10 h%height% 0xE  HWND_BAR gInvoke_Slide			;colour slither
 Gui, Add, Picture, x+30 y10 0xE w%width% h%height% section  HWND_PRGS_ gChoosecolour				;colour box
 Gui, Add, Picture, x+10 y10 h%height% 0xE  HWND_TransScale			;Transparency Scale Pic
-Gui, Add, Slider, x+15 y2 h%HeightTmp% Line10 NoTicks Range0-255 Vertical Invert Left +AltSubmit  vTransparencySlider gCS , 255 ;slider
+Gui, Add, Slider, x+15 y2 h%HeightTmp% Line10 NoTicks Range0-255 Vertical Invert Left +AltSubmit  vCS_TransparencySlider gCS , 255 ;slider
 
 Gui, Add, GroupBox, x10 y+5 w285 h80 section, Selected Colour
 Gui, Add, Picture, xp+15 yp+20 w255 h50  0xE HWND_ColourIndicator 
-paintPictureControl(_ColourIndicator, colour := %LaunchedColour%,,,, 10)
+paintPictureControl(_ColourIndicator, CS_colour := %CS_LaunchedColour%,,,, 10)
 Gui, Add, Button, x+20 ys+5 gColourSelectorSave w100 h35, Save Changes
 Gui, Add, Button, gGuiClose w100 h35, Cancel
 
@@ -35,7 +36,7 @@ CreateTransparencyScale(_TransScale)
 CreateColourRainbow(_BAR)
 
 CreateSpectrum(_PRGS_, 255, 0, 0, , True, Height, Width)
-TransparencySlider := "0xFF" 
+CS_TransparencySlider := "0xFF" 
 Gui, Show, 
 Gui, +OwnerOptions
 Gui, Options:+Disabled
@@ -47,21 +48,21 @@ GuiControl,, CS, % CS -= 33
 
 CS:		;slider
 Critical	;required to stop blinking
-GuiControlGet, TransparencySlider
-TransparencySlider := DecToHex(TransparencySlider)
+GuiControlGet, CS_TransparencySlider
+CS_TransparencySlider := DecToHex(CS_TransparencySlider)
 GuiControlGet, CS
 CalcCS(CS, 85, CSR, CSG, CSB)
-CreateSpectrum(_PRGS_, CSR, CSG, CSB, TransparencySlider,, Height, Width)
-paintPictureControl(_ColourIndicator, colour, TransparencySlider,,, 10)
+CreateSpectrum(_PRGS_, CSR, CSG, CSB, CS_TransparencySlider,, Height, Width)
+paintPictureControl(_ColourIndicator, CS_colour, CS_TransparencySlider,,, 10)
 Critical, Off
 return
 
 
 Choosecolour: ; big colour chart
 MouseGetPos, X, Y
-PixelGetcolor, colour, % X, % Y, RGB
-colour := SubStr(colour, 3)
-paintPictureControl(_ColourIndicator, colour, TransparencySlider,,, 10)
+PixelGetcolor, CS_colour, % X, % Y, RGB
+CS_colour := SubStr(CS_colour, 3)
+paintPictureControl(_ColourIndicator, CS_colour, CS_TransparencySlider,,, 10)
 return
 paintPictureControl(Handle, Colour, Transparency = "FF", ControlW = "", ControlH = "", RoundCorner=0)
 { 
