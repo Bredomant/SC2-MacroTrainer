@@ -176,6 +176,5 @@ InstallSC2Files()
 	FileInstall, Included Files\Used_Icons\Units\Zerg\viper.png, %A_Temp%\UnitPanelMacroTrainer\viper.png, 1
 	FileInstall, Included Files\Used_Icons\Units\Zerg\zergling.png, %A_Temp%\UnitPanelMacroTrainer\zergling.png, 1
 
-
-	FileInstall, C:\Program Files\AutoHotkey\AutoHotkey.exe, %A_Temp%\AHK.exe, 1
+	FileInstall, Included Files\AutoHotkey.exe, %A_Temp%\AHK.exe, 1
 }

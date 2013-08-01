@@ -1,5 +1,8 @@
 SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gmail.com", pass="PublicPasswordfwnk322rf28932hjf32809")
 {
+		; gmail
+		; user="Macro.Trainer@gmail.com", pass="PublicPasswordfwnk322rf28932hjf32809"
+
 	pmsg          := ComObjCreate("CDO.Message")
 	pmsg.From       := "MT BugReport@mail.com" ; """AHKUser"" <...@gmail.com>"
 	pmsg.To       := p_to
@@ -17,7 +20,7 @@ SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gm
 				. "Is64bitOS: " A_Is64bitOS "`n"
 				. "Language Code: " A_Language "`n"
 				. "Language: " getSystemLanguage() "`n"
-				. "Scipt & Path: " A_ScriptFullPath "`n"
+				. "Script & Path: " A_ScriptFullPath "`n"
 				. "Screen Width: " A_ScreenWidth "`n"
 				. "Screen Height: " A_ScreenHeight "`n"
 				. "Screen DPI: " A_ScreenDPI "`n"
@@ -30,7 +33,7 @@ SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gm
 				. "Game Exe: "	StarcraftExePath() "`n"
 				. "Game Dir: "	StarcraftInstallPath() "`n"
 
-	pmsg.TextBody    := p_message
+	pmsg.TextBody := p_message
 	;OR
 	;pmsg.HtmlBody := "<html><head><title>Hello</title></head><body><h2>Hello</h2><br /><p>Testing!</p></body></html>"
 
@@ -48,8 +51,8 @@ SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gm
 	sAttach := Trim(sAttach, "`t |")
 
 	fields := Object()
-	fields.smtpserver   := "smtp.gmail.com" ; specify your SMTP server
-	fields.smtpserverport     := 465 ; 25
+	fields.smtpserver   := 	;"smtp.gmail.com" ; specify your SMTP server
+	fields.smtpserverport  := 465 ; 25
 	fields.smtpusessl      := True ; False
 	fields.sendusing     := 2   ; cdoSendUsingPort
 	fields.smtpauthenticate     := 1   ; cdoBasic

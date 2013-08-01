@@ -1058,7 +1058,7 @@ AutoGroup(byref A_AutoGroup, AGDelay = 0)	;byref slightly faster...
 		type := unit.type				
 		If !isOwnerLocal(Unit.owner)
 		{
-				WrongUnit := 1
+			 	WrongUnit := 1
 				break
 		}
 		CurrentlySelected .= "," unit.UnitIndex
@@ -4469,6 +4469,7 @@ Gui, Tab, Emergency
 	Gui, Add, Text,xp+10 y+25 cRed, Windows Key && Spacebar`n        (Left)
 	Gui, Font, norm 
 	Gui, Font,
+	Gui, Add, Text, xp y+25 w405, The deult key can be changed via the 'settings' Tab on the left.
 
 Gui, Add, Tab2, w440 h%guiMenuHeight% X%MenuTabX%  Y%MenuTabY% vMiniMap_TAB, MiniMap||MiniMap2|Overlays|Hotkeys|Info
 
@@ -6315,7 +6316,7 @@ isTargetUnderConstruction(TargetFilter)
 	return TargetFilter & a_UnitTargetFilter.UnderConstruction
 }
 
-
+; Note Currently used!
 isUserCastingOrBuilding()	;note auto casting e.g. swarm host will always activate this. There are separate bool values indicating buildings at certain spells
 {	global
 	return pointer(GameIdentifier, P_IsUserCasting, O1_IsUserCasting, O2_IsUserCasting, O3_IsUserCasting, O4_IsUserCasting)
@@ -7379,7 +7380,7 @@ getPlayerCurrentAPM(Player="")
 {	global
 	If (player = "")
 		player := a_LocalPlayer["Slot"]	
-	Return ReadMemory(B_pStructure + (Player - 1)*S_pStructure + O_pCurrentAPM, GameIdentifier)
+	Return ReadMemory(B_pStructure + (Player - 1)*S_pStructure + O_pAPM, GameIdentifier)
 }
 
 isUnderConstruction(building) ; starts @ 0 and only for BUILDINGS!
@@ -9071,7 +9072,7 @@ isUnitNearUnit(Queen, Hatch, MaxXYdistance) ; takes objects which must have keys
  }
  numGetIsHatchInjectedFromMemDump(ByRef MemDump, Unit)
  {	global ; 1 byte = 18h chrono for protoss structures, 48h when injected for zerg -  10h normal state
- 	return (48 = numget(MemDump, Unit * S_uStructure + O_uChronoAndInjectState, "UChar")) ? 1 : 0
+ 	return (48 = numget(MemDump, Unit * S_uStructure + O_uInjectState, "UChar")) ? 1 : 0
  }
 
 
@@ -9192,27 +9193,28 @@ LoadMemoryAddresses(SC2EXE)
 {	global
 	mA := []
 	;	[Memory Addresses]
-	B_LocalCharacterNameID := SC2EXE  ;??????	; stored as string Name#123
+	B_LocalCharacterNameID := SC2EXE + 0x04F65144  ; stored as string Name#123
 	B_LocalPlayerSlot := SC2EXE + 0x011265D8 ; note 1byte and has a second copy just after +1byte eg LS =16d=10h, hex 1010 (2bytes) & LS =01d = hex 0101
 	B_pStructure := SC2EXE + 0x035E7BC0 ;			 
-	S_pStructure := 0x2940 ;0xCE0
+	S_pStructure := 0xDC0 ;0xCE0
 		O_pXcam := 0x8
+		O_pCamDistance := 0xA
 		O_pYcam := 0xC	
-
-		O_pType := 0x1D ;
 		O_pTeam := 0x1C
+		O_pType := 0x1D ;
+		O_pStatus := 0x1E
 		O_pName := 0x60 ;+8
 		O_pRacePointer := 0x158
 		O_pColour := 0x160 ;+8 
+		O_pAccountID := 0x1C0
 
-		O_pCurrentAPM := 0x588 ;0x580 
-		O_pAverageAPM := 0x590 ;0x588
-
-		O_pSupplyCap := 0x848 ;+18		
-		O_pSupply := 0x860 ;+ 12
+		O_pAPM := 0x598
+		O_pEPM := 0x5D8
 
 		O_pWorkerCount := 0x788 ;+1c
 		O_pBaseCount := 0x7F8 ; +18
+		O_pSupplyCap := 0x848 ;+18		
+		O_pSupply := 0x860 ;+ 12		
 		O_pMinerals := 0x8A0 ;+18
 		O_pGas := 0x8A8
 
@@ -9228,7 +9230,7 @@ LoadMemoryAddresses(SC2EXE)
 		O1_IdleWorker := 0x370
 		O2_IdleWorker := 0x244
 	B_Timer := SC2EXE + 0x3534F40 ;0x24C9EE0 				
-	B_rStructure := SC2EXE + 0x1EC8E00	;old
+	B_rStructure := SC2EXE + 0x02F6C850	
 		S_rStructure := 0x10
 
 	P_ChatFocus := SC2EXE + 0x031073C0 		;Just when chat box is in focus
@@ -9238,8 +9240,6 @@ LoadMemoryAddresses(SC2EXE)
 	P_MenuFocus := SC2EXE + 0x04FE4E5C 		;this is all menus and includes chat box when in focus ; old 0x3F04C04
 		O1_MenuFocus := 0x17C
 
-
-
 	B_uCount := SC2EXE + 0x2F6C438 				; This is the units alive (and includes missiles) ;0x02CF5588			
 	B_uHighestIndex := SC2EXE + 0x3665100 ; 0x25F92C0		;this is actually the highest currently alive unit (includes missiles while alive)
 	B_uStructure := SC2EXE + 0x3665140			
@@ -9248,14 +9248,22 @@ LoadMemoryAddresses(SC2EXE)
 		O_uTargetFilter := 0x14
 		O_uBuildStatus := 0x18		; buildstatus is really part of the 8 bit targ filter!
 		O_XelNagaActive := 0x34
-		O_uOwner := 0x3D
 		; something added in here in vr 2.10
-		O_uX := 0x4C ; this and the rest below +4
+
+		O_uOwner := 0x41  ; this and the rest below +4
+		O_uX := 0x4C
 		O_uY := 0x50
 		O_uZ := 0x54
+		O_uDestinationX := 0x80
+		O_uDestinationY := 0x84
 		O_P_uCmdQueuePointer := 0xD4 ;+4
 		O_P_uAbilityPointer := 0xDC
-		O_uChronoAndInjectState := 0xE6
+
+									; there are other offsets which can be used for chrono/inject state
+		O_uChronoState := 0xE6				; pre 210 chrono and inject offsets were the same
+		O_uInjectState := 0xE7 ; +5 Weird this was 5 not 4 (and its values changed) chrono state just +4
+
+		O_uHP := 0x114
 		O_uEnergy := 0x11c 
 		O_uTimer := 0x16C ;+4
 		
@@ -9281,31 +9289,18 @@ LoadMemoryAddresses(SC2EXE)
 ;		O1_PlayerColours := 0x4
 ;		O2_PlayerColours := 0x17c
 
-	B_TeamColours := SC2EXE = 0x03108504 
+	B_TeamColours := SC2EXE + 0x03108504 ; 2 when team colours is on 
 	; another one at + 0x4FA7800
 
-
-/*
-				; 2 when team colours is on 
-                //TeamColor 
-
-                TeamColor1 = (int)starcraft.MainModule.BaseAddress + 0x0209D4E4; //V
-                TeamColor2 = (int)starcraft.MainModule.BaseAddress + 0x03ED4BF8; //V
-
-*/
-
-
-
-
-	P_SelectionPage := SC2EXE + 0x0209C3C8 ;	0x02097818 ;theres one other 3 lvl pointer
-		O1_SelectionPage := 0x35C			;this is for the currently selected unit portrait page ie 1-6 in game (really starts at 0-5)
-		O2_SelectionPage := 0x180			;might actually be a 2 or 1 byte value....but works fine as 4
-		O3_SelectionPage := 0x170
+	P_SelectionPage := SC2EXE + 0x031073C0 ; theres one other 3 lvl pointer but for a split second (ever second or so) it points to 
+		O1_SelectionPage := 0x338			; the wrong address! You need to increase CE timer resolution to see this happening! Check it!
+		O2_SelectionPage := 0x15C			;this is for the currently selected unit portrait page ie 1-6 in game (really starts at 0-5)
+		O3_SelectionPage := 0x14C 			;might actually be a 2 or 1 byte value....but works fine as 4
 
 	DeadFilterFlag := 0x0000000200000000	
 	BuriedFilterFlag :=	0x0000000010000000
 
-	B_MapStruct := SC2EXE + 0X024C9E7C 
+	B_MapStruct := SC2EXE + 0x3534EDC ; 0X024C9E7C 
 		O_mLeft := B_MapStruct + 0xDC	                                   
 		O_mBottom := B_MapStruct + 0xE0	                                   
 		O_mRight := B_MapStruct + 0xE4	    ; MapRight 157.999756 (akilon wastes) after dividing 4096                     
@@ -9321,28 +9316,29 @@ LoadMemoryAddresses(SC2EXE)
 	; note I have Converted these hex numbers from their true decimal conversion 
 	
 
-
-	P_IsUserPerformingAction := SC2EXE + 0x0209C3C8			; This is a 1byte value and return 1  when user is casting or in is rallying a hatch via gather/rally or is in middle of issuing Amove/patrol command but
-		O1_IsUserPerformingAction := 0x254 					; if youre searching for a 4byte value in CE offset will be 254 (but really if using it as 1 byte it is 0x255) - but im lazy and use it as a 4byte with my pointer command
+ 															; If used as 4byte value, will return 256 	there seems to be 2 of these memory addresses
+	P_IsUserPerformingAction := SC2EXE + 0x031073C0			; This is a 1byte value and return 1  when user is casting or in is rallying a hatch via gather/rally or is in middle of issuing Amove/patrol command but
+		O1_IsUserPerformingAction := 0x230 					; if youre searching for a 4byte value in CE offset will be at 0x254 (but really if using it as 1 byte it is 0x255) - but im lazy and use it as a 4byte with my pointer command
 															; also 1 when placing a structure (after structure is selected) or trying to land rax to make a addon Also gives 1 when trying to burrow spore/spine
 															; When searching for 4 byte value this offset will be 0x254 
 															; this address is really really useful!
 															; it is even 0 with a burrowed swarm host selected (unless user click 'y' for rally which is even better)
 
-	P_IsUserBuildingWithWorker := SC2EXE + 0x0209C3C8  	 	; this is like the one but will give 1 even when all structure are greyed out (eg lari tech having advanced mutations up)
+/* 	Not Currently Used
+	P_IsUserBuildingWithWorker := SC2EXE + 0x0209C3C8  	 	; this is like the one but will give 1 even when all structure are greyed out (eg lair tech having advanced mutations up)
 		01_IsUserBuildingWithWorker := 0x364 				; works for workers of all races
 		02_IsUserBuildingWithWorker := 0x17C           		; even during constructing SVC will give 0 - give 1 when selection card is up :)
 		03_IsUserBuildingWithWorker := 0x3A8   				; also displays 1 when the toss hallucination card is displayed
 		04_IsUserBuildingWithWorker := 0x168 				; BUT will also give 1 when a hatch is selected!!!
 
-
-	P_IsBuildCardDisplayed := SC2EXE + 0x020AFD6C 		; this displays 1 or 0 units selected - displays 7 when targeting reticle displayed/or placing a building (same thing)
+*/
+	P_IsBuildCardDisplayed := SC2EXE + 0x0311ADB4		; this displays 1 or 0 with units selected - displays 7 when targeting reticle displayed/or placing a building (same thing)
 		01_IsBuildCardDisplayed := 0x7C 				; **but when either build card is displayed it displays 6 (even when all advanced structures are greyed out)!!!!
-		02_IsBuildCardDisplayed := 0x58 				; also displays 6 when the toss hallucination card is displayed
-		03_IsBuildCardDisplayed := 0x3C4 				; could use this in place of the current 'is user performing action offset'
+		02_IsBuildCardDisplayed := 0x74 				; also displays 6 when the toss hallucination card is displayed
+		03_IsBuildCardDisplayed := 0x398 				; could use this in place of the current 'is user performing action offset'
+ 														; Note: There is another address which has the same info, but when placing a building it will swap between 6 & 7 (not stay at 7)!
 
-											; there are two of these the later 1 is actually the one that affects the game
-	B_ModifierKeys := SC2EXE + 0x1FDF7D8  	;shift = 1, ctrl = 2, alt = 4 (and add them together)
+
 /*
 Around this modifier area are other values which contain the logical states
 SC2.exe+1FDF7C6 is a 2byte value which contains the state of the numbers 0-9
@@ -9350,44 +9346,58 @@ SC2.exe+1FDF7D0 contains the state F-keys as well as keys like tab, backspace, I
 SC2.exe+1FDF7C8 (8 bytes) contains the state of most keys eg a-z etc
 
 */
+ 		; the modifier and camera/mouse button addresses will be very close to each other (not the pointer 1 though)
 
-	B_MouseButtonState := SC2EXE + 0x1FDF7BC 				;1 byte - MouseButton state 1 for Lbutton,  2 for middle mouse, 4 for rbutton
+											; there are two of these the later 1 is actually the one that affects the game
+											; Also the 1st one, if u hold down a modifier then go out of the game (small window mode)
+											; it will remain 1 even when back in and shift isn't down as moving a unit wont be shift-commanded! so dont use that one
+	B_ModifierKeys := SC2EXE + 0x304A7A4  	;shift = 1, ctrl = 2, alt = 4 (and add them together)
+
+	B_MouseButtonState := SC2EXE + 0x304A788 				;1 byte - MouseButton state 1 for Lbutton,  2 for middle mouse, 4 for rbutton
 															; 
-	B_CameraDragScroll := SC2EXE + 0x1FDF4A8  				; 1 byte Returns 1 when user is moving camera via DragScroll i.e. mmouse button the main map
+	B_CameraDragScroll := SC2EXE + 0x304A478  				; 1 byte Returns 1 when user is moving camera via DragScroll i.e. mmouse button the main map But not when on the minimap (or if mbutton is held down on the unit panel)
 
-	B_DirectionalKeysCameraScroll := SC2EXE + 0x1FDF7D0		; 1 byte, but again can read it as 4
+	B_DirectionalKeysCameraScroll := SC2EXE + 0x304A79C		; 1 byte, but again can read it as 4 in CE (****read a 1 byte in game, as the next byte activeates on pressing the pause button, so changing this value for a split second)
 															; 4 = left, 8 = Up, 16 = Right, 32 = Down (these are added if more than 1 key is down) - could do a bitmask on it!
 
-	B_CameraMovingViaMouseAtScreenEdge := SC2EXE + 0x0209C3C8 		; Really a 1 byte value value indicates which direction screen will scroll due to mouse at edge of screen
-		01_CameraMovingViaMouseAtScreenEdge	:= 0x7C					; 1 = Diagonal Left/Top 		4 = Left Edge
-		02_CameraMovingViaMouseAtScreenEdge	:= 0x228				; 2 = Top 						5 = Right Edge			
-		03_CameraMovingViaMouseAtScreenEdge	:= 0x4B0				; 3 = Diagonal Right/Top 	  	6 = Diagonal Left/ Bot	
-																	; 7 = Bottom Edge 			 	8 = Diagonal Right/Bot
+	B_CameraMovingViaMouseAtScreenEdge := SC2EXE + 0x031073C0 		; Really a 1 byte value value indicates which direction screen will scroll due to mouse at edge of screen
+		01_CameraMovingViaMouseAtScreenEdge	:= 0x2C0					; 1 = Diagonal Left/Top 		4 = Left Edge
+		02_CameraMovingViaMouseAtScreenEdge	:= 0x20C				; 2 = Top 						5 = Right Edge			
+		03_CameraMovingViaMouseAtScreenEdge	:= 0x4B4				; 3 = Diagonal Right/Top 	  	6 = Diagonal Left/ Bot	
+																	; 7 = Bottom Edge 			 	8 = Diagonal Right/Bot 
+																	; Note need to do a pointer scan with max offset > 1200d!
 
 
-	B_IsGamePaused := SC2EXE + 0x2186548 						
+	B_IsGamePaused := SC2EXE + 0x31F15A5 						
 
 
-	B_FramesPerSecond := SC2EXE + 0x03ED54DC
-	B_Gamespeed  := SC2EXE + 0x03E18628
+	B_FramesPerSecond := SC2EXE + 0x04FA80EC
+	B_Gamespeed  := SC2EXE + 0x04EEB184
 
 	; example: D:\My Computer\My Documents\StarCraft II\Accounts\56064144\6-S2-1-79722\Replays\
 	; this works for En, Fr, and Kr languages 
-	B_ReplayFolder :=  SC2EXE + 0x03E93E00
+	B_ReplayFolder :=  SC2EXE + 0x04F669C0
 
 
 
 	; Horizontal resolution ; 4 bytes
-	; vertical resolution ; The next 4 bytes immediately after the Horizontal resolution
+	; vertical resolution ; The next 4 bytes immediately after the Horizontal resolution cheat and search for 8 bytes 4638564681600 (1920 1080)
 
-	P_HorizontalResolution := SC2EXE + 0x01106654
-		01_HorizontalResolution := 0x90 
-	P_VerticalResolution := SC2EXE + 0x01106654
-		01_VerticalResolution:= 0x94
+	B_HorizontalResolution := SC2EXE + 0x4FE4910
+	B_VerticalResolution := B_HorizontalResolution + 0x4
+
+/*
+	; There is value reached via a pointer which will change the rendered resolution (even in widowed mode)
+	P_HorizontalResolutionReal := SC2EXE + 0x01106654
+		01_HorizontalResolutionReal := 0x90 
+	P_VerticalResolutionReal := SC2EXE + 0x01106654
+		01_VerticalResolutionReal := 0x94
+
+*/
 
  ; The below offsets are not Currently used but are current for 2.0.8
 
-
+/*
 
  	P_IsUserCasting := SC2EXE +	0x0209C3C8					; this is probably something to do with the control card
 		O1_IsUserCasting := 0x364 							; 1 indicates user is casting a spell e.g. fungal, snipe, or is trying to place a structure
@@ -9404,7 +9414,7 @@ SC2.exe+1FDF7C8 (8 bytes) contains the state of most keys eg a-z etc
 		02_IsUserBuildingWithDrone := 0x17C 				; also gives 1 when actually attempting to place building
 		03_IsUserBuildingWithDrone := 0x228
 		04_IsUserBuildingWithDrone := 0x168
-
+*/
 
 	return	
 
@@ -9421,9 +9431,6 @@ SC2.exe+1FDF7C8 (8 bytes) contains the state of most keys eg a-z etc
 		P1_CurrentBaseCam := 0x25C		;not current
 */	
 }
-f1::msgbox % getMiniMapRadius(0)  "`n" getMiniMapRadius(1) "`n"
-		. getRealSubGroupPriority(0) "`n" getRealSubGroupPriority(1)
-
 
 g_SplitUnits:
 	Thread, NoTimers, true
@@ -10035,6 +10042,7 @@ FindXYatAngle(byref ResultX, byref ResultY,	Angle, Direction, distance, X, Y)
 }
 
 
+; I noticed with this function, it will return 0 when there is less than half a second of cool down left - close enough
 
 getWarpGateCooldown(WarpGate) ; unitIndex
 {	global B_uStructure, S_uStructure, O_P_uAbilityPointer, GameIdentifier
@@ -10055,17 +10063,25 @@ getUnitAbilityPointer(unit) ;returns a pointer which still needs to be read. The
 }
 
 isUnitChronoed(unit)
-{	global	; 1 byte = 18h chrono for protoss structures 10h normal state
-	if (24 = ReadMemory(B_uStructure + unit * S_uStructure + O_uChronoAndInjectState, GameIdentifier, 1))	
+{	global	; 1 byte = 18h chrono for protoss structures 10h normal state This is pre patch 2.10
+			; pre 210 i used the same offset to check injects and chrono state
+			; now this has changed
+			; post 210 seems its 0 when idle and 128 when chronoed 
+			; dont think i have to do the if = 128 check now, but leave it just in case - havent checked 
+			; every building for a default value
+	
+	if (128 = ReadMemory(B_uStructure + unit * S_uStructure + O_uChronoState, GameIdentifier, 1))	
 		return 1
 	else return 0
 }
+; pre patch 2.10
 ; 16 dec / 0x10 when not injected
 ; 48 dec / 0x30 when injected
 ; hatch/lair/hive unit structure + 0xE2 = inject state 
 isHatchInjected(Hatch)
 {	global	; 1 byte = 18h chrono for protoss structures, 48h when injected for zerg -  10h normal state
-	if (48 = ReadMemory(B_uStructure + Hatch * S_uStructure + O_uChronoAndInjectState, GameIdentifier, 1))	
+			; this changed in 2.10 - 0 idle 4 for inject (probably dont need the if = 4 check)
+	if (4 = ReadMemory(B_uStructure + Hatch * S_uStructure + O_uInjectState, GameIdentifier, 1))	
 		return 1
 	else return 0
 }
@@ -10159,7 +10175,7 @@ isHatchOrLairMorphing(unit)
 	state := ReadMemory(getUnitAbilityPointer(unit) + 0x8, GameIdentifier, 1)
 	if (state = 9 && type = A_unitID["Hatchery"])	;	->PF
 		return A_unitID["Lair"]
-	else if (state = 64 && type = A_unitID["Lair"])	; 	-> Orbital
+	else if (state = 17 && type = A_unitID["Lair"])	; 	-> Orbital
 		return A_unitID["Hive"]
 	return 0
 }
@@ -10772,15 +10788,14 @@ groupMinerals(minerals)
 	return averagedMinerals
 }
 
-; These values are stored right next to each other, so to quickly find the correct ones again
-; dp
+; These values are stored right next to each other, so to quickly find the correct ones again search for an 8byte value
 SC2HorizontalResolution()
 {	GLOBAL
-	return  pointer(GameIdentifier, P_HorizontalResolution, 01_HorizontalResolution)
+	return  ReadMemory(B_HorizontalResolution, GameIdentifier)
 }
 SC2VerticalResolution()
 {	GLOBAL
-	return  pointer(GameIdentifier, P_VerticalResolution, 01_VerticalResolution)
+	return  ReadMemory(B_VerticalResolution, GameIdentifier)
 }
 
 ; This may appear malicious, but you can easily check the code which is being executed yourself by going to the 
