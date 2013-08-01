@@ -7432,7 +7432,8 @@ isUnitPatrolling(unit)
 
 arePlayerColoursEnabled()
 {	global
-	Return pointer(GameIdentifier, P_PlayerColours, O1_PlayerColours, O2_PlayerColours)
+	return !ReadMemory(B_TeamColours, GameIdentifier) ; inverse as this is true when player colours are off
+	;Return pointer(GameIdentifier, P_PlayerColours, O1_PlayerColours, O2_PlayerColours) ; this true when they are on
 }
 
 isGamePaused()
@@ -9110,9 +9111,11 @@ getUnitTimer(unit)
 
 isUnitHoldingXelnaga(unit)
 {	global
-	if (256 = ReadMemory(B_uStructure + unit * S_uStructure + O_XelNagaActive, GameIdentifier))
-		return 1
-	else return 0
+	
+	return ReadMemory(B_uStructure + unit * S_uStructure + O_XelNagaActive, GameIdentifier)
+	;if (256 = ReadMemory(B_uStructure + unit * S_uStructure + O_XelNagaActive, GameIdentifier))
+	;	return 1
+	;else return 0
 }
 
 getBaseCamIndex() ; begins at 0
@@ -9224,59 +9227,68 @@ LoadMemoryAddresses(SC2EXE)
 	P_IdleWorker := SC2EXE + 0x031073C0		
 		O1_IdleWorker := 0x370
 		O2_IdleWorker := 0x244
-	B_Timer := SC2EXE + 0x24C9EE0 				
+	B_Timer := SC2EXE + 0x3534F40 ;0x24C9EE0 				
 	B_rStructure := SC2EXE + 0x1EC8E00	;old
 		S_rStructure := 0x10
 
-	P_ChatFocus := SC2EXE + 0x0209C3C8 		;Just when chat box is in focus
-		O1_ChatFocus := 0x3D0 
-		O2_ChatFocus := 0x198
+	P_ChatFocus := SC2EXE + 0x031073C0 		;Just when chat box is in focus
+		O1_ChatFocus := 0x3AC 
+		O2_ChatFocus := 0x174
 
-	P_MenuFocus := SC2EXE + 0x03F1211C 		;this is all menus and includes chat box when in focus ; old 0x3F04C04
-		O1_MenuFocus := 0x1A0
+	P_MenuFocus := SC2EXE + 0x04FE4E5C 		;this is all menus and includes chat box when in focus ; old 0x3F04C04
+		O1_MenuFocus := 0x17C
 
 
 
-	B_uCount := SC2EXE + 0x2CF9148				; This is the units alive (and includes missiles) ;0x02CF5588			
-	B_uHighestIndex := SC2EXE + 0x25F92C0		;this is actually the highest currently alive unit (includes missiles while alive)
-	B_uStructure := SC2EXE + 0x25F9300 				
+	B_uCount := SC2EXE + 0x2F6C438 				; This is the units alive (and includes missiles) ;0x02CF5588			
+	B_uHighestIndex := SC2EXE + 0x3665100 ; 0x25F92C0		;this is actually the highest currently alive unit (includes missiles while alive)
+	B_uStructure := SC2EXE + 0x3665140			
 	S_uStructure := 0x1C0
 		O_uModelPointer := 0x8
 		O_uTargetFilter := 0x14
 		O_uBuildStatus := 0x18		; buildstatus is really part of the 8 bit targ filter!
-		O_uOwner := 0x3D
-		O_uX := 0x48
-		O_uY := 0x4C
-		O_uZ := 0x50
-		O_P_uCmdQueuePointer := 0xD0
-		O_P_uAbilityPointer := 0xD8
-		O_uChronoAndInjectState := 0xE2
-		O_uEnergy := 0x118
-		O_uTimer := 0x168
 		O_XelNagaActive := 0x34
-	;CommandQueue
-	O_cqMoveState := 0x40
+		O_uOwner := 0x3D
+		; something added in here in vr 2.10
+		O_uX := 0x4C ; this and the rest below +4
+		O_uY := 0x50
+		O_uZ := 0x54
+		O_P_uCmdQueuePointer := 0xD4 ;+4
+		O_P_uAbilityPointer := 0xDC
+		O_uChronoAndInjectState := 0xE6
+		O_uEnergy := 0x11c 
+		O_uTimer := 0x16C ;+4
+		
+	;CommandQueue 	; separate structure
+		O_cqMoveState := 0x40	
+
 	
 	; Unit Model Structure	
 	O_mUnitID := 0x6	
-	O_mSubgroupPriority := 0x398
-	O_mMiniMapSize := 0x39C
+	O_mSubgroupPriority := 0x3A8 ;0x398
+	O_mMiniMapSize := 0x3AC ;0x39C
+	
 	; selection and ctrl groups
-	B_SelectionStructure := SC2EXE + 0x0215FB50 	
-	B_CtrlGroupStructure := SC2EXE + 0x02164D78 
+	B_SelectionStructure := SC2EXE + 0x031CAB90 ;0x0215FB50 	
+	B_CtrlGroupStructure := SC2EXE + 0x031CFDB8 
 	S_CtrlGroup := 0x1B60
 	S_scStructure := 0x4	; Unit Selection & Ctrl Group Structures
 		O_scTypeCount := 0x2
 		O_scTypeHighlighted := 0x4
 		O_scUnitIndex := 0x8
-	P_PlayerColours := SC2EXE + 0x03D28A84 ; 0 when enemies red  1 when player colours
-		O1_PlayerColours := 0x4
-		O2_PlayerColours := 0x17c
+
+;	P_PlayerColours := SC2EXE + 0x03D28A84 ; 0 when enemies red  1 when player colours
+;		O1_PlayerColours := 0x4
+;		O2_PlayerColours := 0x17c
+
+	B_TeamColours := SC2EXE = 0x03108504 
+	; another one at + 0x4FA7800
 
 
 /*
 				; 2 when team colours is on 
                 //TeamColor 
+
                 TeamColor1 = (int)starcraft.MainModule.BaseAddress + 0x0209D4E4; //V
                 TeamColor2 = (int)starcraft.MainModule.BaseAddress + 0x03ED4BF8; //V
 
@@ -9409,7 +9421,8 @@ SC2.exe+1FDF7C8 (8 bytes) contains the state of most keys eg a-z etc
 		P1_CurrentBaseCam := 0x25C		;not current
 */	
 }
-
+f1::msgbox % getMiniMapRadius(0)  "`n" getMiniMapRadius(1) "`n"
+		. getRealSubGroupPriority(0) "`n" getRealSubGroupPriority(1)
 
 
 g_SplitUnits:
