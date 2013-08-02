@@ -1,10 +1,14 @@
-SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gmail.com", pass="PublicPasswordfwnk322rf28932hjf32809")
-{
+SendEmail(p_to, p_From, p_subject, p_message, oAttachments := "", user="macro.trainer@adam.com.au", pass="asvhaf32489hjk")
+{ 														; username '@adam.com.au' isn't required to receive emails, but it is to SEND!
+		
 		; gmail
 		; user="Macro.Trainer@gmail.com", pass="PublicPasswordfwnk322rf28932hjf32809"
 
-	pmsg          := ComObjCreate("CDO.Message")
-	pmsg.From       := "MT BugReport@mail.com" ; """AHKUser"" <...@gmail.com>"
+	pmsg          := ComObjCreate("CDO.Message") 
+	if (p_From && isValidEmail(p_From)) 		; if user puts a weird name function will fail with an error! hence check if valid
+		pmsg.From       := p_From 				; i.e. an address which violates email address rules 
+	else pmsg.From      := "MT_BugReport@FakeAddress.com" ; Not a Real Address! """AHKUser"" <...@gmail.com>"
+	
 	pmsg.To       := p_to
 	pmsg.BCC       := ""   ; Blind Carbon Copy, Invisable for all, same syntax as CC
 	pmsg.CC       := "" ; "Somebody@somewhere.com, Other-somebody@somewhere.com"
@@ -51,7 +55,7 @@ SendEmail(p_to, p_subject, p_message, oAttachments := "", user="Macro.Trainer@gm
 	sAttach := Trim(sAttach, "`t |")
 
 	fields := Object()
-	fields.smtpserver   := 	;"smtp.gmail.com" ; specify your SMTP server
+	fields.smtpserver   := 	"securemail.adam.com.au" ;"smtp.gmail.com" ; specify your SMTP server
 	fields.smtpserverport  := 465 ; 25
 	fields.smtpusessl      := True ; False
 	fields.sendusing     := 2   ; cdoSendUsingPort
